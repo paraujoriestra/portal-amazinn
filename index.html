@@ -213,7 +213,13 @@ const NAV=[
   {id:'inicio',ic:'🏠',t:'Inicio'},
   {id:'horarios',ic:'📅',t:'Horarios'},
   {id:'comunicados',ic:'📢',t:'Comunicados'},
+  {id:'organigrama',ic:'🏢',t:'Organigrama'},
+  {id:'proveedores',ic:'🚚',t:'Proveedores'},
+  {id:'suministros',ic:'🔌',t:'Suministros'},
+  {id:'sugerencias',ic:'💡',t:'Sugerencias'},
 ];
+const CAN_MANAGE=['responsable','rrhh','admin'];
+let supTab='electricidad';
 const SHIFTS=[{v:"",l:"—",c:"#dfe3ea"},{v:"M",l:"Mañana 09–17",c:"#cfe0f2"},{v:"T",l:"Tarde 14–22",c:"#f7e6b0"},{v:"P",l:"Partido",c:"#cdeee3"},{v:"N",l:"Noche 22–06",c:"#cfe0f2"},{v:"L",l:"Libre",c:"#dfe3ea"},{v:"V",l:"Vacaciones",c:"#f6cfcd"}];
 const SH=Object.fromEntries(SHIFTS.map(s=>[s.v,s]));
 function nextDays(n){const out=[],d=new Date();d.setHours(0,0,0,0);for(let i=0;i<n;i++){const x=new Date(d);x.setDate(d.getDate()+i);out.push(x);}return out;}
@@ -232,6 +238,10 @@ function show(id){
   if(id==='inicio') m.innerHTML=pageInicio();
   else if(id==='comunicados'){ m.innerHTML='<div class="page-title">Comunicados</div><div class="page-sub">Cargando…</div>'; pageComunicados(); }
   else if(id==='horarios'){ m.innerHTML='<div class="page-title">Horarios</div><div class="page-sub">Cargando…</div>'; pageHorarios(); }
+  else if(id==='organigrama'){ m.innerHTML='<div class="page-title">Organigrama</div><div class="page-sub">Cargando…</div>'; pageOrganigrama(); }
+  else if(id==='proveedores'){ m.innerHTML='<div class="page-title">Proveedores</div><div class="page-sub">Cargando…</div>'; pageProveedores(); }
+  else if(id==='suministros'){ m.innerHTML='<div class="page-title">Suministros</div><div class="page-sub">Cargando…</div>'; pageSuministros(); }
+  else if(id==='sugerencias'){ m.innerHTML='<div class="page-title">Sugerencias</div><div class="page-sub">Cargando…</div>'; pageSugerencias(); }
 }
 
 /* ---------------- INICIO ---------------- */
@@ -384,6 +394,119 @@ async function horOthers(days){
     <select onchange="setHorOther(this.value)" style="padding:9px 12px;border:1px solid var(--gris2);border-radius:9px;font-size:14px">${depts.map(d=>`<option ${d===horOtherDept?'selected':''}>${esc(d)}</option>`).join('')}</select></div>`;
   return sel+await horTeam(horOtherDept,days);
 }
+
+/* ---------------- ORGANIGRAMA (directorio desde perfiles) ---------------- */
+function ini2(n){return (n||'?').trim().split(/\s+/).slice(0,2).map(w=>w[0]).join('').toUpperCase();}
+function av(n,color,size){size=size||40;return `<span style="width:${size}px;height:${size}px;border-radius:50%;background:${color||'#1F4E79'};color:#fff;display:inline-flex;align-items:center;justify-content:center;font-weight:700;font-size:${Math.round(size*0.38)}px;flex:0 0 auto">${ini2(n)}</span>`;}
+async function pageOrganigrama(){
+  const{data}=await sb.from('profiles').select('nombre,dept,role,color').order('dept');
+  const ppl=data||[];
+  const byDept={};
+  ppl.forEach(p=>{const d=p.dept||'Sin departamento';(byDept[d]=byDept[d]||[]).push(p);});
+  const roleNice=r=>({empleado:'Empleado',responsable:'Responsable',rrhh:'RRHH',admin:'Administrador'})[r]||r;
+  const blocks=Object.keys(byDept).sort().map(d=>`
+    <div class="panel"><h2>${esc(d)} <span class="badge b-grey" style="font-weight:600">${byDept[d].length}</span></h2>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:12px">
+      ${byDept[d].map(p=>`<div style="display:flex;align-items:center;gap:11px;border:1px solid var(--gris2);border-radius:10px;padding:11px">
+        ${av(p.nombre,p.color,40)}<div><b style="font-size:14px">${esc(p.nombre||'—')}</b><br><small style="color:var(--suave)">${roleNice(p.role)}</small></div></div>`).join('')}
+      </div></div>`).join('');
+  document.getElementById('main').innerHTML=`<div class="page-title">Organigrama</div>
+    <div class="page-sub">Equipo de Amazinn Places por departamento (${ppl.length} personas)</div>${blocks}`;
+}
+
+/* ---------------- PROVEEDORES ---------------- */
+let provFormOpen=false;
+async function pageProveedores(){
+  const canEdit=CAN_MANAGE.includes(PROFILE.role);
+  const{data,error}=await sb.from('proveedores').select('*').order('nombre');
+  if(error){document.getElementById('main').innerHTML='<div class="panel">Error: '+error.message+'</div>';return;}
+  const rows=(data||[]).map(p=>`<tr>
+    <td><b>${esc(p.nombre)}</b></td><td>${esc(p.ruc||'')}</td>
+    <td>${p.email?`<a href="mailto:${esc(p.email)}">${esc(p.email)}</a>`:''}</td>
+    <td>${esc(p.tel||'')}</td><td>${p.cat?`<span class="badge b-blue">${esc(p.cat)}</span>`:''}</td>
+    <td style="color:var(--suave)">${esc(p.nota||'')}</td>
+    ${canEdit?`<td><button class="btn ghost" style="padding:4px 9px" onclick="delRow('proveedores',${p.id},'proveedores')">🗑️</button></td>`:''}</tr>`).join('');
+  document.getElementById('main').innerHTML=`
+    <div class="page-title">Proveedores</div><div class="page-sub">Directorio de proveedores${canEdit?' · puedes añadir':''}</div>
+    ${canEdit?`<div style="margin-bottom:14px"><button class="btn" onclick="provFormOpen=!provFormOpen;show('proveedores')">${provFormOpen?'✕ Cerrar':'➕ Nuevo proveedor'}</button></div>`:''}
+    ${canEdit&&provFormOpen?`<div class="panel" style="max-width:680px"><form class="box" onsubmit="return createProv(event)" style="max-width:none">
+      <div class="row"><div><label>Nombre</label><input id="pN" required></div><div><label>RUC</label><input id="pR"></div></div>
+      <div class="row"><div><label>Email</label><input id="pE" type="email"></div><div><label>Teléfono</label><input id="pT"></div></div>
+      <label>Categoría</label><input id="pC" placeholder="Electricidad, Limpieza…"><label>Nota</label><textarea id="pNo" rows="2"></textarea>
+      <div><button class="btn" type="submit">Guardar</button></div></form></div>`:''}
+    <div class="panel"><table><thead><tr><th>Proveedor</th><th>RUC</th><th>Email</th><th>Teléfono</th><th>Categoría</th><th>Nota</th>${canEdit?'<th></th>':''}</tr></thead><tbody>${rows||'<tr><td colspan="7" style="color:var(--suave)">Aún no hay proveedores.</td></tr>'}</tbody></table></div>`;
+}
+async function createProv(e){e.preventDefault();
+  const row={nombre:val('pN'),ruc:val('pR'),email:val('pE'),tel:val('pT'),cat:val('pC'),nota:val('pNo')};
+  if(!row.nombre)return false;
+  const{error}=await sb.from('proveedores').insert(row);
+  if(error){alert('Error: '+error.message);return false;}
+  provFormOpen=false;show('proveedores');return false;
+}
+
+/* ---------------- SUMINISTROS ---------------- */
+let supFormOpen=false;
+function setSupTab(t){supTab=t;supFormOpen=false;show('suministros');}
+async function pageSuministros(){
+  const canEdit=CAN_MANAGE.includes(PROFILE.role);
+  const tabs=[['electricidad','⚡ Electricidad'],['agua','💧 Agua y Aseo'],['internet','🌐 Internet']];
+  const{data,error}=await sb.from('suministros').select('*').eq('tipo',supTab).order('propiedad');
+  if(error){document.getElementById('main').innerHTML='<div class="panel">Error: '+error.message+'</div>';return;}
+  const conTitular=supTab!=='agua';
+  const refLbl=supTab==='electricidad'?'Nº NIS':(supTab==='agua'?'Nº IDAAN':'Nº de suscriptor');
+  const rows=(data||[]).map(r=>`<tr><td><b>${esc(r.referencia||'')}</b></td>${conTitular?`<td>${esc(r.titular||'')}</td>`:''}<td>${esc(r.compania||'')}</td><td>${esc(r.propiedad||'')}</td>
+    ${canEdit?`<td><button class="btn ghost" style="padding:4px 9px" onclick="delRow('suministros',${r.id},'suministros')">🗑️</button></td>`:''}</tr>`).join('');
+  document.getElementById('main').innerHTML=`
+    <div class="page-title">Suministros por activo</div><div class="page-sub">Referencias de los contratos de cada propiedad</div>
+    <div class="tabs">${tabs.map(t=>`<button class="${supTab===t[0]?'on':''}" onclick="setSupTab('${t[0]}')">${t[1]}</button>`).join('')}</div>
+    ${canEdit?`<div style="margin-bottom:14px"><button class="btn ghost" onclick="supFormOpen=!supFormOpen;show('suministros')">${supFormOpen?'✕ Cerrar':'➕ Añadir registro'}</button></div>`:''}
+    ${canEdit&&supFormOpen?`<div class="panel" style="max-width:560px"><form class="box" onsubmit="return createSup(event)" style="max-width:none">
+      <label>${refLbl}</label><input id="sR">${conTitular?'<label>A nombre de</label><input id="sT">':''}
+      <label>Compañía</label><input id="sC"><label>Propiedad</label><input id="sP">
+      <div><button class="btn" type="submit">Guardar</button></div></form></div>`:''}
+    <div class="panel"><table><thead><tr><th>${refLbl}</th>${conTitular?'<th>A nombre de</th>':''}<th>Compañía</th><th>Propiedad</th>${canEdit?'<th></th>':''}</tr></thead>
+      <tbody>${rows||'<tr><td colspan="5" style="color:var(--suave)">Sin registros en esta categoría.</td></tr>'}</tbody></table></div>`;
+}
+async function createSup(e){e.preventDefault();
+  const row={tipo:supTab,referencia:val('sR'),titular:supTab!=='agua'?val('sT'):null,compania:val('sC'),propiedad:val('sP')};
+  const{error}=await sb.from('suministros').insert(row);
+  if(error){alert('Error: '+error.message);return false;}
+  supFormOpen=false;show('suministros');return false;
+}
+
+/* ---------------- SUGERENCIAS ---------------- */
+const SUG_EST={Pendiente:'b-amber','En estudio':'b-blue',Aplicada:'b-green',Descartada:'b-grey'};
+async function pageSugerencias(){
+  const manage=(PROFILE.role==='rrhh'||PROFILE.role==='admin');
+  const{data,error}=await sb.from('sugerencias').select('*').order('created_at',{ascending:false});
+  if(error){document.getElementById('main').innerHTML='<div class="panel">Error: '+error.message+'</div>';return;}
+  const list=(data||[]).map(g=>{const fecha=new Date(g.created_at).toLocaleDateString('es-ES',{day:'numeric',month:'short',year:'numeric'});
+    return `<div style="padding:14px 0;border-bottom:1px solid var(--gris)">
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span class="badge b-blue">${esc(g.cat||'')}</span> <b>${esc(g.autor_nombre||'')}</b> <small style="color:var(--suave)">· ${fecha}</small>
+      <span style="margin-left:auto">${manage?`<select onchange="setSugEstado(${g.id},this.value)" style="padding:5px 8px;border:1px solid var(--gris2);border-radius:7px;font-size:12.5px">${Object.keys(SUG_EST).map(e=>`<option ${g.estado===e?'selected':''}>${e}</option>`).join('')}</select>`:`<span class="badge ${SUG_EST[g.estado]||'b-grey'}">${esc(g.estado)}</span>`}</span></div>
+      <div style="margin-top:6px;font-size:14px">${esc(g.texto)}</div></div>`;}).join('');
+  document.getElementById('main').innerHTML=`
+    <div class="page-title">Buzón de sugerencias</div><div class="page-sub">Propón mejoras, necesidades o ideas. Toda sugerencia llega a RRHH.</div>
+    <div class="panel" style="max-width:680px"><h2>💡 Nueva sugerencia</h2>
+      <form class="box" onsubmit="return createSug(event)" style="max-width:none">
+        <label>Categoría</label><select id="sgCat"><option>Mejora</option><option>Necesidad</option><option>Incidencia</option><option>Idea</option><option>Otro</option></select>
+        <label>Tu sugerencia</label><textarea id="sgT" rows="4" required></textarea>
+        <label style="display:flex;align-items:center;gap:8px;font-weight:500"><input type="checkbox" id="sgAnon"> Enviar de forma anónima</label>
+        <div><button class="btn" type="submit">Enviar</button></div></form></div>
+    <div class="panel"><h2>📋 Sugerencias del equipo (${(data||[]).length})</h2>${list||'<div style="color:var(--suave);font-size:13.5px">Aún no hay sugerencias.</div>'}</div>`;
+}
+async function createSug(e){e.preventDefault();
+  const texto=val('sgT'); if(!texto)return false;
+  const anon=document.getElementById('sgAnon').checked;
+  const{error}=await sb.from('sugerencias').insert({autor_id:ME.id,autor_nombre:anon?'Anónimo':PROFILE.nombre,cat:val('sgCat'),texto,estado:'Pendiente'});
+  if(error){alert('Error: '+error.message);return false;}
+  show('sugerencias');return false;
+}
+async function setSugEstado(id,val2){await sb.from('sugerencias').update({estado:val2}).eq('id',id);show('sugerencias');}
+
+/* utilidades */
+function val(id){const el=document.getElementById(id);return el?el.value.trim():'';}
+async function delRow(table,id,page){if(!confirm('¿Eliminar este registro?'))return;const{error}=await sb.from(table).delete().eq('id',id);if(error){alert('Error: '+error.message);return;}show(page);}
 
 function esc(t){return (t||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
 </script>
