@@ -240,6 +240,16 @@
   .b-amber{background:#fdf3d7;color:var(--amarillo)}
   .b-grey{background:var(--gris2);color:var(--suave)}
   .b-owner{background:linear-gradient(135deg,#2b2620,#4a4030);color:#e8d6a8;font-weight:700}
+  /* ---- Recortador de foto de perfil ---- */
+  .crop-ov{position:fixed;inset:0;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;z-index:9999}
+  .crop-box{background:#fff;border-radius:14px;padding:22px;max-width:330px;box-shadow:0 20px 60px rgba(0,0,0,.3)}
+  .crop-stage{position:relative;overflow:hidden;border-radius:10px;background:#222;cursor:grab;touch-action:none;margin:0 auto}
+  .crop-stage:active{cursor:grabbing}
+  .crop-stage img{position:absolute;user-select:none;-webkit-user-drag:none;max-width:none}
+  .crop-mask{position:absolute;inset:0;border-radius:10px;pointer-events:none}
+  .crop-mask::before{content:"";position:absolute;inset:0;border-radius:50%;border:2px solid rgba(255,255,255,.9);box-sizing:border-box}
+  .crop-zoom{width:100%;margin:16px 0 4px}
+  .crop-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:10px}
 
   /* Comunicado: plantilla fija (logo + tipografía + estructura homogénea) */
   .com-card{background:#fff;border:1px solid var(--gris2);border-radius:14px;box-shadow:var(--sombra);margin-bottom:20px;overflow:hidden;max-width:780px}
@@ -1163,12 +1173,63 @@ function av(n,color,size,foto){size=size||40;
   return `<span style="width:${size}px;height:${size}px;border-radius:50%;background:${color||'#1F4E79'};color:#fff;display:inline-flex;align-items:center;justify-content:center;font-weight:700;font-size:${Math.round(size*0.38)}px;flex:0 0 auto">${ini2(n)}</span>`;}
 // redimensiona y recorta una imagen a un avatar pequeño (data URL)
 function fileToAvatar(file){return new Promise(res=>{const r=new FileReader();r.onload=e=>{const img=new Image();img.onload=()=>{const s=160,c=document.createElement('canvas');c.width=s;c.height=s;const x=c.getContext('2d');const m=Math.min(img.width,img.height);x.drawImage(img,(img.width-m)/2,(img.height-m)/2,m,m,0,0,s,s);res(c.toDataURL('image/jpeg',0.82));};img.src=e.target.result;};r.readAsDataURL(file);});}
+/* Recortador: abre una ventana para encuadrar la cara dentro de la foto */
+function openCropper(file, onDone){
+  const reader=new FileReader();
+  reader.onload=e=>{ const img=new Image(); img.onload=()=>buildCropper(img,onDone); img.src=e.target.result; };
+  reader.readAsDataURL(file);
+}
+function buildCropper(img, onDone){
+  const V=260;
+  const cover=Math.max(V/img.naturalWidth, V/img.naturalHeight);
+  let scale=cover, ox=0, oy=0;
+  const clamp=()=>{ const dw=img.naturalWidth*scale, dh=img.naturalHeight*scale;
+    ox=Math.min(0,Math.max(V-dw,ox)); oy=Math.min(0,Math.max(V-dh,oy)); };
+  ox=(V-img.naturalWidth*scale)/2; oy=(V-img.naturalHeight*scale)/2; clamp();
+  const ov=document.createElement('div'); ov.className='crop-ov';
+  ov.innerHTML=`<div class="crop-box">
+    <h3 style="margin:0 0 4px">Encuadrar foto</h3>
+    <p style="margin:0 0 12px;font-size:12.5px;color:var(--suave)">Arrastra la imagen y usa la barra para acercar. Lo que quede dentro del círculo será la foto de perfil.</p>
+    <div class="crop-stage" id="cropStage" style="width:${V}px;height:${V}px">
+      <img id="cropImg" src="${img.src}" draggable="false"><div class="crop-mask"></div>
+    </div>
+    <input type="range" id="cropZoom" min="1" max="4" step="0.01" value="1" class="crop-zoom">
+    <div class="crop-actions"><button class="btn ghost" type="button" id="cropCancel">Cancelar</button><button class="btn" type="button" id="cropApply">Aplicar</button></div>
+  </div>`;
+  document.body.appendChild(ov);
+  const imgEl=ov.querySelector('#cropImg'), stage=ov.querySelector('#cropStage'), zoom=ov.querySelector('#cropZoom');
+  const render=()=>{ imgEl.style.width=(img.naturalWidth*scale)+'px'; imgEl.style.height=(img.naturalHeight*scale)+'px'; imgEl.style.left=ox+'px'; imgEl.style.top=oy+'px'; };
+  render();
+  let drag=false,sx=0,sy=0,sox=0,soy=0;
+  const start=(px,py)=>{drag=true;sx=px;sy=py;sox=ox;soy=oy;};
+  const move=(px,py)=>{ if(!drag)return; ox=sox+(px-sx); oy=soy+(py-sy); clamp(); render(); };
+  const end=()=>{drag=false;};
+  const onMM=e=>move(e.clientX,e.clientY), onMU=()=>end();
+  stage.addEventListener('mousedown',e=>{e.preventDefault();start(e.clientX,e.clientY);});
+  window.addEventListener('mousemove',onMM); window.addEventListener('mouseup',onMU);
+  stage.addEventListener('touchstart',e=>{const t=e.touches[0];start(t.clientX,t.clientY);},{passive:true});
+  stage.addEventListener('touchmove',e=>{const t=e.touches[0];move(t.clientX,t.clientY);},{passive:true});
+  stage.addEventListener('touchend',end);
+  zoom.addEventListener('input',()=>{ const cx=V/2,cy=V/2; const ix=(cx-ox)/scale, iy=(cy-oy)/scale;
+    scale=cover*parseFloat(zoom.value); ox=cx-ix*scale; oy=cy-iy*scale; clamp(); render(); });
+  const close=()=>{ window.removeEventListener('mousemove',onMM); window.removeEventListener('mouseup',onMU); ov.remove(); };
+  ov.querySelector('#cropCancel').onclick=close;
+  ov.querySelector('#cropApply').onclick=()=>{ const out=160,c=document.createElement('canvas');c.width=out;c.height=out;const x=c.getContext('2d');
+    x.drawImage(img, -ox/scale, -oy/scale, V/scale, V/scale, 0,0,out,out);
+    const data=c.toDataURL('image/jpeg',0.85); close(); onDone(data); };
+}
+function adminFotoPick(input){ const f=input.files[0]; if(!f) return; openCropper(f, foto=>{ userDraft.foto=foto; show('admin'); }); }
+function miFotoPick(input){ const f=input.files[0]; if(!f) return; openCropper(f, async foto=>{
+  const{error}=await sb.from('profiles').update({foto}).eq('id',ME.id);
+  if(error){alert('Error: '+error.message);return;}
+  PROFILE.foto=foto; const avEl=document.getElementById('av'); avEl.textContent=''; avEl.style.background=`#eee url('${foto}') center/cover no-repeat`;
+  show('perfil'); toast('✓ Foto actualizada'); }); }
 function pagePerfil(){
-  const p=PROFILE, rol=({empleado:'Empleado',responsable:'Responsable',rrhh:'RRHH',admin:'Administrador'})[p.role]||p.role;
+  const p=PROFILE, rol=({empleado:'Empleado',responsable:'Responsable',rrhh:'RRHH',admin:'Administrador',propietario:'Propietario'})[p.role]||p.role;
   document.getElementById('main').innerHTML=`<div class="page-title">Mi perfil</div><div class="page-sub">Tus datos en Amazinn Places</div>
     <div class="panel" style="max-width:620px;display:flex;gap:22px;align-items:center;flex-wrap:wrap">
       <div style="text-align:center">${av(p.nombre,p.color,110,p.foto)}
-        <div style="margin-top:10px"><label class="btn ghost" style="padding:6px 12px;cursor:pointer">📷 Cambiar foto<input type="file" accept="image/*" style="display:none" onchange="cambiarMiFoto(this)"></label></div></div>
+        <div style="margin-top:10px"><label class="btn ghost" style="padding:6px 12px;cursor:pointer">📷 Cambiar foto<input type="file" accept="image/*" style="display:none" onchange="miFotoPick(this)"></label></div></div>
       <div style="flex:1;min-width:220px">
         <div style="font-size:22px;font-weight:800;font-family:'Playfair Display',Georgia,serif">${esc(p.nombre||'')}</div>
         <div style="color:var(--acento);font-weight:700;margin:2px 0 12px">${esc(p.cargo||p.dept||'')}</div>
@@ -1476,7 +1537,7 @@ function userForm(){const u=userDraft;const colores=['#1F4E79','#16a085','#8e44a
     <label>Cargo / puesto</label><input id="uCargo" value="${esc(u.cargo||'')}" placeholder="Ej: Recepcionista, Responsable de operaciones…">
     <label>Cumpleaños</label><input id="uC" type="date" value="${u.cumple||''}">
     <label>Foto de perfil</label>
-    <div style="display:flex;align-items:center;gap:12px">${av(u.nombre,u.color,48,u.foto)}<input type="file" id="uFoto" accept="image/*">${u.foto?`<button type="button" class="btn ghost" style="padding:5px 11px" onclick="userDraft.foto=null;show('admin')">Quitar foto</button>`:''}</div>
+    <div style="display:flex;align-items:center;gap:12px">${av(u.nombre,u.color,48,u.foto)}<input type="file" id="uFoto" accept="image/*" onchange="adminFotoPick(this)">${u.foto?`<button type="button" class="btn ghost" style="padding:5px 11px" onclick="userDraft.foto=null;show('admin')">Quitar foto</button>`:''}</div>
     <label>Color de avatar (si no hay foto)</label><div style="display:flex;gap:8px;flex-wrap:wrap">${colores.map(c=>`<label style="cursor:pointer"><input type="radio" name="uCol" value="${c}" ${(u.color||colores[0])===c?'checked':''} style="display:none" onchange="this.parentElement.parentElement.querySelectorAll('.sw').forEach(s=>s.style.outline='');this.nextElementSibling.style.outline='3px solid #333'"><span class="sw" style="display:inline-block;width:26px;height:26px;border-radius:50%;background:${c};outline:${(u.color||colores[0])===c?'3px solid #333':''}"></span></label>`).join('')}</div>
     <div><button class="btn" type="submit">Guardar</button> <button class="btn ghost" type="button" onclick="userFormOpen=false;show('admin')">Cancelar</button></div></form></div>`;}
 async function userSave(e){e.preventDefault();
@@ -1485,8 +1546,8 @@ async function userSave(e){e.preventDefault();
   const nuevoRol = (userDraft.role==='propietario') ? 'propietario' : (rolSel?rolSel.value:userDraft.role);
   const row={nombre:val('uN'),dept:document.getElementById('uD').value,role:nuevoRol,vac:+val('uV')||0,cumple:val('uC')||null,cargo:val('uCargo'),color:col?col.value:'#1F4E79'};
   const f=document.getElementById('uFoto').files[0];
-  if(f){ row.foto=await fileToAvatar(f); }
-  else if(userDraft.foto===null){ row.foto=null; }   // se pulsó "Quitar foto"
+  if(f){ row.foto=await fileToAvatar(f); }            // respaldo si no se usó el recorte
+  else { row.foto = (userDraft.foto!==undefined ? userDraft.foto : null); }  // recorte aplicado, foto existente, o "Quitar foto"
   const{error}=await sb.from('profiles').update(row).eq('id',userEditId);
   if(error){alert('Error: '+error.message);return false;}
   userFormOpen=false;show('admin');return false;}
