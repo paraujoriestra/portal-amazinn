@@ -1612,9 +1612,15 @@ async function pageAdmin(){
   const rows=us.map(u=>{
     const esOwner=u.role==='propietario';
     const badge=esOwner?'b-owner':u.role==='admin'?'b-red':u.role==='rrhh'?'b-blue':u.role==='responsable'?'b-amber':'b-grey';
-    const accion = (esOwner && u.id!==ME.id)
-      ? '<span style="font-size:12px;color:var(--suave)">🔒 Protegido</span>'
-      : `<button class="btn ghost" style="padding:4px 9px" onclick='userEdit(${JSON.stringify(u).replace(/'/g,"&#39;")})'>✏️ Editar</button>`;
+    let accion;
+    if(esOwner && u.id!==ME.id){
+      accion='<span style="font-size:12px;color:var(--suave)">🔒 Protegido</span>';
+    } else {
+      accion=`<button class="btn ghost" style="padding:4px 9px" onclick='userEdit(${JSON.stringify(u).replace(/'/g,"&#39;")})'>✏️ Editar</button>`;
+      if(isOwner() && u.id!==ME.id && !esOwner){
+        accion+=` <button class="btn ghost" style="padding:4px 9px;color:#c0392b;border-color:#e3b7b1" onclick="deleteUser('${u.id}','${(u.nombre||'').replace(/'/g,"\\'")}')" title="Eliminar usuario">🗑</button>`;
+      }
+    }
     return `<tr><td>${av(u.nombre,u.color,30,u.foto)}</td><td><b>${esc(u.nombre||'')}</b>${u.id===ME.id?' <span class="badge b-grey">tú</span>':''}${esOwner?' 👑':''}<br><small style="color:var(--suave)">${esc(u.email||'')}</small></td>
     <td>${esc(u.dept||'')}</td><td><span class="badge ${badge}">${rl(u.role)}</span></td><td>${u.vac||0}</td>
     <td>${accion}</td></tr>`;}).join('');
@@ -1625,6 +1631,13 @@ async function pageAdmin(){
 }
 let userDraft={};
 function userEdit(u){userEditId=u.id;userDraft=u;userFormOpen=true;show('admin');}
+async function deleteUser(id,nombre){
+  if(!isOwner()){ alert('Solo el Propietario puede eliminar usuarios.'); return; }
+  if(!confirm(`¿Eliminar a ${nombre} de forma permanente?\n\nSe borrará su cuenta de acceso y su perfil. No podrá volver a entrar. Esta acción no se puede deshacer.`)) return;
+  const { error } = await sb.rpc('eliminar_usuario',{ target:id });
+  if(error){ alert('No se pudo eliminar: '+error.message); return; }
+  toast('Usuario eliminado'); show('admin');
+}
 function userForm(){const u=userDraft;const colores=['#1F4E79','#16a085','#8e44ad','#d35400','#c0392b','#2980b9','#27ae60','#e67e22','#34495e'];
   return `<div class="panel" style="max-width:640px"><h2>✏️ Editar ${esc(u.nombre||'usuario')}</h2><form class="box" onsubmit="return userSave(event)" style="max-width:none">
     <div class="row"><div><label>Nombre</label><input id="uN" value="${esc(u.nombre||'')}"></div><div><label>Días vacaciones</label><input id="uV" type="number" value="${u.vac||0}"></div></div>
