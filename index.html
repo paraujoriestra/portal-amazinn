@@ -136,7 +136,7 @@
 <div id="login">
   <div class="login-card">
     <img id="logoLogin" alt="Amazinn Places" style="height:64px;margin:0 auto 6px;display:block">
-    <div class="sub">Portal interno del empleado</div>
+    <div class="sub">Portal Interno del equipo</div>
     <form onsubmit="return authSubmit(event)">
       <div id="liNameBox" style="display:none">
         <label>Nombre y apellidos</label>
@@ -245,8 +245,9 @@ async function enterApp(user){
   document.getElementById('app').style.display='block';
   document.getElementById('uname').textContent = PROFILE.nombre || user.email;
   document.getElementById('urole').textContent = (PROFILE.dept||'') + (PROFILE.role!=='empleado'?' · '+PROFILE.role:'');
-  document.getElementById('av').textContent = inis(PROFILE.nombre||user.email);
-  document.getElementById('av').style.background = PROFILE.color || '#1F4E79';
+  const avEl=document.getElementById('av');
+  if(PROFILE.foto){ avEl.textContent=''; avEl.style.background=`#eee url('${PROFILE.foto}') center/cover no-repeat`; }
+  else { avEl.textContent = inis(PROFILE.nombre||user.email); avEl.style.background = PROFILE.color || '#1F4E79'; }
   buildNav();
   document.getElementById('chatFab').style.display='flex';
   chatMsgs=[{from:'bot',msg:`¡Hola, ${(PROFILE.nombre||'').split(' ')[0]||''}! 🤖 Soy <b>Wally</b>, el asistente de Amazinn Places. Pregúntame cómo encontrar algo.`}];
@@ -512,9 +513,13 @@ async function horOthers(days){
 
 /* ---------------- ORGANIGRAMA (directorio desde perfiles) ---------------- */
 function ini2(n){return (n||'?').trim().split(/\s+/).slice(0,2).map(w=>w[0]).join('').toUpperCase();}
-function av(n,color,size){size=size||40;return `<span style="width:${size}px;height:${size}px;border-radius:50%;background:${color||'#1F4E79'};color:#fff;display:inline-flex;align-items:center;justify-content:center;font-weight:700;font-size:${Math.round(size*0.38)}px;flex:0 0 auto">${ini2(n)}</span>`;}
+function av(n,color,size,foto){size=size||40;
+  if(foto) return `<span style="width:${size}px;height:${size}px;border-radius:50%;background:#eee center/cover no-repeat;background-image:url('${foto}');display:inline-block;flex:0 0 auto"></span>`;
+  return `<span style="width:${size}px;height:${size}px;border-radius:50%;background:${color||'#1F4E79'};color:#fff;display:inline-flex;align-items:center;justify-content:center;font-weight:700;font-size:${Math.round(size*0.38)}px;flex:0 0 auto">${ini2(n)}</span>`;}
+// redimensiona y recorta una imagen a un avatar pequeño (data URL)
+function fileToAvatar(file){return new Promise(res=>{const r=new FileReader();r.onload=e=>{const img=new Image();img.onload=()=>{const s=160,c=document.createElement('canvas');c.width=s;c.height=s;const x=c.getContext('2d');const m=Math.min(img.width,img.height);x.drawImage(img,(img.width-m)/2,(img.height-m)/2,m,m,0,0,s,s);res(c.toDataURL('image/jpeg',0.82));};img.src=e.target.result;};r.readAsDataURL(file);});}
 async function pageOrganigrama(){
-  const{data}=await sb.from('profiles').select('nombre,dept,role,color').order('dept');
+  const{data}=await sb.from('profiles').select('nombre,dept,role,color,foto').order('dept');
   const ppl=data||[];
   const byDept={};
   ppl.forEach(p=>{const d=p.dept||'Sin departamento';(byDept[d]=byDept[d]||[]).push(p);});
@@ -523,7 +528,7 @@ async function pageOrganigrama(){
     <div class="panel"><h2>${esc(d)} <span class="badge b-grey" style="font-weight:600">${byDept[d].length}</span></h2>
       <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:12px">
       ${byDept[d].map(p=>`<div style="display:flex;align-items:center;gap:11px;border:1px solid var(--gris2);border-radius:10px;padding:11px">
-        ${av(p.nombre,p.color,40)}<div><b style="font-size:14px">${esc(p.nombre||'—')}</b><br><small style="color:var(--suave)">${roleNice(p.role)}</small></div></div>`).join('')}
+        ${av(p.nombre,p.color,40,p.foto)}<div><b style="font-size:14px">${esc(p.nombre||'—')}</b><br><small style="color:var(--suave)">${roleNice(p.role)}</small></div></div>`).join('')}
       </div></div>`).join('');
   document.getElementById('main').innerHTML=`<div class="page-title">Organigrama</div>
     <div class="page-sub">Equipo de Amazinn Places por departamento (${ppl.length} personas)</div>${blocks}`;
@@ -780,7 +785,7 @@ async function pageAdmin(){
   const{data}=await sb.from('profiles').select('*').order('dept');
   const us=data||[];
   const rl=r=>({empleado:'Empleado',responsable:'Responsable',rrhh:'RRHH',admin:'Administrador'})[r]||r;
-  const rows=us.map(u=>`<tr><td>${av(u.nombre,u.color,30)}</td><td><b>${esc(u.nombre||'')}</b>${u.id===ME.id?' <span class="badge b-grey">tú</span>':''}<br><small style="color:var(--suave)">${esc(u.email||'')}</small></td>
+  const rows=us.map(u=>`<tr><td>${av(u.nombre,u.color,30,u.foto)}</td><td><b>${esc(u.nombre||'')}</b>${u.id===ME.id?' <span class="badge b-grey">tú</span>':''}<br><small style="color:var(--suave)">${esc(u.email||'')}</small></td>
     <td>${esc(u.dept||'')}</td><td><span class="badge ${u.role==='admin'?'b-red':u.role==='rrhh'?'b-blue':u.role==='responsable'?'b-amber':'b-grey'}">${rl(u.role)}</span></td><td>${u.vac||0}</td>
     <td><button class="btn ghost" style="padding:4px 9px" onclick='userEdit(${JSON.stringify(u).replace(/'/g,"&#39;")})'>✏️ Editar</button></td></tr>`).join('');
   document.getElementById('main').innerHTML=`<div class="page-title">Administración</div><div class="page-sub">Gestión de empleados y roles</div>
@@ -796,11 +801,16 @@ function userForm(){const u=userDraft;const colores=['#1F4E79','#16a085','#8e44a
     <div class="row"><div><label>Departamento</label><select id="uD">${DEPTS.map(d=>`<option ${u.dept===d?'selected':''}>${d}</option>`).join('')}</select></div>
       <div><label>Rol</label><select id="uR">${['empleado','responsable','rrhh','admin'].map(r=>`<option value="${r}" ${u.role===r?'selected':''}>${r}</option>`).join('')}</select></div></div>
     <label>Cumpleaños</label><input id="uC" type="date" value="${u.cumple||''}">
-    <label>Color</label><div style="display:flex;gap:8px;flex-wrap:wrap">${colores.map(c=>`<label style="cursor:pointer"><input type="radio" name="uCol" value="${c}" ${(u.color||colores[0])===c?'checked':''} style="display:none" onchange="this.parentElement.parentElement.querySelectorAll('.sw').forEach(s=>s.style.outline='');this.nextElementSibling.style.outline='3px solid #333'"><span class="sw" style="display:inline-block;width:26px;height:26px;border-radius:50%;background:${c};outline:${(u.color||colores[0])===c?'3px solid #333':''}"></span></label>`).join('')}</div>
+    <label>Foto de perfil</label>
+    <div style="display:flex;align-items:center;gap:12px">${av(u.nombre,u.color,48,u.foto)}<input type="file" id="uFoto" accept="image/*">${u.foto?`<button type="button" class="btn ghost" style="padding:5px 11px" onclick="userDraft.foto=null;show('admin')">Quitar foto</button>`:''}</div>
+    <label>Color de avatar (si no hay foto)</label><div style="display:flex;gap:8px;flex-wrap:wrap">${colores.map(c=>`<label style="cursor:pointer"><input type="radio" name="uCol" value="${c}" ${(u.color||colores[0])===c?'checked':''} style="display:none" onchange="this.parentElement.parentElement.querySelectorAll('.sw').forEach(s=>s.style.outline='');this.nextElementSibling.style.outline='3px solid #333'"><span class="sw" style="display:inline-block;width:26px;height:26px;border-radius:50%;background:${c};outline:${(u.color||colores[0])===c?'3px solid #333':''}"></span></label>`).join('')}</div>
     <div><button class="btn" type="submit">Guardar</button> <button class="btn ghost" type="button" onclick="userFormOpen=false;show('admin')">Cancelar</button></div></form></div>`;}
 async function userSave(e){e.preventDefault();
   const col=document.querySelector('input[name="uCol"]:checked');
   const row={nombre:val('uN'),dept:document.getElementById('uD').value,role:document.getElementById('uR').value,vac:+val('uV')||0,cumple:val('uC')||null,color:col?col.value:'#1F4E79'};
+  const f=document.getElementById('uFoto').files[0];
+  if(f){ row.foto=await fileToAvatar(f); }
+  else if(userDraft.foto===null){ row.foto=null; }   // se pulsó "Quitar foto"
   const{error}=await sb.from('profiles').update(row).eq('id',userEditId);
   if(error){alert('Error: '+error.message);return false;}
   userFormOpen=false;show('admin');return false;}
