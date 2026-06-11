@@ -134,7 +134,11 @@
   form.box input,form.box select,form.box textarea,.com-card,.tabs button,.search input,
   .grid-wrap,table.sched select,.cell-b,.qr-card,.asset-card,.cal td,.gr-item{border-radius:0 !important}
   .card,.panel{box-shadow:none;border:1px solid var(--gris2);transition:transform .18s,box-shadow .18s}
+  .clic{cursor:pointer}
   .clic:hover{transform:translateY(-3px)}
+  .bday-ban{background:linear-gradient(135deg,#fff4d6,#ffe9c7);border:1px solid #ffe0a3;padding:14px 18px;margin-bottom:16px;font-size:14.5px}
+  .bday-ban.me{background:linear-gradient(135deg,#1c1b18,#3a342a);color:#fff;font-weight:600;font-size:15px;border:none}
+  .bday-ban.me b{color:#fff}
   .btn,.login-card button{text-transform:uppercase;font-size:12.5px;letter-spacing:.8px}
   .btn:hover{background:var(--acento);color:#241f16}
   header.top{border-top:3px solid var(--acento);box-shadow:none}
@@ -468,7 +472,7 @@ function show(id){
   ensureGroupOpen(id); highlightNav();
   const m=document.getElementById('main');
   if(id==='perfil'){ m.innerHTML='<div class="page-title">Mi perfil</div><div class="page-sub">Cargando…</div>'; pagePerfil(); return; }
-  if(id==='inicio') m.innerHTML=pageInicio();
+  if(id==='inicio'){ m.innerHTML='<div class="page-sub">Cargando…</div>'; pageInicio(); return; }
   else if(id==='comunicados'){ m.innerHTML='<div class="page-title">Comunicados</div><div class="page-sub">Cargando…</div>'; pageComunicados(); }
   else if(id==='horarios'){ m.innerHTML='<div class="page-title">Horarios</div><div class="page-sub">Cargando…</div>'; pageHorarios(); }
   else if(id==='organigrama'){ m.innerHTML='<div class="page-title">Organigrama</div><div class="page-sub">Cargando…</div>'; pageOrganigrama(); }
@@ -499,19 +503,41 @@ function show(id){
 }
 
 /* ---------------- INICIO ---------------- */
-function pageInicio(){
-  return `
-    <div class="page-title">Hola, ${(PROFILE.nombre||'').split(' ')[0]||'👋'}</div>
-    <div class="page-sub">Portal interno de Amazinn Places · ${PROFILE.dept||''}</div>
-    <div class="cards">
-      <div class="card"><h3>📢 Comunicados</h3><div class="big" id="cInicioCom">—</div><small style="color:var(--suave)">en la empresa</small></div>
-      <div class="card"><h3>🧑‍💼 Tu rol</h3><div class="big" style="font-size:20px">${roleNice(PROFILE.role)}</div></div>
-      <div class="card"><h3>🏢 Departamento</h3><div class="big" style="font-size:20px">${PROFILE.dept||'—'}</div></div>
+async function pageInicio(){
+  const p=PROFILE, cargo=p.cargo||roleNice(p.role);
+  const {data:bd}=await sb.from('profiles').select('nombre,dept,cumple').not('cumple','is',null);
+  const now=new Date(), mm=String(now.getMonth()+1).padStart(2,'0'), dd=String(now.getDate()).padStart(2,'0');
+  const hoy=(bd||[]).filter(x=>{const a=(x.cumple||'').split('-');return a[1]===mm&&a[2]===dd;});
+  const bday=hoy.map(b=> b.nombre===p.nombre
+    ? `<div class="bday-ban me">🎉 ¡Feliz cumpleaños, ${(p.nombre||'').split(' ')[0]}! De parte de todo el equipo de <b>Amazinn Places</b> te deseamos un día estupendo. 🎂🧡</div>`
+    : `<div class="bday-ban">🎂 Hoy es el cumpleaños de <b>${esc(b.nombre)}</b> (${esc(b.dept||'')}). ¡No olvides felicitarle! 🥳</div>`).join('');
+  const {data:coms}=await sb.from('comunicados').select('id,dirigido');
+  const {data:lect}=await sb.from('comunicado_lecturas').select('comunicado_id,user_id');
+  const vis=(coms||[]).filter(c=>c.dirigido==='*'||c.dirigido===p.dept);
+  const readIds=new Set((lect||[]).filter(l=>l.user_id===ME.id).map(l=>l.comunicado_id));
+  const sinLeer=vis.filter(c=>!readIds.has(c.id)).length;
+  const {data:kud}=await sb.from('kudos').select('*').order('created_at',{ascending:false}).limit(2);
+  const kudos=(kud||[]).map(k=>`<div style="font-size:13.5px;padding:7px 0;border-bottom:1px solid var(--gris)"><b>${esc(k.de_nombre)}</b> → <b style="color:var(--acento)">${esc(k.para_nombre)}</b>: ${esc(k.texto)}</div>`).join('')||'<div style="color:var(--suave);font-size:13.5px">Aún no hay reconocimientos.</div>';
+  document.getElementById('main').innerHTML=`
+    <div style="display:flex;align-items:center;gap:18px;margin-bottom:18px">
+      ${av(p.nombre,p.color,88,p.foto)}
+      <div><div class="page-title" style="margin-bottom:2px;border-bottom:none;padding-bottom:0">Hola, ${(p.nombre||'').split(' ')[0]} 👋</div>
+        <div style="font-size:14px;color:var(--acento);font-weight:700">${esc(cargo)}</div>
+        <div class="page-sub" style="margin-bottom:0">${esc(p.dept||'')}</div></div>
     </div>
-    <div class="panel" style="margin-top:6px">
-      <h2>✅ Conexión activa</h2>
-      <p style="font-size:13.5px;color:var(--suave)">Estás conectado a la base de datos. Los comunicados que se publiquen aquí los verá todo el equipo en tiempo real. Iremos añadiendo el resto de módulos (horarios, fichaje, bitácora, plantillas…) en las próximas versiones.</p>
-    </div>`;
+    ${bday}
+    <div class="cards">
+      <div class="card clic" onclick="show('horarios')"><h3>📅 Mis horarios</h3><div class="big" style="font-size:22px">Ver turnos</div></div>
+      <div class="card clic" onclick="show('vacaciones')"><h3>🌴 Vacaciones</h3><div class="big green">${p.vac||0} días</div></div>
+      <div class="card clic" onclick="show('comunicados')"><h3>📢 Comunicados sin leer</h3><div class="big">${sinLeer}</div><small style="color:var(--suave)">pendientes de confirmar</small></div>
+      <div class="card clic" onclick="show('fichaje')"><h3>⏱️ Fichaje</h3><div class="big" style="font-size:22px">Fichar</div></div>
+    </div>
+    <div class="panel clic" onclick="show('kudos')"><h2>🏅 Reconocimientos recientes</h2>${kudos}</div>
+    <div class="cards"><div class="card"><h3>⚡ Accesos rápidos</h3><div style="font-size:13.5px">
+      <div style="padding:6px 0;border-bottom:1px solid var(--gris)"><a href="#" onclick="show('vacaciones');return false">Solicitar vacaciones</a></div>
+      <div style="padding:6px 0;border-bottom:1px solid var(--gris)"><a href="#" onclick="show('bajas');return false">Notificar una baja</a></div>
+      <div style="padding:6px 0;border-bottom:1px solid var(--gris)"><a href="#" onclick="show('mensajeria');return false">Mensajería interna</a></div>
+      <div style="padding:6px 0"><a href="#" onclick="show('perfil');return false">Mi perfil</a></div></div></div></div>`;
 }
 function roleNice(r){return ({empleado:'Empleado',responsable:'Responsable',rrhh:'RRHH',admin:'Administrador'})[r]||r;}
 
@@ -677,8 +703,9 @@ function pagePerfil(){
         <div style="margin-top:10px"><label class="btn ghost" style="padding:6px 12px;cursor:pointer">📷 Cambiar foto<input type="file" accept="image/*" style="display:none" onchange="cambiarMiFoto(this)"></label></div></div>
       <div style="flex:1;min-width:220px">
         <div style="font-size:22px;font-weight:800;font-family:'Playfair Display',Georgia,serif">${esc(p.nombre||'')}</div>
-        <div style="color:var(--acento);font-weight:700;margin:2px 0 12px">${esc(p.dept||'')}</div>
+        <div style="color:var(--acento);font-weight:700;margin:2px 0 12px">${esc(p.cargo||p.dept||'')}</div>
         <div style="font-size:14px;line-height:2">
+          <div>🏢 <b>Departamento:</b> ${esc(p.dept||'—')}</div>
           <div>🧑‍💼 <b>Rol:</b> ${rol}</div>
           <div>✉️ <b>Email:</b> ${esc(p.email||ME.email||'—')}</div>
           <div>🌴 <b>Vacaciones:</b> ${p.vac||0} días</div>
@@ -970,6 +997,7 @@ function userForm(){const u=userDraft;const colores=['#1F4E79','#16a085','#8e44a
     <div class="row"><div><label>Nombre</label><input id="uN" value="${esc(u.nombre||'')}"></div><div><label>Días vacaciones</label><input id="uV" type="number" value="${u.vac||0}"></div></div>
     <div class="row"><div><label>Departamento</label><select id="uD">${DEPTS.map(d=>`<option ${u.dept===d?'selected':''}>${d}</option>`).join('')}</select></div>
       <div><label>Rol</label><select id="uR">${['empleado','responsable','rrhh','admin'].map(r=>`<option value="${r}" ${u.role===r?'selected':''}>${r}</option>`).join('')}</select></div></div>
+    <label>Cargo / puesto</label><input id="uCargo" value="${esc(u.cargo||'')}" placeholder="Ej: Recepcionista, Responsable de operaciones…">
     <label>Cumpleaños</label><input id="uC" type="date" value="${u.cumple||''}">
     <label>Foto de perfil</label>
     <div style="display:flex;align-items:center;gap:12px">${av(u.nombre,u.color,48,u.foto)}<input type="file" id="uFoto" accept="image/*">${u.foto?`<button type="button" class="btn ghost" style="padding:5px 11px" onclick="userDraft.foto=null;show('admin')">Quitar foto</button>`:''}</div>
@@ -977,7 +1005,7 @@ function userForm(){const u=userDraft;const colores=['#1F4E79','#16a085','#8e44a
     <div><button class="btn" type="submit">Guardar</button> <button class="btn ghost" type="button" onclick="userFormOpen=false;show('admin')">Cancelar</button></div></form></div>`;}
 async function userSave(e){e.preventDefault();
   const col=document.querySelector('input[name="uCol"]:checked');
-  const row={nombre:val('uN'),dept:document.getElementById('uD').value,role:document.getElementById('uR').value,vac:+val('uV')||0,cumple:val('uC')||null,color:col?col.value:'#1F4E79'};
+  const row={nombre:val('uN'),dept:document.getElementById('uD').value,role:document.getElementById('uR').value,vac:+val('uV')||0,cumple:val('uC')||null,cargo:val('uCargo'),color:col?col.value:'#1F4E79'};
   const f=document.getElementById('uFoto').files[0];
   if(f){ row.foto=await fileToAvatar(f); }
   else if(userDraft.foto===null){ row.foto=null; }   // se pulsó "Quitar foto"
