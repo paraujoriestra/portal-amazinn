@@ -249,6 +249,9 @@
   .btn-read{background:var(--acento);color:#fff;border:none;padding:9px 16px;border-radius:9px;font-weight:600;font-size:13px}
   .btn-del{background:transparent;color:#c0392b;border:1px solid #e3b7b1;padding:8px 14px;border-radius:9px;font-weight:600;font-size:12.5px;cursor:pointer;margin-left:8px}
   .btn-del:hover{background:#c0392b;color:#fff;border-color:#c0392b}
+  .nav-badge{margin-left:auto;background:#e23b3b;color:#fff;font-size:11px;font-weight:700;min-width:18px;height:18px;border-radius:9px;display:inline-flex;align-items:center;justify-content:center;padding:0 5px;line-height:1}
+  #nav a{display:flex;align-items:center}
+  .mc-dot{margin-left:auto;background:#e23b3b;color:#fff;font-size:10.5px;font-weight:700;min-width:17px;height:17px;border-radius:9px;display:inline-flex;align-items:center;justify-content:center;padding:0 5px}
   .btn-read:hover{filter:brightness(.95)}
   .read-ok{color:var(--acento);font-weight:700;font-size:13px}
   .read-count{font-size:12px;color:var(--suave)}
@@ -609,6 +612,9 @@ async function enterApp(user){
   buildNav();
   document.getElementById('chatFab').style.display='flex';
   loadNotifs();
+  loadMsgUnread();
+  if(window._msgPoll) clearInterval(window._msgPoll);
+  window._msgPoll = setInterval(loadMsgUnread, 20000);
   chatMsgs=[{from:'bot',msg:`¡Hola, ${(PROFILE.nombre||'').split(' ')[0]||''}! 🤖 Soy <b>Wally</b>, el asistente de Amazinn Places. Pregúntame cómo encontrar algo.`}];
   show('inicio');
 }
@@ -746,6 +752,21 @@ function toggleBell(e){
 function goNotif(sec,e){if(e)e.stopPropagation();const p=document.getElementById('notifPanel');if(p)p.style.display='none';if(sec)show(sec);}
 document.addEventListener('click',(e)=>{const p=document.getElementById('notifPanel');if(!p||p.style.display!=='block')return;if(e.target.closest('#notifPanel')||e.target.closest('#bell'))return;p.style.display='none';});
 async function notifyTeam(dept,icon,texto,sec){ try{ await sb.from('notificaciones').insert({dept,icon,texto,sec}); }catch(e){} }
+let MSG_UNREAD=0;
+async function loadMsgUnread(){
+  const { count } = await sb.from('mensajes').select('id',{count:'exact',head:true}).eq('para_id',ME.id).eq('leido',false);
+  MSG_UNREAD = count||0;
+  updateMsgBadge();
+}
+function updateMsgBadge(){
+  const a=document.querySelector('#nav a[data-id="mensajeria"]');
+  if(!a) return;
+  let b=a.querySelector('.nav-badge');
+  if(MSG_UNREAD>0){
+    if(!b){ b=document.createElement('span'); b.className='nav-badge'; a.appendChild(b); }
+    b.textContent = MSG_UNREAD>99?'99+':MSG_UNREAD;
+  } else if(b){ b.remove(); }
+}
 function buildNav(){
   const nav=document.getElementById('nav');
   const groups=navGroups();
@@ -762,6 +783,7 @@ function buildNav(){
     nav.appendChild(box);
   });
   highlightNav();
+  updateMsgBadge();
 }
 function highlightNav(){document.querySelectorAll('#nav a').forEach(a=>a.classList.toggle('active',a.dataset.id===curPage));}
 function ensureGroupOpen(id){const g=groupOf(id);if(g&&navOpen&&!navOpen.has(g)){navOpen.add(g);buildNav();}}
@@ -1617,8 +1639,15 @@ async function pageMensajeria(){
   const {data:msgs}=await sb.from('mensajes').select('*').order('created_at');
   const MS=msgs||[];
   if(chatWithId && !contacts.find(c=>c.id===chatWithId)) chatWithId=null;
+  // marcar como leídos los mensajes recibidos de este contacto
+  if(chatWithId){
+    await sb.from('mensajes').update({leido:true}).eq('para_id',ME.id).eq('de_id',chatWithId).eq('leido',false);
+    loadMsgUnread();
+  }
   const lista=contacts.map(c=>{const last=[...MS].reverse().find(m=>(m.de_id===ME.id&&m.para_id===c.id)||(m.de_id===c.id&&m.para_id===ME.id));
-    return `<div class="mc ${c.id===chatWithId?'on':''}" onclick="openChat('${c.id}','${(c.nombre||'').replace(/'/g,"\\'")}')">${av(c.nombre,c.color,34,c.foto)}<div style="overflow:hidden"><b style="display:block">${esc(c.nombre)}</b><small style="color:var(--suave);display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:150px">${last?esc(last.texto):'—'}</small></div></div>`;}).join('');
+    const noLeidos=MS.filter(m=>m.de_id===c.id&&m.para_id===ME.id&&!m.leido).length;
+    const dot=noLeidos>0?`<span class="mc-dot">${noLeidos>99?'99+':noLeidos}</span>`:'';
+    return `<div class="mc ${c.id===chatWithId?'on':''}" onclick="openChat('${c.id}','${(c.nombre||'').replace(/'/g,"\\'")}')">${av(c.nombre,c.color,34,c.foto)}<div style="overflow:hidden"><b style="display:block">${esc(c.nombre)}</b><small style="color:var(--suave);display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:150px">${last?esc(last.texto):'—'}</small></div>${dot}</div>`;}).join('');
   let conv;
   if(!chatWithId) conv=`<div class="msg-conv" style="align-items:center;justify-content:center;color:var(--suave);font-size:14px">Selecciona un compañero para chatear</div>`;
   else{ const thread=MS.filter(m=>(m.de_id===ME.id&&m.para_id===chatWithId)||(m.de_id===chatWithId&&m.para_id===ME.id));
