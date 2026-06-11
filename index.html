@@ -531,14 +531,23 @@
     <img id="logoLogin" alt="Amazinn Places" style="height:64px;margin:0 auto 6px;display:block">
     <div class="sub">Portal Interno del equipo</div>
     <form onsubmit="return authSubmit(event)">
-      <div id="liNameBox" style="display:none">
-        <label>Nombre y apellidos</label>
-        <input id="liName" type="text" placeholder="Pablo Araujo">
+      <div id="liSignupFields" style="display:none">
+        <label>Nombre</label>
+        <input id="liName" type="text" placeholder="Pablo">
+        <label>Apellidos</label>
+        <input id="liApe" type="text" placeholder="Araujo Riestra">
+        <label>Nº de teléfono</label>
+        <input id="liTel" type="tel" inputmode="tel" placeholder="+507 6000 0000">
+        <label>Nº de identificación</label>
+        <input id="liIdent" type="text" placeholder="Cédula / pasaporte">
+        <label>Fecha de cumpleaños</label>
+        <input id="liCumple" type="date">
       </div>
       <label>Email</label>
       <input id="liEmail" type="email" required placeholder="tucorreo@amazinnplaces.com">
-      <label>Contraseña</label>
-      <input id="liPass" type="password" required placeholder="••••••••">
+      <label>PIN de acceso (6 dígitos)</label>
+      <input id="liPass" type="password" inputmode="numeric" autocomplete="off" maxlength="6" required placeholder="••••••" oninput="this.value=this.value.replace(/\D/g,'').slice(0,6)">
+      <div id="liPinHint" style="display:none;font-size:12px;color:var(--suave);margin:-4px 0 8px">Elige 6 números. No pueden ser todos iguales (ej. 111111).</div>
       <button type="submit" id="liBtn">Entrar</button>
     </form>
     <div class="login-err" id="liErr"></div>
@@ -609,7 +618,8 @@ async function initSession(){
 let signupMode=false;
 function toggleSignup(){
   signupMode=!signupMode;
-  document.getElementById('liNameBox').style.display = signupMode?'block':'none';
+  document.getElementById('liSignupFields').style.display = signupMode?'block':'none';
+  document.getElementById('liPinHint').style.display = signupMode?'block':'none';
   document.getElementById('liBtn').textContent = signupMode?'Crear cuenta':'Entrar';
   document.getElementById('liToggle').textContent = signupMode?'¿Ya tienes cuenta? Entrar':'¿Primera vez? Crear cuenta';
   document.getElementById('liErr').textContent='';
@@ -620,14 +630,19 @@ async function authSubmit(e){
   const email=document.getElementById('liEmail').value.trim();
   const pass=document.getElementById('liPass').value;
   const errEl=document.getElementById('liErr'); errEl.style.color='var(--rojo)';
+  // Validación del PIN
+  if(!/^\d{6}$/.test(pass)){ errEl.textContent='El PIN debe tener exactamente 6 dígitos.'; return false; }
+  if(signupMode && /^(\d)\1{5}$/.test(pass)){ errEl.textContent='El PIN no puede tener los 6 dígitos iguales (ej. 111111). Elige otro.'; return false; }
   const btn=document.getElementById('liBtn'); const orig=btn.textContent; btn.disabled=true; btn.textContent='…';
   if(signupMode){
-    const nombre=document.getElementById('liName').value.trim();
-    const { data, error } = await sb.auth.signUp({ email, password:pass, options:{ data:{ nombre } } });
+    const nombre=val('liName'), apellidos=val('liApe'), telefono=val('liTel'), identificacion=val('liIdent'), cumple=document.getElementById('liCumple').value;
+    if(!nombre||!apellidos||!telefono||!identificacion||!cumple){ errEl.textContent='Completa todos los campos del registro.'; return false; }
+    btn.disabled=true; btn.textContent='…';
+    const { data, error } = await sb.auth.signUp({ email, password:pass, options:{ data:{ nombre, apellidos, telefono, identificacion, cumple } } });
     btn.disabled=false; btn.textContent=orig;
     if(error){ errEl.textContent='No se pudo crear la cuenta: '+error.message; return false; }
-    if(data.session){ await enterApp(data.user); }
-    else { errEl.style.color='var(--acento)'; errEl.textContent='✓ Cuenta creada. Si te pedimos confirmar por email, revisa tu correo y luego pulsa "Entrar".'; toggleSignup(); }
+    if(data.session){ await sb.auth.signOut(); }   // queda pendiente de aprobación
+    showThanks();
     return false;
   }
   const { data, error } = await sb.auth.signInWithPassword({ email, password:pass });
@@ -643,6 +658,12 @@ async function enterApp(user){
   // cargar perfil
   const { data:prof } = await sb.from('profiles').select('*').eq('id', user.id).single();
   PROFILE = prof || { nombre:user.email, dept:'', role:'empleado', color:'#1F4E79' };
+  // Control de aprobación: si no está aprobado, no entra
+  if(PROFILE.estado && PROFILE.estado!=='aprobado'){
+    await sb.auth.signOut();
+    if(PROFILE.estado==='rechazado') showRejected(); else showThanks();
+    return;
+  }
   document.getElementById('login').style.display='none';
   document.getElementById('app').style.display='block';
   document.getElementById('uname').textContent = PROFILE.nombre || user.email;
@@ -654,12 +675,27 @@ async function enterApp(user){
   document.getElementById('chatFab').style.display='flex';
   loadNotifs();
   loadMsgUnread();
+  loadPendingCount();
   if(window._msgPoll) clearInterval(window._msgPoll);
-  window._msgPoll = setInterval(loadMsgUnread, 20000);
+  window._msgPoll = setInterval(()=>{loadMsgUnread();loadPendingCount();}, 20000);
   chatMsgs=[{from:'bot',msg:`¡Hola, ${(PROFILE.nombre||'').split(' ')[0]||''}! 🤖 Soy <b>Wally</b>, el asistente de Amazinn Places. Pregúntame cómo encontrar algo.`}];
   show('inicio');
 }
 function inis(n){return (n||'?').trim().split(/\s+/).slice(0,2).map(w=>w[0]).join('').toUpperCase();}
+function loginMsg(icon,titulo,texto){
+  document.getElementById('app').style.display='none';
+  const lc=document.querySelector('#login .login-card');
+  if(lc) lc.innerHTML=`<img src="${LOGO}" style="height:60px;margin:0 auto 10px;display:block">
+    <div style="text-align:center;padding:4px 2px">
+      <div style="font-size:42px">${icon}</div>
+      <h2 style="margin:8px 0">${titulo}</h2>
+      <p style="color:var(--suave);font-size:14px;line-height:1.6">${texto}</p>
+      <button onclick="location.reload()" style="margin-top:16px;background:var(--azul);color:#fff;border:none;padding:10px 20px;border-radius:8px;cursor:pointer;font-weight:600;font-family:inherit">Volver al inicio</button>
+    </div>`;
+  document.getElementById('login').style.display='flex';
+}
+function showThanks(){ loginMsg('✅','¡Muchas gracias!','Tu registro se ha enviado correctamente.<br>Pronto confirmarán tu acceso. Te avisaremos cuando puedas entrar.'); }
+function showRejected(){ loginMsg('🚫','Acceso no aprobado','Tu solicitud de registro no fue aprobada.<br>Si crees que es un error, contacta con tu responsable.'); }
 
 /* ---------------- NAVEGACIÓN ---------------- */
 const NAV=[
@@ -700,6 +736,7 @@ const NAV=[
   {id:'auditoria',ic:'🔒',t:'Auditoría', roles:['admin']},
   {grp:'Gestión', roles:['responsable','rrhh','admin']},
   {id:'aprobaciones',ic:'✅',t:'Aprobaciones', roles:['responsable','rrhh','admin']},
+  {id:'registros',ic:'🆕',t:'Registros pendientes', roles:['admin']},
   {id:'admin',ic:'⚙️',t:'Administración', roles:['admin']},
 ];
 const CAN_MANAGE=['responsable','rrhh','admin','propietario'];
@@ -734,6 +771,7 @@ const ICONS={
   docs:'<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/>',
   sugerencias:'<path d="M9 18h6M10 21h4"/><path d="M12 3a6 6 0 0 0-4 10c1 1 1 2 1 3h6c0-1 0-2 1-3a6 6 0 0 0-4-10z"/>',
   cumple:'<path d="M4 21h16v-7H4z"/><path d="M4 14c2 0 2-2 4-2s2 2 4 2 2-2 4-2 2 2 4 2M12 4v4"/>',
+  registros:'<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6M22 11h-6"/>',
   organigrama:'<rect x="9" y="2" width="6" height="5" rx="1"/><rect x="2" y="16" width="6" height="5" rx="1"/><rect x="16" y="16" width="6" height="5" rx="1"/><path d="M12 7v4M5 16v-3h14v3"/>',
   proveedores:'<path d="M2 6h12v9H2zM14 9h4l3 3v3h-7z"/><circle cx="6.5" cy="18" r="1.6"/><circle cx="17.5" cy="18" r="1.6"/>',
   suministros:'<path d="M9 2v6M15 2v6M7 8h10v3a5 5 0 0 1-10 0z"/><path d="M12 16v5"/>',
@@ -809,6 +847,21 @@ function updateMsgBadge(){
     b.textContent = MSG_UNREAD>99?'99+':MSG_UNREAD;
   } else if(b){ b.remove(); }
 }
+let PENDING_REG=0;
+async function loadPendingCount(){
+  if(!isAdmin()){ PENDING_REG=0; updateRegBadge(); return; }
+  const { count } = await sb.from('profiles').select('id',{count:'exact',head:true}).eq('estado','pendiente');
+  PENDING_REG = count||0; updateRegBadge();
+}
+function updateRegBadge(){
+  const a=document.querySelector('#nav a[data-id="registros"]');
+  if(!a) return;
+  let b=a.querySelector('.nav-badge');
+  if(PENDING_REG>0){
+    if(!b){ b=document.createElement('span'); b.className='nav-badge'; a.appendChild(b); }
+    b.textContent = PENDING_REG>99?'99+':PENDING_REG;
+  } else if(b){ b.remove(); }
+}
 function buildNav(){
   const nav=document.getElementById('nav');
   const groups=navGroups();
@@ -826,6 +879,7 @@ function buildNav(){
   });
   highlightNav();
   updateMsgBadge();
+  updateRegBadge();
 }
 function highlightNav(){document.querySelectorAll('#nav a').forEach(a=>a.classList.toggle('active',a.dataset.id===curPage));}
 function ensureGroupOpen(id){const g=groupOf(id);if(g&&navOpen&&!navOpen.has(g)){navOpen.add(g);buildNav();}}
@@ -850,6 +904,7 @@ function show(id){
   else if(id==='cumple'){ m.innerHTML='<div class="page-title">Cumpleaños</div><div class="page-sub">Cargando…</div>'; pageCumple(); }
   else if(id==='carteles'){ pageCarteles(); }
   else if(id==='admin'){ m.innerHTML='<div class="page-title">Administración</div><div class="page-sub">Cargando…</div>'; pageAdmin(); }
+  else if(id==='registros'){ m.innerHTML='<div class="page-title">Registros pendientes</div><div class="page-sub">Cargando…</div>'; pageRegistros(); }
   else if(id==='mensajes'){ m.innerHTML='<div class="page-title">Mensajes y plantillas</div><div class="page-sub">Cargando…</div>'; pageMensajes(); }
   else if(id==='bitacora'){ m.innerHTML='<div class="page-title">Bitácora</div><div class="page-sub">Cargando…</div>'; pageBitacora(); }
   else if(id==='formacion'){ m.innerHTML='<div class="page-title">Formaciones</div><div class="page-sub">Cargando…</div>'; pageFormacion(); }
@@ -1505,6 +1560,49 @@ function pageCarteles(){const t=CARTELES[cartelTpl];
 }
 function updateCartel(){const t=CARTELES[cartelTpl];document.getElementById('cartelPrint').innerHTML=cartelHTML(val('caT'),document.getElementById('caB').value,val('caU'),t.color,t.icon);}
 
+/* ---------------- REGISTROS PENDIENTES (aprobación) ---------------- */
+async function pageRegistros(){
+  const { data } = await sb.from('profiles').select('*').eq('estado','pendiente').order('created_at');
+  const us=data||[];
+  const cards=us.map(u=>`<div class="panel" style="max-width:680px">
+    <div style="display:flex;gap:14px;align-items:center;margin-bottom:12px">${av(u.nombre,u.color,52,u.foto)}
+      <div style="flex:1"><b style="font-size:16px">${esc(u.nombre||'')}</b><br><small style="color:var(--suave)">${esc(u.email||'')}</small></div>
+      <button class="btn ghost" style="padding:6px 12px" onclick="regFoto('${u.id}')">📷 Foto</button></div>
+    <div style="font-size:13.5px;line-height:2;background:var(--gris);border-radius:9px;padding:8px 14px">
+      📞 <b>${esc(u.telefono||'—')}</b> &nbsp;·&nbsp; 🪪 <b>${esc(u.identificacion||'—')}</b> &nbsp;·&nbsp; 🎂 <b>${u.cumple||'—'}</b></div>
+    <div class="row" style="margin-top:12px">
+      <div><label>Rol</label><select id="rgR_${u.id}">${['empleado','responsable','rrhh','admin'].map(r=>`<option value="${r}">${r}</option>`).join('')}</select></div>
+      <div><label>Departamento</label><select id="rgD_${u.id}">${DEPTS.map(d=>`<option ${u.dept===d?'selected':''}>${d}</option>`).join('')}</select></div>
+    </div>
+    <div style="margin-top:14px;display:flex;gap:8px">
+      <button class="btn" onclick="aprobarReg('${u.id}')">✅ Aprobar acceso</button>
+      <button class="btn ghost" onclick="rechazarReg('${u.id}')">✖ Rechazar</button>
+    </div></div>`).join('');
+  document.getElementById('main').innerHTML=`<div class="page-title">Registros pendientes</div>
+    <div class="page-sub">Solicitudes de acceso al portal · asigna rol, departamento y foto antes de aprobar</div>
+    ${us.length?cards:'<div class="panel">No hay registros pendientes. ✅</div>'}`;
+}
+async function aprobarReg(id){
+  const role=document.getElementById('rgR_'+id).value, dept=document.getElementById('rgD_'+id).value;
+  const { error } = await sb.from('profiles').update({ estado:'aprobado', role, dept }).eq('id',id);
+  if(error){ alert('No se pudo aprobar: '+error.message); return; }
+  loadPendingCount(); show('registros'); toast('✓ Usuario aprobado');
+}
+async function rechazarReg(id){
+  if(!confirm('¿Rechazar esta solicitud? El usuario no podrá entrar al portal.')) return;
+  const { error } = await sb.from('profiles').update({ estado:'rechazado' }).eq('id',id);
+  if(error){ alert('Error: '+error.message); return; }
+  loadPendingCount(); show('registros'); toast('Solicitud rechazada');
+}
+function regFoto(id){
+  const input=document.createElement('input'); input.type='file'; input.accept='image/*';
+  input.onchange=()=>{ const f=input.files[0]; if(!f) return; openCropper(f, async foto=>{
+    const { error }=await sb.from('profiles').update({ foto }).eq('id',id);
+    if(error){ alert('Error: '+error.message); return; }
+    show('registros'); toast('✓ Foto guardada'); }); };
+  input.click();
+}
+
 /* ---------------- ADMINISTRACIÓN (usuarios) ---------------- */
 let userEditId=null, userFormOpen=false;
 async function pageAdmin(){
@@ -1535,6 +1633,8 @@ function userForm(){const u=userDraft;const colores=['#1F4E79','#16a085','#8e44a
         ? `<input value="Propietario 👑" disabled style="background:var(--gris)"><small style="color:var(--suave)">El rol de Propietario no se puede cambiar desde aquí.</small>`
         : `<select id="uR">${['empleado','responsable','rrhh','admin'].map(r=>`<option value="${r}" ${u.role===r?'selected':''}>${r}</option>`).join('')}</select>`}</div></div>
     <label>Cargo / puesto</label><input id="uCargo" value="${esc(u.cargo||'')}" placeholder="Ej: Recepcionista, Responsable de operaciones…">
+    <div class="row"><div><label>Nº de teléfono</label><input id="uTel" value="${esc(u.telefono||'')}"></div>
+      <div><label>Nº de identificación</label><input id="uIdent" value="${esc(u.identificacion||'')}"></div></div>
     <label>Cumpleaños</label><input id="uC" type="date" value="${u.cumple||''}">
     <label>Foto de perfil</label>
     <div style="display:flex;align-items:center;gap:12px">${av(u.nombre,u.color,48,u.foto)}<input type="file" id="uFoto" accept="image/*" onchange="adminFotoPick(this)">${u.foto?`<button type="button" class="btn ghost" style="padding:5px 11px" onclick="userDraft.foto=null;show('admin')">Quitar foto</button>`:''}</div>
@@ -1544,7 +1644,7 @@ async function userSave(e){e.preventDefault();
   const col=document.querySelector('input[name="uCol"]:checked');
   const rolSel=document.getElementById('uR');
   const nuevoRol = (userDraft.role==='propietario') ? 'propietario' : (rolSel?rolSel.value:userDraft.role);
-  const row={nombre:val('uN'),dept:document.getElementById('uD').value,role:nuevoRol,vac:+val('uV')||0,cumple:val('uC')||null,cargo:val('uCargo'),color:col?col.value:'#1F4E79'};
+  const row={nombre:val('uN'),dept:document.getElementById('uD').value,role:nuevoRol,vac:+val('uV')||0,cumple:val('uC')||null,cargo:val('uCargo'),telefono:val('uTel'),identificacion:val('uIdent'),color:col?col.value:'#1F4E79'};
   const f=document.getElementById('uFoto').files[0];
   if(f){ row.foto=await fileToAvatar(f); }            // respaldo si no se usó el recorte
   else { row.foto = (userDraft.foto!==undefined ? userDraft.foto : null); }  // recorte aplicado, foto existente, o "Quitar foto"
