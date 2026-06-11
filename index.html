@@ -5,8 +5,10 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Amazinn Places · Portal interno</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;800;900&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
-  :root{--azul:#1F4E79;--azul2:#2E5C8A;--azul-claro:#E8F0F9;--acento:#16a085;--gris:#f4f6f9;--gris2:#e4e8ee;--texto:#2b2f36;--suave:#6b7280;--rojo:#d9534f;--amarillo:#e0a800;--sombra:0 1px 3px rgba(0,0,0,.08)}
+  :root{--azul:#1c1b18;--azul2:#3a342a;--azul-claro:#f1e9da;--acento:#b08d57;--gris:#f7f3ec;--gris2:#e7e0d3;--texto:#26241f;--suave:#8c8475;--rojo:#b3543f;--amarillo:#c0922f;--sombra:0 1px 2px rgba(40,30,15,.05),0 2px 10px rgba(40,30,15,.05)}
   *{box-sizing:border-box;margin:0;padding:0}
   body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;background:var(--gris);color:var(--texto);line-height:1.5}
   button{font-family:inherit;cursor:pointer}
@@ -121,6 +123,64 @@
   .setup{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:#fff;z-index:60;padding:24px}
   .setup .box{max-width:560px;font-size:14px;line-height:1.6}
   .setup code{background:var(--gris);padding:2px 6px;border-radius:5px}
+  /* ===== TEMA LOOKB · elegante (carbón + dorado + marfil) ===== */
+  body{font-family:'Inter',-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+  a{color:var(--acento)}
+  .page-title,.panel h2,.com-card .h b,.card .big{font-family:'Playfair Display',Georgia,serif}
+  .page-title{font-weight:800}
+  .login-card .brand,.brand{font-family:'Playfair Display',Georgia,serif}
+  #login{background:linear-gradient(135deg,#26241f 0%,#403828 60%,#5a4a30 100%)}
+  .card,.panel,.btn,.badge,.login-card,.login-card input,.login-card button,
+  form.box input,form.box select,form.box textarea,.com-card,.tabs button,.search input,
+  .grid-wrap,table.sched select,.cell-b,.qr-card,.asset-card,.cal td,.gr-item{border-radius:0 !important}
+  .card,.panel{box-shadow:none;border:1px solid var(--gris2);transition:transform .18s,box-shadow .18s}
+  .clic:hover{transform:translateY(-3px)}
+  .btn,.login-card button{text-transform:uppercase;font-size:12.5px;letter-spacing:.8px}
+  .btn:hover{background:var(--acento);color:#241f16}
+  header.top{border-top:3px solid var(--acento);box-shadow:none}
+  .page-title{border-bottom:2px solid var(--azul-claro);padding-bottom:8px;display:inline-block}
+  .avatar{border-radius:4px}
+  table th{font-weight:600}
+  table.sched thead th,table.cal th{background:var(--azul)}
+  /* Menú lateral oscuro */
+  nav.side{background:#1c1b18;border-right:none}
+  nav.side .grp-tog{color:#bcb4a4}
+  nav.side .grp-tog:hover{color:#fff;background:#2a2823}
+  nav.side .grp-tog.open{color:var(--acento)}
+  nav.side a{color:#d8d2c4;border-left:3px solid transparent}
+  nav.side a:hover{background:#2a2823;color:#fff}
+  nav.side a.active{background:#2a2823;border-left-color:var(--acento);color:#fff}
+  nav.side a .nic{width:18px;height:18px;display:inline-block;vertical-align:-3px}
+  nav.side a .nic *{stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+  /* Controles de cabecera */
+  .hdr-ctrl{background:none;border:1px solid var(--gris2);width:36px;height:36px;font-size:16px;margin-right:12px;line-height:1;cursor:pointer}
+  .hdr-ctrl:hover{border-color:var(--acento)}
+  .hamb{display:none;background:none;border:none;font-size:22px;margin-right:12px;cursor:pointer;color:var(--texto)}
+  .gsearch{position:relative;margin-left:22px;flex:0 1 300px;max-width:300px}
+  .gsearch input{width:100%;padding:9px 12px 9px 34px;border:1px solid var(--gris2);font-size:13.5px;font-family:inherit;background:#fff}
+  .gsearch input:focus{outline:none;border-color:var(--acento)}
+  .gsearch .gs-ic{position:absolute;left:11px;top:50%;transform:translateY(-50%);font-size:12px;opacity:.6}
+  .gresults{display:none;position:absolute;top:42px;left:0;right:0;background:#fff;border:1px solid var(--gris2);box-shadow:0 10px 24px rgba(40,30,15,.14);z-index:40;max-height:340px;overflow:auto}
+  .gresults .gr-item{padding:9px 12px;border-bottom:1px solid var(--gris);cursor:pointer}
+  .gresults .gr-item:hover{background:var(--azul-claro)}
+  .gresults .gr-item b{font-size:13.5px;font-weight:600;display:block}
+  .gresults .gr-item small{color:var(--suave);font-size:11px;text-transform:uppercase}
+  .gresults .gr-empty{padding:14px;color:var(--suave);font-size:13px;text-align:center}
+  /* Modo oscuro */
+  body.dark{--gris:#16150f;--gris2:#34302a;--texto:#ece6d9;--suave:#a59d8d;--azul:#efe7d8;--azul-claro:#2b2823}
+  body.dark .card,body.dark .panel,body.dark header.top,body.dark .com-card,body.dark .login-card,body.dark form.box input,body.dark form.box select,body.dark form.box textarea,body.dark .search input,body.dark .gsearch input,body.dark .gresults,body.dark .grid-wrap,body.dark .cal td{background:#211f1a;color:var(--texto);border-color:#34302a}
+  body.dark .hdr-ctrl{color:var(--texto)}
+  body.dark .page-sub,body.dark small{color:var(--suave)}
+  /* Móvil */
+  .nav-backdrop{display:none}
+  @media(max-width:760px){
+    header.top{padding:0 14px}.hamb{display:block}main{padding:18px 16px}
+    nav.side{position:fixed;left:0;top:60px;bottom:0;z-index:45;transform:translateX(-100%);transition:transform .25s;width:240px}
+    body.nav-open nav.side{transform:translateX(0)}
+    body.nav-open .nav-backdrop{display:block;position:fixed;inset:60px 0 0 0;background:rgba(0,0,0,.4);z-index:44}
+    .cards{grid-template-columns:1fr 1fr}.user-chip .meta{display:none}.gsearch{display:none}
+  }
+  @media(max-width:460px){.cards{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
@@ -156,15 +216,19 @@
 <!-- APP -->
 <div id="app">
   <header class="top">
-    <img id="logoHdr" alt="Amazinn Places" style="height:34px;display:block">
+    <button class="hamb" onclick="toggleSidebar()" aria-label="Menú">☰</button>
+    <img id="logoHdr" alt="Amazinn Places" onclick="show('inicio')" style="height:34px;display:block;cursor:pointer" title="Ir al inicio">
+    <div class="gsearch"><span class="gs-ic">🔎</span><input id="gSearch" placeholder="Buscar…" oninput="globalSearch()" onblur="setTimeout(()=>{const r=document.getElementById('gResults');if(r)r.style.display='none'},180)"><div id="gResults" class="gresults"></div></div>
     <div class="spacer"></div>
-    <div class="user-chip">
+    <button class="hdr-ctrl" id="darkBtn" onclick="toggleDark()" title="Modo claro / oscuro">🌙</button>
+    <div class="user-chip" onclick="show('perfil')" style="cursor:pointer" title="Mi perfil">
       <div class="avatar" id="av">··</div>
       <div class="meta"><b id="uname">—</b><small id="urole">—</small></div>
     </div>
     <button class="logout" onclick="doLogout()">Salir</button>
   </header>
   <div class="layout">
+    <div class="nav-backdrop" onclick="toggleSidebar()"></div>
     <nav class="side" id="nav"></nav>
     <main id="main"></main>
   </div>
@@ -311,6 +375,47 @@ function navGroups(){
   return groups.filter(g=>g.items.length);
 }
 function groupOf(id){let c=null;for(const it of NAV){if(it.grp)c=it.grp;else if(it.id===id)return c;}return null;}
+const ICONS={
+  inicio:'<path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V20h14V9.5"/>',
+  horarios:'<rect x="3" y="4" width="18" height="17" rx="1"/><path d="M3 9h18M8 2v4M16 2v4"/>',
+  fichaje:'<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+  comunicados:'<path d="M3 11v2l12 5V6L3 11z"/><path d="M16 9a3 3 0 0 1 0 6"/>',
+  calendario:'<rect x="3" y="4" width="18" height="17" rx="1"/><path d="M3 9h18M8 2v4M16 2v4M7 13h2M11 13h2M15 13h2"/>',
+  vacaciones:'<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.4 1.4M17.6 17.6 19 19M19 5l-1.4 1.4M6.4 17.6 5 19"/>',
+  bajas:'<path d="M12 21s-7-4.5-7-10a4 4 0 0 1 7-2 4 4 0 0 1 7 2c0 5.5-7 10-7 10z"/>',
+  docs:'<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/>',
+  sugerencias:'<path d="M9 18h6M10 21h4"/><path d="M12 3a6 6 0 0 0-4 10c1 1 1 2 1 3h6c0-1 0-2 1-3a6 6 0 0 0-4-10z"/>',
+  cumple:'<path d="M4 21h16v-7H4z"/><path d="M4 14c2 0 2-2 4-2s2 2 4 2 2-2 4-2 2 2 4 2M12 4v4"/>',
+  organigrama:'<rect x="9" y="2" width="6" height="5" rx="1"/><rect x="2" y="16" width="6" height="5" rx="1"/><rect x="16" y="16" width="6" height="5" rx="1"/><path d="M12 7v4M5 16v-3h14v3"/>',
+  proveedores:'<path d="M2 6h12v9H2zM14 9h4l3 3v3h-7z"/><circle cx="6.5" cy="18" r="1.6"/><circle cx="17.5" cy="18" r="1.6"/>',
+  suministros:'<path d="M9 2v6M15 2v6M7 8h10v3a5 5 0 0 1-10 0z"/><path d="M12 16v5"/>',
+  mensajes:'<path d="M21 15a2 2 0 0 1-2 2H8l-4 4V5a2 2 0 0 1 2-2h13a2 2 0 0 1 2 2z"/>',
+  bitacora:'<rect x="5" y="4" width="14" height="17" rx="1"/><path d="M9 4V3h6v1M8 10h8M8 14h8M8 18h5"/>',
+  marca:'<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8" cy="9" r="1.6"/><path d="M3 17l5-4 4 3 3-2 6 5"/>',
+  carteles:'<rect x="4" y="4" width="16" height="11" rx="1"/><path d="M12 15v5M8 20h8"/>',
+  tutoriales:'<path d="M2 9l10-5 10 5-10 5z"/><path d="M6 11v4c0 1.5 3 3 6 3s6-1.5 6-3v-4"/>',
+  formacion:'<path d="M5 3h14v16H6a2 2 0 0 0-2 2V5a2 2 0 0 1 1-2z"/><path d="M4 19a2 2 0 0 1 2-2h13"/>',
+  depto:'<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
+  kpis:'<path d="M3 21h18M6 21V11M11 21V5M16 21v-8M21 21v-5"/>',
+  auditoria:'<rect x="5" y="11" width="14" height="9" rx="1"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>',
+  aprobaciones:'<circle cx="12" cy="12" r="9"/><path d="M8 12l3 3 5-6"/>',
+  admin:'<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2"/>',
+  perfil:'<circle cx="12" cy="8" r="4"/><path d="M5 21a7 7 0 0 1 14 0"/>'
+};
+function navIcon(id){return `<svg class="nic" viewBox="0 0 24 24" style="width:18px;height:18px">${ICONS[id]||'<circle cx="12" cy="12" r="8"/>'}</svg>`;}
+function toggleDark(){document.body.classList.toggle('dark');const b=document.getElementById('darkBtn');if(b)b.textContent=document.body.classList.contains('dark')?'☀️':'🌙';}
+function toggleSidebar(){document.body.classList.toggle('nav-open');}
+function globalSearch(){
+  const q=(document.getElementById('gSearch').value||'').toLowerCase().trim();
+  const box=document.getElementById('gResults'); if(!box) return;
+  if(!q){box.style.display='none';return;}
+  const items=[];
+  try{navGroups().forEach(g=>g.items.forEach(it=>items.push({l:it.t,sub:'Sección',s:it.id})));}catch(e){}
+  const res=items.filter(i=>(i.l||'').toLowerCase().includes(q)).slice(0,8);
+  box.innerHTML=res.length?res.map(r=>`<div class="gr-item" onmousedown="goSearch('${r.s}')"><b>${r.l}</b><small>${r.sub}</small></div>`).join(''):'<div class="gr-empty">Sin resultados</div>';
+  box.style.display='block';
+}
+function goSearch(s){const b=document.getElementById('gResults');if(b)b.style.display='none';const i=document.getElementById('gSearch');if(i)i.value='';show(s);}
 function buildNav(){
   const nav=document.getElementById('nav');
   const groups=navGroups();
@@ -323,7 +428,7 @@ function buildNav(){
     head.onclick=()=>{navOpen.has(g.name)?navOpen.delete(g.name):navOpen.add(g.name);buildNav();};
     nav.appendChild(head);
     const box=document.createElement('div'); if(!open) box.style.display='none';
-    g.items.forEach(it=>{const a=document.createElement('a');a.dataset.id=it.id;a.innerHTML=`<span>${it.ic}</span> ${it.t}`;a.onclick=()=>show(it.id);box.appendChild(a);});
+    g.items.forEach(it=>{const a=document.createElement('a');a.dataset.id=it.id;a.innerHTML=`<span class="nicw">${navIcon(it.id)}</span> ${it.t}`;a.onclick=()=>show(it.id);box.appendChild(a);});
     nav.appendChild(box);
   });
   highlightNav();
@@ -332,8 +437,10 @@ function highlightNav(){document.querySelectorAll('#nav a').forEach(a=>a.classLi
 function ensureGroupOpen(id){const g=groupOf(id);if(g&&navOpen&&!navOpen.has(g)){navOpen.add(g);buildNav();}}
 function show(id){
   curPage=id;
+  document.body.classList.remove('nav-open');
   ensureGroupOpen(id); highlightNav();
   const m=document.getElementById('main');
+  if(id==='perfil'){ m.innerHTML='<div class="page-title">Mi perfil</div><div class="page-sub">Cargando…</div>'; pagePerfil(); return; }
   if(id==='inicio') m.innerHTML=pageInicio();
   else if(id==='comunicados'){ m.innerHTML='<div class="page-title">Comunicados</div><div class="page-sub">Cargando…</div>'; pageComunicados(); }
   else if(id==='horarios'){ m.innerHTML='<div class="page-title">Horarios</div><div class="page-sub">Cargando…</div>'; pageHorarios(); }
@@ -518,6 +625,25 @@ function av(n,color,size,foto){size=size||40;
   return `<span style="width:${size}px;height:${size}px;border-radius:50%;background:${color||'#1F4E79'};color:#fff;display:inline-flex;align-items:center;justify-content:center;font-weight:700;font-size:${Math.round(size*0.38)}px;flex:0 0 auto">${ini2(n)}</span>`;}
 // redimensiona y recorta una imagen a un avatar pequeño (data URL)
 function fileToAvatar(file){return new Promise(res=>{const r=new FileReader();r.onload=e=>{const img=new Image();img.onload=()=>{const s=160,c=document.createElement('canvas');c.width=s;c.height=s;const x=c.getContext('2d');const m=Math.min(img.width,img.height);x.drawImage(img,(img.width-m)/2,(img.height-m)/2,m,m,0,0,s,s);res(c.toDataURL('image/jpeg',0.82));};img.src=e.target.result;};r.readAsDataURL(file);});}
+function pagePerfil(){
+  const p=PROFILE, rol=({empleado:'Empleado',responsable:'Responsable',rrhh:'RRHH',admin:'Administrador'})[p.role]||p.role;
+  document.getElementById('main').innerHTML=`<div class="page-title">Mi perfil</div><div class="page-sub">Tus datos en Amazinn Places</div>
+    <div class="panel" style="max-width:620px;display:flex;gap:22px;align-items:center;flex-wrap:wrap">
+      <div style="text-align:center">${av(p.nombre,p.color,110,p.foto)}
+        <div style="margin-top:10px"><label class="btn ghost" style="padding:6px 12px;cursor:pointer">📷 Cambiar foto<input type="file" accept="image/*" style="display:none" onchange="cambiarMiFoto(this)"></label></div></div>
+      <div style="flex:1;min-width:220px">
+        <div style="font-size:22px;font-weight:800;font-family:'Playfair Display',Georgia,serif">${esc(p.nombre||'')}</div>
+        <div style="color:var(--acento);font-weight:700;margin:2px 0 12px">${esc(p.dept||'')}</div>
+        <div style="font-size:14px;line-height:2">
+          <div>🧑‍💼 <b>Rol:</b> ${rol}</div>
+          <div>✉️ <b>Email:</b> ${esc(p.email||ME.email||'—')}</div>
+          <div>🌴 <b>Vacaciones:</b> ${p.vac||0} días</div>
+        </div>
+      </div>
+    </div>
+    <div style="font-size:12.5px;color:var(--suave);max-width:620px">Puedes cambiar tu foto. El resto de datos (rol, departamento, vacaciones) los gestiona el administrador.</div>`;
+}
+async function cambiarMiFoto(input){const f=input.files[0];if(!f)return;const foto=await fileToAvatar(f);const{error}=await sb.from('profiles').update({foto}).eq('id',ME.id);if(error){alert('Error: '+error.message);return;}PROFILE.foto=foto;const avEl=document.getElementById('av');avEl.textContent='';avEl.style.background=`#eee url('${foto}') center/cover no-repeat`;show('perfil');toast('✓ Foto actualizada');}
 async function pageOrganigrama(){
   const{data}=await sb.from('profiles').select('nombre,dept,role,color,foto').order('dept');
   const ppl=data||[];
