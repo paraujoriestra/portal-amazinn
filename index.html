@@ -132,7 +132,7 @@
   #login{background:linear-gradient(135deg,#26241f 0%,#403828 60%,#5a4a30 100%)}
   .card,.panel,.btn,.badge,.login-card,.login-card input,.login-card button,
   form.box input,form.box select,form.box textarea,.com-card,.tabs button,.search input,
-  .grid-wrap,table.sched select,.cell-b,.qr-card,.asset-card,.cal td,.gr-item{border-radius:0 !important}
+  .grid-wrap,table.sched select,.cell-b,.qr-card,.asset-card,.cal td,.gr-item{border-radius:5px !important}
   .card,.panel{box-shadow:none;border:1px solid var(--gris2);transition:transform .18s,box-shadow .18s}
   .clic{cursor:pointer}
   .clic:hover{transform:translateY(-3px)}
@@ -189,6 +189,20 @@
     .cards{grid-template-columns:1fr 1fr}.user-chip .meta{display:none}.gsearch{display:none}
   }
   @media(max-width:460px){.cards{grid-template-columns:1fr}}
+  /* Notificaciones */
+  .bell{position:relative;font-size:20px;margin-right:18px;cursor:pointer}
+  .bell .dot{position:absolute;top:-3px;right:-5px;background:var(--rojo);color:#fff;font-size:10px;font-weight:700;border-radius:10px;padding:1px 5px}
+  .notif-panel{display:none;position:fixed;top:66px;right:20px;width:360px;max-width:92vw;max-height:72vh;overflow-y:auto;background:#fff;border:1px solid var(--gris2);border-radius:7px;box-shadow:0 14px 36px rgba(40,30,15,.22);z-index:60}
+  .notif-panel .nh{padding:12px 16px;font-weight:700;font-size:14px;color:var(--azul);border-bottom:1px solid var(--gris2);position:sticky;top:0;background:#fff}
+  .notif-panel .ni{display:flex;gap:11px;padding:12px 16px;border-bottom:1px solid var(--gris);font-size:13.5px;cursor:pointer;align-items:flex-start}
+  .notif-panel .ni:last-child{border:none}
+  .notif-panel .ni:hover{background:var(--gris)}
+  .notif-panel .ni .ic{font-size:18px;flex:0 0 auto}
+  .notif-panel .ni .go{margin-left:auto;color:var(--acento);align-self:center}
+  .notif-panel .ni small{color:var(--suave);display:block;margin-top:3px}
+  .notif-panel .ni.unread{background:var(--azul-claro)}
+  .notif-panel .empty{padding:24px 16px;text-align:center;color:var(--suave);font-size:13px}
+  body.dark .notif-panel,body.dark .notif-panel .nh{background:#211f1a;color:var(--texto);border-color:#34302a}
   /* Mensajería */
   .msg-layout{display:grid;grid-template-columns:250px 1fr;border:1px solid var(--gris2);background:#fff;height:540px;box-shadow:var(--sombra)}
   .msg-contacts{border-right:1px solid var(--gris2);overflow:auto}
@@ -243,6 +257,8 @@
     <div class="gsearch"><span class="gs-ic">🔎</span><input id="gSearch" placeholder="Buscar…" oninput="globalSearch()" onblur="setTimeout(()=>{const r=document.getElementById('gResults');if(r)r.style.display='none'},180)"><div id="gResults" class="gresults"></div></div>
     <div class="spacer"></div>
     <button class="hdr-ctrl" id="darkBtn" onclick="toggleDark()" title="Modo claro / oscuro">🌙</button>
+    <div class="bell" id="bell" title="Notificaciones" onclick="toggleBell(event)">🔔<span class="dot" id="bellDot">0</span></div>
+    <div class="notif-panel" id="notifPanel"></div>
     <div class="user-chip" onclick="show('perfil')" style="cursor:pointer" title="Mi perfil">
       <div class="avatar" id="av">··</div>
       <div class="meta"><b id="uname">—</b><small id="urole">—</small></div>
@@ -336,6 +352,7 @@ async function enterApp(user){
   else { avEl.textContent = inis(PROFILE.nombre||user.email); avEl.style.background = PROFILE.color || '#1F4E79'; }
   buildNav();
   document.getElementById('chatFab').style.display='flex';
+  loadNotifs();
   chatMsgs=[{from:'bot',msg:`¡Hola, ${(PROFILE.nombre||'').split(' ')[0]||''}! 🤖 Soy <b>Wally</b>, el asistente de Amazinn Places. Pregúntame cómo encontrar algo.`}];
   show('inicio');
 }
@@ -447,6 +464,32 @@ function globalSearch(){
   box.style.display='block';
 }
 function goSearch(s){const b=document.getElementById('gResults');if(b)b.style.display='none';const i=document.getElementById('gSearch');if(i)i.value='';show(s);}
+/* ---------------- NOTIFICACIONES (campana) ---------------- */
+let NOTIFS=[], NOTIF_READ=new Set();
+async function loadNotifs(){
+  const {data}=await sb.from('notificaciones').select('*').order('created_at',{ascending:false}).limit(40);
+  NOTIFS=data||[];
+  const {data:r}=await sb.from('notif_leidas').select('notif_id').eq('user_id',ME.id);
+  NOTIF_READ=new Set((r||[]).map(x=>x.notif_id));
+  refreshBell();
+}
+function visNotifs(){return NOTIFS.filter(n=>n.dept==='*'||n.dept===PROFILE.dept||PROFILE.role==='admin');}
+function refreshBell(){const d=document.getElementById('bellDot');if(!d)return;const n=visNotifs().filter(x=>!NOTIF_READ.has(x.id)).length;d.textContent=n;d.style.display=n?'block':'none';}
+function toggleBell(e){
+  if(e)e.stopPropagation();
+  const p=document.getElementById('notifPanel');
+  if(p.style.display==='block'){p.style.display='none';return;}
+  const items=visNotifs();
+  p.innerHTML=`<div class="nh">Notificaciones</div>`+(items.length?items.map(n=>`<div class="ni ${NOTIF_READ.has(n.id)?'':'unread'}" onclick="goNotif('${n.sec||''}',event)"><span class="ic">${n.icon||'🔔'}</span><div>${esc(n.texto||'')}<small>${new Date(n.created_at).toLocaleString('es-ES')}${n.sec?' · pulsa para ver':''}</small></div>${n.sec?'<span class="go">→</span>':''}</div>`).join(''):`<div class="empty">No tienes notificaciones</div>`);
+  p.style.display='block';
+  const unread=items.filter(n=>!NOTIF_READ.has(n.id));
+  unread.forEach(n=>NOTIF_READ.add(n.id));
+  if(unread.length){ sb.from('notif_leidas').insert(unread.map(n=>({notif_id:n.id,user_id:ME.id}))).then(()=>{}); }
+  refreshBell();
+}
+function goNotif(sec,e){if(e)e.stopPropagation();const p=document.getElementById('notifPanel');if(p)p.style.display='none';if(sec)show(sec);}
+document.addEventListener('click',(e)=>{const p=document.getElementById('notifPanel');if(!p||p.style.display!=='block')return;if(e.target.closest('#notifPanel')||e.target.closest('#bell'))return;p.style.display='none';});
+async function notifyTeam(dept,icon,texto,sec){ try{ await sb.from('notificaciones').insert({dept,icon,texto,sec}); }catch(e){} }
 function buildNav(){
   const nav=document.getElementById('nav');
   const groups=navGroups();
@@ -606,6 +649,7 @@ async function createCom(e){
     autor_id:ME.id, autor_nombre:PROFILE.nombre };
   const { error } = await sb.from('comunicados').insert(row);
   if(error){ alert('No se pudo publicar: '+error.message); return false; }
+  await notifyTeam(row.dirigido, '📢', `Nuevo comunicado de ${PROFILE.nombre}: "${row.titulo}"`, 'comunicados');
   comFormOpen=false; pageComunicados();
   return false;
 }
@@ -656,6 +700,7 @@ async function saveTurnos(dept){
   const rows=[...document.querySelectorAll('.tcell')].map(s=>({dept,empleado_id:s.dataset.emp,empleado_nombre:s.dataset.name,fecha:s.dataset.fecha,turno:s.value,updated_at:new Date().toISOString()}));
   const{error}=await sb.from('turnos').upsert(rows,{onConflict:'empleado_id,fecha'});
   if(error){alert('No se pudo guardar: '+error.message);return;}
+  await notifyTeam(dept, '📅', `${PROFILE.nombre} ha actualizado el horario de ${dept}. Revisa tus turnos.`, 'horarios');
   show('horarios');
 }
 async function horMine(days){
