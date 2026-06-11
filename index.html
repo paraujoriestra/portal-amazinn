@@ -80,7 +80,9 @@
   .accent-pick span:hover{transform:scale(1.15);border-color:#fff;box-shadow:0 0 0 1px var(--gris2)}
   /* ===== MENSAJERÍA ===== */
   .msg-layout{display:grid;grid-template-columns:250px 1fr;border:1px solid var(--gris2);background:#fff;height:540px;box-shadow:var(--sombra)}
-  .msg-contacts{border-right:1px solid var(--gris2);overflow:auto}
+  .msg-contacts{border-right:1px solid var(--gris2);overflow:auto;display:flex;flex-direction:column}
+  .msg-search{position:sticky;top:0;background:#fff;padding:9px;border-bottom:1px solid var(--gris2);z-index:2}
+  .msg-search input{width:100%;box-sizing:border-box;padding:8px 11px;border:1px solid var(--gris2);border-radius:8px;font-family:inherit;font-size:13px}
   .msg-contacts .mc{padding:11px 14px;border-bottom:1px solid var(--gris);cursor:pointer;display:flex;gap:10px;align-items:center;font-size:13.5px}
   .msg-contacts .mc.on,.msg-contacts .mc:hover{background:var(--azul-claro)}
   .msg-contacts .mc b{font-size:13.5px}
@@ -1650,10 +1652,8 @@ async function pageMensajeria(){
     await sb.from('mensajes').update({leido:true}).eq('para_id',ME.id).eq('de_id',chatWithId).eq('leido',false);
     loadMsgUnread();
   }
-  const lista=contacts.map(c=>{const last=[...MS].reverse().find(m=>(m.de_id===ME.id&&m.para_id===c.id)||(m.de_id===c.id&&m.para_id===ME.id));
-    const noLeidos=MS.filter(m=>m.de_id===c.id&&m.para_id===ME.id&&!m.leido).length;
-    const dot=noLeidos>0?`<span class="mc-dot">${noLeidos>99?'99+':noLeidos}</span>`:'';
-    return `<div class="mc ${c.id===chatWithId?'on':''}" onclick="openChat('${c.id}','${(c.nombre||'').replace(/'/g,"\\'")}')">${av(c.nombre,c.color,34,c.foto)}<div style="overflow:hidden"><b style="display:block">${esc(c.nombre)}</b><small style="color:var(--suave);display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:150px">${last?esc(last.texto):'—'}</small></div>${dot}</div>`;}).join('');
+  MSG_CONTACTS=contacts; MSG_ALL=MS;
+  const lista=buildContactList('');
   let conv;
   if(!chatWithId) conv=`<div class="msg-conv" style="align-items:center;justify-content:center;color:var(--suave);font-size:14px">Selecciona un compañero para chatear</div>`;
   else{ const thread=MS.filter(m=>(m.de_id===ME.id&&m.para_id===chatWithId)||(m.de_id===chatWithId&&m.para_id===ME.id));
@@ -1661,8 +1661,28 @@ async function pageMensajeria(){
       <div class="msg-thread" id="msgThread">${thread.map(m=>`<div class="mbub ${m.de_id===ME.id?'me':'ot'}">${esc(m.texto)}</div>`).join('')||'<div style="color:var(--suave);text-align:center;font-size:13px">Aún no hay mensajes. ¡Escribe el primero!</div>'}</div>
       <div class="msg-input"><div class="emoji-wrap"><button type="button" class="emoji-btn" onclick="toggleEmoji(event)" title="Emojis">😊</button><div id="emojiPanel" class="emoji-panel"></div></div><input id="msgIn" placeholder="Escribe un mensaje…" onkeydown="if(event.key==='Enter')sendMsg()"><button class="btn" onclick="sendMsg()">Enviar</button></div></div>`; }
   setTimeout(()=>{const t=document.getElementById('msgThread');if(t)t.scrollTop=t.scrollHeight;},40);
-  document.getElementById('main').innerHTML=`<div class="page-title">Mensajería interna</div><div class="page-sub">Habla con tus compañeros de equipo</div><div class="msg-layout"><div class="msg-contacts">${lista||'<div style="padding:14px;color:var(--suave);font-size:13px">No hay otros usuarios todavía.</div>'}</div>${conv}</div>`;
+  document.getElementById('main').innerHTML=`<div class="page-title">Mensajería interna</div><div class="page-sub">Habla con tus compañeros de equipo</div><div class="msg-layout"><div class="msg-contacts"><div class="msg-search"><input id="msgSearch" placeholder="🔍 Buscar persona o palabra…" oninput="msgSearch(this.value)"></div><div id="contactList">${lista}</div></div>${conv}</div>`;
 }
+let MSG_CONTACTS=[], MSG_ALL=[];
+function buildContactList(term){
+  term=(term||'').trim().toLowerCase();
+  const rows=MSG_CONTACTS.map(c=>{
+    const conv=MSG_ALL.filter(m=>(m.de_id===ME.id&&m.para_id===c.id)||(m.de_id===c.id&&m.para_id===ME.id));
+    const last=[...conv].reverse()[0];
+    const noLeidos=conv.filter(m=>m.de_id===c.id&&m.para_id===ME.id&&!m.leido).length;
+    const dot=noLeidos>0?`<span class="mc-dot">${noLeidos>99?'99+':noLeidos}</span>`:'';
+    // ¿coincide con la búsqueda? por nombre o por contenido de algún mensaje
+    const nameHit=(c.nombre||'').toLowerCase().includes(term);
+    const msgHit=term?conv.find(m=>(m.texto||'').toLowerCase().includes(term)):null;
+    if(term && !nameHit && !msgHit) return '';
+    // si la búsqueda coincide con un mensaje, muestro ese fragmento
+    const sub=(term && msgHit)?esc(msgHit.texto):(last?esc(last.texto):'—');
+    return `<div class="mc ${c.id===chatWithId?'on':''}" onclick="openChat('${c.id}','${(c.nombre||'').replace(/'/g,"\\'")}')">${av(c.nombre,c.color,34,c.foto)}<div style="overflow:hidden"><b style="display:block">${esc(c.nombre)}</b><small style="color:var(--suave);display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:170px">${sub}</small></div>${dot}</div>`;
+  }).filter(Boolean).join('');
+  if(!rows) return `<div style="padding:14px;color:var(--suave);font-size:13px">${term?'Sin resultados para "'+esc(term)+'"':'No hay otros usuarios todavía.'}</div>`;
+  return rows;
+}
+function msgSearch(v){const l=document.getElementById('contactList');if(l)l.innerHTML=buildContactList(v);}
 function openChat(id,name){chatWithId=id;chatWithName=name;show('mensajeria');}
 async function sendMsg(){const i=document.getElementById('msgIn');const t=(i.value||'').trim();if(!t||!chatWithId)return;const{error}=await sb.from('mensajes').insert({de_id:ME.id,para_id:chatWithId,de_nombre:PROFILE.nombre,para_nombre:chatWithName,texto:t});if(error){alert('Error: '+error.message);return;}show('mensajeria');}
 const EMOJIS=['😀','😁','😂','🤣','😊','😍','😘','😎','🤩','🥳','😉','🙂','😇','🤔','😅','😬','😴','🥹','😢','😭','😤','😡','👍','👎','👏','🙏','💪','🙌','👋','🤝','✌️','🤞','❤️','🧡','💛','💚','💙','💜','🔥','✨','🎉','🎊','✅','❌','⭐','💯','👀','🚀','☕','🍕','🎂','💼','📌','⏰'];
