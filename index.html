@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Amazinn Places · Portal interno</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root{--azul:#1F4E79;--azul2:#2E5C8A;--azul-claro:#E8F0F9;--acento:#16a085;--gris:#f4f6f9;--gris2:#e4e8ee;--texto:#2b2f36;--suave:#6b7280;--rojo:#d9534f;--amarillo:#e0a800;--sombra:0 1px 3px rgba(0,0,0,.08)}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;background:var(--gris);color:var(--texto);line-height:1.5}
+  button{font-family:inherit;cursor:pointer}
+  a{color:var(--azul)}
+  .brand{font-family:Georgia,'Times New Roman',serif;font-weight:900;color:#111;line-height:.82;letter-spacing:1px}
+  /* LOGIN */
+  #login{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#1F4E79,#2E5C8A);z-index:50}
+  .login-card{background:#fff;border-radius:16px;padding:40px;width:380px;max-width:92vw;box-shadow:0 20px 50px rgba(0,0,0,.3);text-align:center}
+  .login-card .brand{font-size:30px;margin-bottom:2px}
+  .login-card .sub{color:var(--suave);font-size:14px;margin:6px 0 22px}
+  .login-card label{display:block;text-align:left;font-size:13px;color:var(--suave);margin:12px 0 6px;font-weight:600}
+  .login-card input{width:100%;padding:11px 12px;border:1px solid var(--gris2);border-radius:9px;font-size:15px}
+  .login-card button{width:100%;margin-top:22px;padding:13px;background:var(--azul);color:#fff;border:none;border-radius:9px;font-size:15px;font-weight:600}
+  .login-card button:hover{background:var(--azul2)}
+  .login-err{color:var(--rojo);font-size:13px;margin-top:12px;min-height:18px}
+  /* APP */
+  #app{display:none}
+  header.top{background:#fff;border-bottom:1px solid var(--gris2);height:60px;display:flex;align-items:center;padding:0 22px;position:sticky;top:0;z-index:20;box-shadow:var(--sombra)}
+  header.top .brand{font-size:17px;line-height:.8}
+  header.top .spacer{flex:1}
+  .avatar{width:36px;height:36px;border-radius:50%;background:var(--azul);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px}
+  .user-chip{display:flex;align-items:center;gap:10px}
+  .user-chip .meta{font-size:13px;line-height:1.2}.user-chip .meta b{display:block}.user-chip .meta small{color:var(--suave)}
+  .logout{margin-left:16px;font-size:13px;color:var(--suave);background:none;border:1px solid var(--gris2);padding:6px 12px;border-radius:8px}
+  .layout{display:flex}
+  nav.side{width:220px;background:#fff;border-right:1px solid var(--gris2);min-height:calc(100vh - 60px);padding:14px 0;position:sticky;top:60px}
+  nav.side a{display:flex;align-items:center;gap:11px;padding:11px 22px;color:var(--texto);text-decoration:none;font-size:14.5px;border-left:3px solid transparent;cursor:pointer}
+  nav.side a:hover{background:var(--azul-claro)}
+  nav.side a.active{background:var(--azul-claro);border-left-color:var(--azul);color:var(--azul);font-weight:600}
+  main{flex:1;padding:28px 34px;max-width:1000px}
+  .page-title{font-size:24px;font-weight:700;color:var(--azul);margin-bottom:4px}
+  .page-sub{color:var(--suave);font-size:14px;margin-bottom:22px}
+  .cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:16px}
+  .card{background:#fff;border:1px solid var(--gris2);border-radius:12px;padding:18px;box-shadow:var(--sombra)}
+  .card h3{font-size:14px;color:var(--suave);font-weight:600;margin-bottom:8px}
+  .card .big{font-size:28px;font-weight:800;color:var(--azul)}
+  .panel{background:#fff;border:1px solid var(--gris2);border-radius:12px;padding:22px;box-shadow:var(--sombra);margin-bottom:20px}
+  .panel h2{font-size:17px;color:var(--azul);margin-bottom:14px}
+  .btn{background:var(--azul);color:#fff;border:none;padding:11px 20px;border-radius:9px;font-weight:600;font-size:14px}
+  .btn:hover{background:var(--azul2)}
+  .btn.ghost{background:#fff;color:var(--azul);border:1px solid var(--azul)}
+  form.box{display:grid;gap:14px;max-width:560px}
+  form.box label{font-size:13px;font-weight:600;color:var(--suave)}
+  form.box input,form.box select,form.box textarea{width:100%;padding:10px 12px;border:1px solid var(--gris2);border-radius:9px;font-size:14px;font-family:inherit}
+  .row{display:flex;gap:14px}.row>div{flex:1}
+  .badge{display:inline-block;font-size:11.5px;font-weight:600;padding:3px 9px;border-radius:20px}
+  .b-blue{background:var(--azul-claro);color:var(--azul)}.b-amber{background:#fdf3d7;color:var(--amarillo)}.b-red{background:#fbe6e5;color:var(--rojo)}.b-green{background:#e3f5ef;color:var(--acento)}.b-grey{background:var(--gris2);color:var(--suave)}
+  .com-card{background:#fff;border:1px solid var(--gris2);border-left:4px solid var(--azul);border-radius:10px;padding:16px 18px;margin-bottom:14px;box-shadow:var(--sombra);max-width:760px}
+  .com-card.urg{border-left-color:var(--rojo)}.com-card.imp{border-left-color:var(--amarillo)}
+  .com-card .h{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:8px;flex-wrap:wrap}
+  .com-card .h b{font-size:15px}
+  .com-card .txt{white-space:pre-line;font-size:14px;color:#333;line-height:1.6}
+  .com-card .foot{display:flex;align-items:center;gap:10px;margin-top:12px;padding-top:10px;border-top:1px solid var(--gris);font-size:12px;color:var(--suave);flex-wrap:wrap}
+  .btn-read{background:var(--acento);color:#fff;border:none;padding:7px 13px;border-radius:8px;font-weight:600;font-size:12.5px}
+  .read-ok{color:var(--acento);font-weight:700;font-size:12.5px}
+  table{width:100%;border-collapse:collapse;font-size:14px}
+  th{text-align:left;color:var(--suave);font-weight:600;font-size:12px;text-transform:uppercase;padding:10px 12px;border-bottom:2px solid var(--gris2)}
+  td{padding:11px 12px;border-bottom:1px solid var(--gris)}
+  .tabs{display:flex;gap:6px;margin-bottom:18px;border-bottom:2px solid var(--gris2);flex-wrap:wrap}
+  .tabs button{background:none;border:none;padding:10px 16px;font-size:14px;font-weight:600;color:var(--suave);border-bottom:3px solid transparent;margin-bottom:-2px;cursor:pointer}
+  .tabs button.on{color:var(--azul);border-bottom-color:var(--azul)}
+  .grid-wrap{overflow-x:auto;border:1px solid var(--gris2);border-radius:12px;background:#fff;box-shadow:var(--sombra)}
+  table.sched{border-collapse:collapse;font-size:13px;min-width:760px;width:100%}
+  table.sched th,table.sched td{border:1px solid var(--gris2);padding:6px 8px;text-align:center;white-space:nowrap}
+  table.sched thead th{background:var(--azul);color:#fff;font-size:11px;font-weight:600}
+  table.sched .emp{position:sticky;left:0;background:#fff;text-align:left;font-weight:600;min-width:150px;z-index:1}
+  table.sched thead .emp{background:var(--azul);color:#fff}
+  table.sched .wknd{background:#f0f3f7}
+  table.sched select{border:1px solid var(--gris2);border-radius:6px;padding:4px;font-size:12px;background:#fff;min-width:74px}
+  .cell-b{display:inline-block;padding:3px 7px;border-radius:6px;font-size:11.5px;font-weight:600;min-width:30px}
+  .legend{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--suave);margin-top:14px}
+  .legend span{display:flex;align-items:center;gap:6px}.legend i{width:12px;height:12px;border-radius:3px;display:inline-block}
+  .setup{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:#fff;z-index:60;padding:24px}
+  .setup .box{max-width:560px;font-size:14px;line-height:1.6}
+  .setup code{background:var(--gris);padding:2px 6px;border-radius:5px}
+</style>
+</head>
+<body>
+
+<!-- Aviso si falta configurar Supabase -->
+<div id="setup" class="setup" style="display:none"><div class="box">
+  <div class="brand" style="font-size:26px">AMAZINN places</div>
+  <h2 style="color:var(--azul);margin:14px 0">Falta configurar la conexión</h2>
+  <p>Abre este archivo <code>portal.html</code> y, al principio del bloque <code>&lt;script&gt;</code> de configuración, pega la <b>URL</b> y la <b>clave anónima</b> de tu proyecto Supabase. Encontrarás los pasos en <b>GUIA_PUESTA_EN_MARCHA.md</b>.</p>
+</div></div>
+
+<!-- LOGIN -->
+<div id="login">
+  <div class="login-card">
+    <div class="brand">AMAZINN places</div>
+    <div class="sub">Portal interno del empleado</div>
+    <form onsubmit="return authSubmit(event)">
+      <div id="liNameBox" style="display:none">
+        <label>Nombre y apellidos</label>
+        <input id="liName" type="text" placeholder="Pablo Araujo">
+      </div>
+      <label>Email</label>
+      <input id="liEmail" type="email" required placeholder="tucorreo@amazinnplaces.com">
+      <label>Contraseña</label>
+      <input id="liPass" type="password" required placeholder="••••••••">
+      <button type="submit" id="liBtn">Entrar</button>
+    </form>
+    <div class="login-err" id="liErr"></div>
+    <div style="margin-top:14px;font-size:13px"><a href="#" id="liToggle" onclick="toggleSignup();return false">¿Primera vez? Crear cuenta</a></div>
+  </div>
+</div>
+
+<!-- APP -->
+<div id="app">
+  <header class="top">
+    <div class="brand">AMAZINN places</div>
+    <div class="spacer"></div>
+    <div class="user-chip">
+      <div class="avatar" id="av">··</div>
+      <div class="meta"><b id="uname">—</b><small id="urole">—</small></div>
+    </div>
+    <button class="logout" onclick="doLogout()">Salir</button>
+  </header>
+  <div class="layout">
+    <nav class="side" id="nav"></nav>
+    <main id="main"></main>
+  </div>
+</div>
+
+<script>
+/* =====================================================================
+   CONFIGURACIÓN — pega aquí los datos de tu proyecto Supabase
+   (Supabase → Project Settings → API)
+   ===================================================================== */
+const SUPABASE_URL      = "https://lignlqomotopwottnqkk.supabase.co";
+const SUPABASE_ANON_KEY = "sb_publishable_5e5M44BylweO-pzG74H8tw_N-uSjd1z";
+/* ===================================================================== */
+
+const DEPTS = ["Dirección","Recursos Humanos","Atención al cliente","Operaciones","Limpieza","Mantenimiento","Almacén","Recepción nocturna","Marketing"];
+const NIVEL = { info:["Informativo","b-blue"], imp:["Importante","b-amber"], urg:["Urgente","b-red"] };
+const CAN_COM = ["responsable","rrhh","admin"];
+
+let sb=null, ME=null, PROFILE=null, curPage='inicio';
+
+// ¿Está configurado?
+if(SUPABASE_URL.startsWith("http") && SUPABASE_ANON_KEY && !SUPABASE_ANON_KEY.startsWith("PEGA")){
+  sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  initSession();
+} else {
+  document.getElementById('login').style.display='none';
+  document.getElementById('setup').style.display='flex';
+}
+
+async function initSession(){
+  const { data:{ session } } = await sb.auth.getSession();
+  if(session){ await enterApp(session.user); }
+}
+
+let signupMode=false;
+function toggleSignup(){
+  signupMode=!signupMode;
+  document.getElementById('liNameBox').style.display = signupMode?'block':'none';
+  document.getElementById('liBtn').textContent = signupMode?'Crear cuenta':'Entrar';
+  document.getElementById('liToggle').textContent = signupMode?'¿Ya tienes cuenta? Entrar':'¿Primera vez? Crear cuenta';
+  document.getElementById('liErr').textContent='';
+  document.getElementById('liErr').style.color='var(--rojo)';
+}
+async function authSubmit(e){
+  e.preventDefault();
+  const email=document.getElementById('liEmail').value.trim();
+  const pass=document.getElementById('liPass').value;
+  const errEl=document.getElementById('liErr'); errEl.style.color='var(--rojo)';
+  const btn=document.getElementById('liBtn'); const orig=btn.textContent; btn.disabled=true; btn.textContent='…';
+  if(signupMode){
+    const nombre=document.getElementById('liName').value.trim();
+    const { data, error } = await sb.auth.signUp({ email, password:pass, options:{ data:{ nombre } } });
+    btn.disabled=false; btn.textContent=orig;
+    if(error){ errEl.textContent='No se pudo crear la cuenta: '+error.message; return false; }
+    if(data.session){ await enterApp(data.user); }
+    else { errEl.style.color='var(--acento)'; errEl.textContent='✓ Cuenta creada. Si te pedimos confirmar por email, revisa tu correo y luego pulsa "Entrar".'; toggleSignup(); }
+    return false;
+  }
+  const { data, error } = await sb.auth.signInWithPassword({ email, password:pass });
+  btn.disabled=false; btn.textContent=orig;
+  if(error){ errEl.textContent='No se pudo entrar: '+error.message; return false; }
+  await enterApp(data.user);
+  return false;
+}
+async function doLogout(){ await sb.auth.signOut(); location.reload(); }
+
+async function enterApp(user){
+  ME = user;
+  // cargar perfil
+  const { data:prof } = await sb.from('profiles').select('*').eq('id', user.id).single();
+  PROFILE = prof || { nombre:user.email, dept:'', role:'empleado', color:'#1F4E79' };
+  document.getElementById('login').style.display='none';
+  document.getElementById('app').style.display='block';
+  document.getElementById('uname').textContent = PROFILE.nombre || user.email;
+  document.getElementById('urole').textContent = (PROFILE.dept||'') + (PROFILE.role!=='empleado'?' · '+PROFILE.role:'');
+  document.getElementById('av').textContent = inis(PROFILE.nombre||user.email);
+  document.getElementById('av').style.background = PROFILE.color || '#1F4E79';
+  buildNav();
+  show('inicio');
+}
+function inis(n){return (n||'?').trim().split(/\s+/).slice(0,2).map(w=>w[0]).join('').toUpperCase();}
+
+/* ---------------- NAVEGACIÓN ---------------- */
+const NAV=[
+  {id:'inicio',ic:'🏠',t:'Inicio'},
+  {id:'horarios',ic:'📅',t:'Horarios'},
+  {id:'comunicados',ic:'📢',t:'Comunicados'},
+];
+const SHIFTS=[{v:"",l:"—",c:"#dfe3ea"},{v:"M",l:"Mañana 09–17",c:"#cfe0f2"},{v:"T",l:"Tarde 14–22",c:"#f7e6b0"},{v:"P",l:"Partido",c:"#cdeee3"},{v:"N",l:"Noche 22–06",c:"#cfe0f2"},{v:"L",l:"Libre",c:"#dfe3ea"},{v:"V",l:"Vacaciones",c:"#f6cfcd"}];
+const SH=Object.fromEntries(SHIFTS.map(s=>[s.v,s]));
+function nextDays(n){const out=[],d=new Date();d.setHours(0,0,0,0);for(let i=0;i<n;i++){const x=new Date(d);x.setDate(d.getDate()+i);out.push(x);}return out;}
+function isoD(x){return `${x.getFullYear()}-${String(x.getMonth()+1).padStart(2,'0')}-${String(x.getDate()).padStart(2,'0')}`;}
+function lblD(x){const ds=['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'],ms=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];return `${ds[x.getDay()]} ${x.getDate()} ${ms[x.getMonth()]}`;}
+function isWk(x){return x.getDay()===0||x.getDay()===6;}
+let horTab='mi', horOtherDept=null;
+function buildNav(){
+  const nav=document.getElementById('nav');
+  nav.innerHTML=NAV.map(i=>`<a data-id="${i.id}" onclick="show('${i.id}')"><span>${i.ic}</span> ${i.t}</a>`).join('');
+}
+function show(id){
+  curPage=id;
+  document.querySelectorAll('#nav a').forEach(a=>a.classList.toggle('active',a.dataset.id===id));
+  const m=document.getElementById('main');
+  if(id==='inicio') m.innerHTML=pageInicio();
+  else if(id==='comunicados'){ m.innerHTML='<div class="page-title">Comunicados</div><div class="page-sub">Cargando…</div>'; pageComunicados(); }
+  else if(id==='horarios'){ m.innerHTML='<div class="page-title">Horarios</div><div class="page-sub">Cargando…</div>'; pageHorarios(); }
+}
+
+/* ---------------- INICIO ---------------- */
+function pageInicio(){
+  return `
+    <div class="page-title">Hola, ${(PROFILE.nombre||'').split(' ')[0]||'👋'}</div>
+    <div class="page-sub">Portal interno de Amazinn Places · ${PROFILE.dept||''}</div>
+    <div class="cards">
+      <div class="card"><h3>📢 Comunicados</h3><div class="big" id="cInicioCom">—</div><small style="color:var(--suave)">en la empresa</small></div>
+      <div class="card"><h3>🧑‍💼 Tu rol</h3><div class="big" style="font-size:20px">${roleNice(PROFILE.role)}</div></div>
+      <div class="card"><h3>🏢 Departamento</h3><div class="big" style="font-size:20px">${PROFILE.dept||'—'}</div></div>
+    </div>
+    <div class="panel" style="margin-top:6px">
+      <h2>✅ Conexión activa</h2>
+      <p style="font-size:13.5px;color:var(--suave)">Estás conectado a la base de datos. Los comunicados que se publiquen aquí los verá todo el equipo en tiempo real. Iremos añadiendo el resto de módulos (horarios, fichaje, bitácora, plantillas…) en las próximas versiones.</p>
+    </div>`;
+}
+function roleNice(r){return ({empleado:'Empleado',responsable:'Responsable',rrhh:'RRHH',admin:'Administrador'})[r]||r;}
+
+/* ---------------- COMUNICADOS (datos reales) ---------------- */
+async function pageComunicados(){
+  const canCreate = CAN_COM.includes(PROFILE.role);
+  const { data:coms, error } = await sb.from('comunicados').select('*').order('created_at',{ascending:false});
+  if(error){ document.getElementById('main').innerHTML='<div class="page-title">Comunicados</div><div class="panel">Error al cargar: '+error.message+'</div>'; return; }
+  const { data:lect } = await sb.from('comunicado_lecturas').select('comunicado_id,user_id');
+  const lecturas = lect||[];
+  const visibles = (coms||[]).filter(c=>c.dirigido==='*'||c.dirigido===PROFILE.dept);
+  const cardHTML = c=>{
+    const nv=NIVEL[c.nivel]||NIVEL.info;
+    const lts=lecturas.filter(l=>l.comunicado_id===c.id);
+    const yo=lts.some(l=>l.user_id===ME.id);
+    const fecha=new Date(c.created_at).toLocaleDateString('es-ES',{day:'numeric',month:'short',year:'numeric'});
+    const read = yo?'<span class="read-ok">✓ Leído</span>':`<button class="btn-read" onclick="confirmRead(${c.id})">✔ Confirmar lectura</button>`;
+    const count = canCreate?`<span style="font-size:12px;color:var(--suave)">👁 ${lts.length} confirmación(es)</span>`:'';
+    const dest = c.dirigido==='*'?'Toda la empresa':c.dirigido;
+    return `<div class="com-card ${c.nivel}">
+      <div class="h"><b>${esc(c.titulo)}</b><span class="badge ${nv[1]}">${nv[0]}</span></div>
+      <div style="font-size:12px;color:var(--suave);margin-bottom:8px">📍 ${esc(dest)}</div>
+      <div class="txt">${esc(c.cuerpo)}</div>
+      <div class="foot"><b>${esc(c.autor_nombre||'')}</b> · ${fecha}<span style="margin-left:auto;display:flex;gap:12px;align-items:center">${count}${read}</span></div>
+    </div>`;
+  };
+  document.getElementById('main').innerHTML = `
+    <div class="page-title">Comunicados</div>
+    <div class="page-sub">Novedades oficiales de la empresa${canCreate?' · puedes publicar':''}</div>
+    ${canCreate?`<div style="margin-bottom:18px"><button class="btn" onclick="toggleComForm()">➕ Nuevo comunicado</button></div><div id="comFormBox"></div>`:''}
+    ${visibles.length?visibles.map(cardHTML).join(''):'<div class="panel">No hay comunicados todavía.</div>'}`;
+}
+let comFormOpen=false;
+function toggleComForm(){
+  comFormOpen=!comFormOpen;
+  document.getElementById('comFormBox').innerHTML = comFormOpen ? `
+    <div class="panel" style="max-width:760px"><h2>✍️ Nuevo comunicado</h2>
+      <form class="box" onsubmit="return createCom(event)" style="max-width:none">
+        <label>Título</label><input id="cTit" required>
+        <div class="row">
+          <div><label>Dirigido a</label><select id="cDir"><option value="*">Toda la empresa</option>${DEPTS.map(d=>`<option value="${d}">${d}</option>`).join('')}</select></div>
+          <div><label>Nivel</label><select id="cNiv"><option value="info">Informativo</option><option value="imp">Importante</option><option value="urg">Urgente</option></select></div>
+        </div>
+        <label>Contenido</label><textarea id="cCpo" rows="5" required></textarea>
+        <div><button class="btn" type="submit">📢 Publicar</button>
+          <button class="btn ghost" type="button" style="margin-left:8px" onclick="toggleComForm()">Cancelar</button></div>
+      </form></div>` : '';
+}
+async function createCom(e){
+  e.preventDefault();
+  const row={ titulo:document.getElementById('cTit').value.trim(), cuerpo:document.getElementById('cCpo').value.trim(),
+    nivel:document.getElementById('cNiv').value, dirigido:document.getElementById('cDir').value,
+    autor_id:ME.id, autor_nombre:PROFILE.nombre };
+  const { error } = await sb.from('comunicados').insert(row);
+  if(error){ alert('No se pudo publicar: '+error.message); return false; }
+  comFormOpen=false; pageComunicados();
+  return false;
+}
+async function confirmRead(id){
+  const { error } = await sb.from('comunicado_lecturas').insert({ comunicado_id:id, user_id:ME.id });
+  if(error && !String(error.message).includes('duplicate')){ alert('Error: '+error.message); return; }
+  pageComunicados();
+}
+/* ---------------- HORARIOS (datos reales) ---------------- */
+function setHorTab(t){horTab=t;show('horarios');}
+function setHorOther(d){horOtherDept=d;show('horarios');}
+function chip(v){const s=SH[v||""];return `<span class="cell-b" title="${s.l}" style="background:${s.c};color:#333">${v||'—'}</span>`;}
+async function teamOf(dept){const{data}=await sb.from('profiles').select('id,nombre').eq('dept',dept).order('nombre');return data||[];}
+async function turnosMap(dept){const{data}=await sb.from('turnos').select('*').eq('dept',dept);const m={};(data||[]).forEach(t=>m[t.empleado_id+'|'+t.fecha]=t.turno||'');return m;}
+
+async function pageHorarios(){
+  const dept=PROFILE.dept||'';
+  const canEdit=(PROFILE.role==='responsable'||PROFILE.role==='admin');
+  const tabs=canEdit?[['editor','🗓️ Crear / editar'],['equipo','👥 Horario del equipo'],['otros','🏢 Otros equipos']]
+                    :[['mi','📅 Mi horario'],['equipo','👥 Horario del equipo'],['otros','🏢 Otros equipos']];
+  if(!tabs.some(t=>t[0]===horTab)) horTab=tabs[0][0];
+  const days=nextDays(15);
+  let body='';
+  if(horTab==='mi') body=await horMine(days);
+  else if(horTab==='editor') body=await horEditor(dept,days);
+  else if(horTab==='equipo') body=await horTeam(dept,days);
+  else body=await horOthers(days);
+  const legend=`<div class="legend">${SHIFTS.filter(s=>s.v).map(s=>`<span><i style="background:${s.c}"></i>${s.l}</span>`).join('')}</div>`;
+  document.getElementById('main').innerHTML=`
+    <div class="page-title">Horarios${dept?' · '+dept:''}</div>
+    <div class="page-sub">${canEdit?'Publica el horario de tu equipo; el equipo ve sus turnos al instante':'Consulta tu horario y el de los equipos · próximos 15 días'}</div>
+    <div class="tabs">${tabs.map(t=>`<button class="${horTab===t[0]?'on':''}" onclick="setHorTab('${t[0]}')">${t[1]}</button>`).join('')}</div>
+    ${body}${horTab!=='mi'?legend:''}`;
+}
+async function horEditor(dept,days){
+  if(!dept) return `<div class="panel">Tu usuario no tiene departamento asignado. Asígnatelo en Administración (o con SQL) para poder planificar.</div>`;
+  const team=await teamOf(dept);
+  if(!team.length) return `<div class="panel">No hay empleados en <b>${esc(dept)}</b>. Crea empleados con ese departamento (registro o administración) para planificar sus turnos.</div>`;
+  const map=await turnosMap(dept);
+  const head=`<tr><th class="emp">Empleado</th>${days.map(d=>`<th class="${isWk(d)?'wknd':''}">${lblD(d)}</th>`).join('')}</tr>`;
+  const rows=team.map(e=>`<tr><td class="emp">${esc(e.nombre)}</td>${days.map(d=>{const iso=isoD(d);const val=map[e.id+'|'+iso]||'';
+    return `<td class="${isWk(d)?'wknd':''}"><select class="tcell" data-emp="${e.id}" data-name="${esc(e.nombre)}" data-fecha="${iso}">${SHIFTS.map(s=>`<option value="${s.v}" ${val===s.v?'selected':''}>${s.v||'—'} · ${s.l}</option>`).join('')}</select></td>`;}).join('')}</tr>`).join('');
+  return `<div style="margin-bottom:14px"><button class="btn" onclick="saveTurnos('${esc(dept)}')">💾 Guardar y publicar</button>
+      <span style="font-size:12.5px;color:var(--suave);margin-left:10px">Al guardar, el equipo ve el horario actualizado.</span></div>
+    <div class="grid-wrap"><table class="sched"><thead>${head}</thead><tbody>${rows}</tbody></table></div>`;
+}
+async function saveTurnos(dept){
+  const rows=[...document.querySelectorAll('.tcell')].map(s=>({dept,empleado_id:s.dataset.emp,empleado_nombre:s.dataset.name,fecha:s.dataset.fecha,turno:s.value,updated_at:new Date().toISOString()}));
+  const{error}=await sb.from('turnos').upsert(rows,{onConflict:'empleado_id,fecha'});
+  if(error){alert('No se pudo guardar: '+error.message);return;}
+  show('horarios');
+}
+async function horMine(days){
+  const{data}=await sb.from('turnos').select('*').eq('empleado_id',ME.id).gte('fecha',isoD(days[0])).lte('fecha',isoD(days[days.length-1]));
+  const map={};(data||[]).forEach(t=>map[t.fecha]=t);
+  const HOR={M:'09:00–17:00',T:'14:00–22:00',P:'10:00–14:00 / 17:00–21:00',N:'22:00–06:00'};
+  const rows=days.map(d=>{const iso=isoD(d);const t=map[iso];const v=t?t.turno:'';const s=SH[v||''];
+    const horario=HOR[v]||'—';const lugar=(t&&t.lugar)?t.lugar:(v&&v!=='L'&&v!=='V'?'—':'—');
+    return `<tr><td><b>${lblD(d)}</b></td><td>${horario}</td><td>${lugar}</td><td><span class="badge" style="background:${s.c};color:#333">${s.l}</span></td></tr>`;}).join('');
+  const any=(data||[]).length;
+  return `<div class="panel">${any?'':'<div style="color:var(--suave);font-size:13.5px;margin-bottom:10px">Tu responsable aún no ha publicado tus turnos.</div>'}
+    <table><thead><tr><th>Día</th><th>Horario</th><th>Ubicación</th><th>Turno</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+}
+async function horTeam(dept,days){
+  if(!dept) return `<div class="panel">Sin departamento asignado.</div>`;
+  const team=await teamOf(dept);
+  if(!team.length) return `<div class="panel">No hay empleados en ${esc(dept)}.</div>`;
+  const map=await turnosMap(dept);
+  const head=`<tr><th class="emp">Empleado</th>${days.map(d=>`<th class="${isWk(d)?'wknd':''}">${lblD(d)}</th>`).join('')}</tr>`;
+  const rows=team.map(e=>`<tr><td class="emp">${e.id===ME.id?'<b style="color:var(--azul)">'+esc(e.nombre)+' (tú)</b>':esc(e.nombre)}</td>${days.map(d=>`<td class="${isWk(d)?'wknd':''}">${chip(map[e.id+'|'+isoD(d)]||'')}</td>`).join('')}</tr>`).join('');
+  return `<div class="grid-wrap"><table class="sched"><thead>${head}</thead><tbody>${rows}</tbody></table></div>`;
+}
+async function horOthers(days){
+  const{data}=await sb.from('profiles').select('dept');
+  const depts=[...new Set((data||[]).map(p=>p.dept).filter(Boolean))].filter(d=>d!==PROFILE.dept);
+  if(!depts.length) return `<div class="panel">No hay otros departamentos con empleados todavía.</div>`;
+  if(!depts.includes(horOtherDept)) horOtherDept=depts[0];
+  const sel=`<div style="margin-bottom:14px"><label style="font-size:13px;font-weight:600;color:var(--suave);margin-right:8px">Departamento:</label>
+    <select onchange="setHorOther(this.value)" style="padding:9px 12px;border:1px solid var(--gris2);border-radius:9px;font-size:14px">${depts.map(d=>`<option ${d===horOtherDept?'selected':''}>${esc(d)}</option>`).join('')}</select></div>`;
+  return sel+await horTeam(horOtherDept,days);
+}
+
+function esc(t){return (t||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+</script>
+</body>
+</html>
