@@ -181,6 +181,20 @@
     .cards{grid-template-columns:1fr 1fr}.user-chip .meta{display:none}.gsearch{display:none}
   }
   @media(max-width:460px){.cards{grid-template-columns:1fr}}
+  /* Mensajería */
+  .msg-layout{display:grid;grid-template-columns:250px 1fr;border:1px solid var(--gris2);background:#fff;height:540px;box-shadow:var(--sombra)}
+  .msg-contacts{border-right:1px solid var(--gris2);overflow:auto}
+  .msg-contacts .mc{padding:11px 14px;border-bottom:1px solid var(--gris);cursor:pointer;display:flex;gap:10px;align-items:center;font-size:13.5px}
+  .msg-contacts .mc.on,.msg-contacts .mc:hover{background:var(--azul-claro)}
+  .msg-conv{display:flex;flex-direction:column;min-width:0}
+  .msg-thread{flex:1;overflow:auto;padding:16px;background:var(--gris);display:flex;flex-direction:column;gap:8px}
+  .mbub{max-width:75%;padding:9px 12px;font-size:13.5px;line-height:1.4}
+  .mbub.me{background:var(--azul);color:#fff;align-self:flex-end}
+  .mbub.ot{background:#fff;border:1px solid var(--gris2);align-self:flex-start}
+  .msg-input{display:flex;gap:8px;padding:10px;border-top:1px solid var(--gris2)}
+  .msg-input input{flex:1;padding:9px 12px;border:1px solid var(--gris2);font-family:inherit;font-size:13.5px}
+  body.dark .msg-layout,body.dark .msg-contacts .mc,body.dark .mbub.ot{background:#211f1a;border-color:#34302a;color:var(--texto)}
+  @media(max-width:760px){.msg-layout{grid-template-columns:1fr;height:auto}.msg-contacts{max-height:170px}.msg-conv{height:380px}}
 </style>
 </head>
 <body>
@@ -326,17 +340,22 @@ const NAV=[
   {id:'horarios',ic:'📅',t:'Mis horarios'},
   {id:'fichaje',ic:'⏱️',t:'Fichaje'},
   {id:'comunicados',ic:'📢',t:'Comunicados'},
+  {id:'mensajeria',ic:'💌',t:'Mensajería'},
   {id:'calendario',ic:'🗓️',t:'Calendario'},
   {grp:'RRHH'},
   {id:'vacaciones',ic:'🌴',t:'Vacaciones'},
   {id:'bajas',ic:'🩺',t:'Notificar baja'},
   {id:'docs',ic:'📁',t:'Documentación'},
+  {id:'onboarding',ic:'🚀',t:'Onboarding'},
   {id:'sugerencias',ic:'💡',t:'Sugerencias'},
+  {id:'kudos',ic:'🏅',t:'Reconocimientos'},
   {id:'cumple',ic:'🎂',t:'Cumpleaños'},
   {grp:'Recursos'},
+  {id:'perfil',ic:'👤',t:'Mi perfil'},
   {id:'organigrama',ic:'🏢',t:'Organigrama'},
   {id:'proveedores',ic:'🚚',t:'Proveedores'},
   {id:'suministros',ic:'🔌',t:'Suministros'},
+  {id:'incidencias',ic:'🛠️',t:'Incidencias'},
   {grp:'Atención al cliente', depts:['Atención al cliente']},
   {id:'mensajes',ic:'💬',t:'Mensajes y plantillas', depts:['Atención al cliente']},
   {id:'bitacora',ic:'📝',t:'Bitácora de turnos', depts:['Atención al cliente']},
@@ -400,7 +419,11 @@ const ICONS={
   auditoria:'<rect x="5" y="11" width="14" height="9" rx="1"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>',
   aprobaciones:'<circle cx="12" cy="12" r="9"/><path d="M8 12l3 3 5-6"/>',
   admin:'<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2"/>',
-  perfil:'<circle cx="12" cy="8" r="4"/><path d="M5 21a7 7 0 0 1 14 0"/>'
+  perfil:'<circle cx="12" cy="8" r="4"/><path d="M5 21a7 7 0 0 1 14 0"/>',
+  mensajeria:'<path d="M4 4h16v12H7l-3 3z"/>',
+  kudos:'<circle cx="12" cy="9" r="5"/><path d="M9 13l-2 8 5-3 5 3-2-8"/>',
+  incidencias:'<path d="M12 3 2 20h20z"/><path d="M12 10v5M12 17.5v.4"/>',
+  onboarding:'<path d="M5 13l-2 6 6-2M5 13l8-8 4 4-8 8M13 5l4 4M15 7l2-3 3 2-1 3z"/>'
 };
 function navIcon(id){return `<svg class="nic" viewBox="0 0 24 24" style="width:18px;height:18px">${ICONS[id]||'<circle cx="12" cy="12" r="8"/>'}</svg>`;}
 function toggleDark(){document.body.classList.toggle('dark');const b=document.getElementById('darkBtn');if(b)b.textContent=document.body.classList.contains('dark')?'☀️':'🌙';}
@@ -465,6 +488,10 @@ function show(id){
   else if(id==='marca'){ m.innerHTML=pageMarca(); }
   else if(id==='tutoriales'){ m.innerHTML=pageTutoriales(); }
   else if(id==='depto'){ m.innerHTML=pageDepto(); }
+  else if(id==='mensajeria'){ m.innerHTML='<div class="page-title">Mensajería</div><div class="page-sub">Cargando…</div>'; pageMensajeria(); }
+  else if(id==='kudos'){ m.innerHTML='<div class="page-title">Reconocimientos</div><div class="page-sub">Cargando…</div>'; pageKudos(); }
+  else if(id==='incidencias'){ m.innerHTML='<div class="page-title">Incidencias</div><div class="page-sub">Cargando…</div>'; pageIncidencias(); }
+  else if(id==='onboarding'){ m.innerHTML=pageOnboarding(); }
 }
 
 /* ---------------- INICIO ---------------- */
@@ -491,20 +518,33 @@ async function pageComunicados(){
   if(error){ document.getElementById('main').innerHTML='<div class="page-title">Comunicados</div><div class="panel">Error al cargar: '+error.message+'</div>'; return; }
   const { data:lect } = await sb.from('comunicado_lecturas').select('comunicado_id,user_id');
   const lecturas = lect||[];
+  const { data:profs } = await sb.from('profiles').select('id,nombre,dept');
+  const PR = profs||[];
   const visibles = (coms||[]).filter(c=>c.dirigido==='*'||c.dirigido===PROFILE.dept);
   const cardHTML = c=>{
     const nv=NIVEL[c.nivel]||NIVEL.info;
     const lts=lecturas.filter(l=>l.comunicado_id===c.id);
-    const yo=lts.some(l=>l.user_id===ME.id);
+    const ids=lts.map(l=>l.user_id);
+    const yo=ids.includes(ME.id);
     const fecha=new Date(c.created_at).toLocaleDateString('es-ES',{day:'numeric',month:'short',year:'numeric'});
     const read = yo?'<span class="read-ok">✓ Leído</span>':`<button class="btn-read" onclick="confirmRead(${c.id})">✔ Confirmar lectura</button>`;
-    const count = canCreate?`<span style="font-size:12px;color:var(--suave)">👁 ${lts.length} confirmación(es)</span>`:'';
     const dest = c.dirigido==='*'?'Toda la empresa':c.dirigido;
+    let detalle='';
+    if(canCreate){
+      const aud=PR.filter(u=>c.dirigido==='*'||c.dirigido===u.dept);
+      const conf=aud.filter(u=>ids.includes(u.id)).map(u=>u.nombre);
+      const pend=aud.filter(u=>!ids.includes(u.id)).map(u=>u.nombre);
+      detalle=`<details style="border-top:1px dashed var(--gris2);background:#fafbfd"><summary style="padding:10px 18px;cursor:pointer;font-size:12.5px;color:var(--suave);font-weight:600">👁 ${conf.length}/${aud.length} han confirmado${pend.length?' · '+pend.length+' pendiente(s)':''}</summary>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px;padding:4px 18px 14px;font-size:13px">
+          <div><b style="color:var(--acento);font-size:12px">✓ Confirmado (${conf.length})</b>${conf.map(n=>`<div>${esc(n)}</div>`).join('')||'<div style="color:var(--suave)">—</div>'}</div>
+          <div><b style="color:var(--amarillo);font-size:12px">⏳ Pendiente (${pend.length})</b>${pend.map(n=>`<div>${esc(n)}</div>`).join('')||'<div style="color:var(--suave)">—</div>'}</div></div></details>`;
+    }
     return `<div class="com-card ${c.nivel}">
       <div class="h"><b>${esc(c.titulo)}</b><span class="badge ${nv[1]}">${nv[0]}</span></div>
       <div style="font-size:12px;color:var(--suave);margin-bottom:8px">📍 ${esc(dest)}</div>
       <div class="txt">${esc(c.cuerpo)}</div>
-      <div class="foot"><b>${esc(c.autor_nombre||'')}</b> · ${fecha}<span style="margin-left:auto;display:flex;gap:12px;align-items:center">${count}${read}</span></div>
+      <div class="foot"><b>${esc(c.autor_nombre||'')}</b> · ${fecha}<span style="margin-left:auto">${read}</span></div>
+      ${detalle}
     </div>`;
   };
   document.getElementById('main').innerHTML = `
@@ -1169,6 +1209,65 @@ function pageDepto(){return `<div class="page-title">Área de ${esc(PROFILE.dept
     <div class="card"><h3>👥 Mi equipo</h3><div style="font-size:13.5px;color:var(--suave)">Compañeros de tu departamento (ver Organigrama).</div></div>
     <div class="card"><h3>📌 Objetivos del mes</h3><div style="font-size:13.5px;color:var(--suave)">Metas y seguimiento del área.</div></div></div>`;
 }
+
+/* ---------------- MENSAJERÍA (datos reales) ---------------- */
+let chatWithId=null, chatWithName=null;
+async function pageMensajeria(){
+  const {data:profs}=await sb.from('profiles').select('id,nombre,color,foto').neq('id',ME.id).order('nombre');
+  const contacts=profs||[];
+  const {data:msgs}=await sb.from('mensajes').select('*').order('created_at');
+  const MS=msgs||[];
+  if(chatWithId && !contacts.find(c=>c.id===chatWithId)) chatWithId=null;
+  const lista=contacts.map(c=>{const last=[...MS].reverse().find(m=>(m.de_id===ME.id&&m.para_id===c.id)||(m.de_id===c.id&&m.para_id===ME.id));
+    return `<div class="mc ${c.id===chatWithId?'on':''}" onclick="openChat('${c.id}','${(c.nombre||'').replace(/'/g,"\\'")}')">${av(c.nombre,c.color,34,c.foto)}<div style="overflow:hidden"><b style="display:block">${esc(c.nombre)}</b><small style="color:var(--suave);display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:150px">${last?esc(last.texto):'—'}</small></div></div>`;}).join('');
+  let conv;
+  if(!chatWithId) conv=`<div class="msg-conv" style="align-items:center;justify-content:center;color:var(--suave);font-size:14px">Selecciona un compañero para chatear</div>`;
+  else{ const thread=MS.filter(m=>(m.de_id===ME.id&&m.para_id===chatWithId)||(m.de_id===chatWithId&&m.para_id===ME.id));
+    conv=`<div class="msg-conv"><div style="padding:12px 16px;border-bottom:1px solid var(--gris2);display:flex;align-items:center;gap:10px"><b>${esc(chatWithName)}</b></div>
+      <div class="msg-thread" id="msgThread">${thread.map(m=>`<div class="mbub ${m.de_id===ME.id?'me':'ot'}">${esc(m.texto)}</div>`).join('')||'<div style="color:var(--suave);text-align:center;font-size:13px">Aún no hay mensajes. ¡Escribe el primero!</div>'}</div>
+      <div class="msg-input"><input id="msgIn" placeholder="Escribe un mensaje…" onkeydown="if(event.key==='Enter')sendMsg()"><button class="btn" onclick="sendMsg()">Enviar</button></div></div>`; }
+  setTimeout(()=>{const t=document.getElementById('msgThread');if(t)t.scrollTop=t.scrollHeight;},40);
+  document.getElementById('main').innerHTML=`<div class="page-title">Mensajería interna</div><div class="page-sub">Habla con tus compañeros de equipo</div><div class="msg-layout"><div class="msg-contacts">${lista||'<div style="padding:14px;color:var(--suave);font-size:13px">No hay otros usuarios todavía.</div>'}</div>${conv}</div>`;
+}
+function openChat(id,name){chatWithId=id;chatWithName=name;show('mensajeria');}
+async function sendMsg(){const i=document.getElementById('msgIn');const t=(i.value||'').trim();if(!t||!chatWithId)return;const{error}=await sb.from('mensajes').insert({de_id:ME.id,para_id:chatWithId,de_nombre:PROFILE.nombre,para_nombre:chatWithName,texto:t});if(error){alert('Error: '+error.message);return;}show('mensajeria');}
+
+/* ---------------- RECONOCIMIENTOS ---------------- */
+async function pageKudos(){
+  const {data}=await sb.from('kudos').select('*').order('created_at',{ascending:false});
+  const K=data||[];
+  const {data:profs}=await sb.from('profiles').select('nombre').neq('id',ME.id).order('nombre');
+  const opts=(profs||[]).map(p=>`<option>${esc(p.nombre)}</option>`).join('');
+  document.getElementById('main').innerHTML=`<div class="page-title">Reconocimientos</div><div class="page-sub">Reconoce el buen trabajo de un compañero 🏅</div>
+    <div class="panel" style="max-width:620px"><h2>Dar un reconocimiento</h2><form class="box" onsubmit="return createKudo(event)" style="max-width:none">
+      <label>Para</label><select id="kPara">${opts}</select><label>Mensaje</label><textarea id="kT" rows="3" required></textarea><div><button class="btn" type="submit">Enviar reconocimiento</button></div></form></div>
+    <div class="panel"><h2>🏅 Muro de reconocimientos (${K.length})</h2>${K.map(k=>`<div style="padding:12px 0;border-bottom:1px solid var(--gris);font-size:14px"><b>${esc(k.de_nombre)}</b> → <b style="color:var(--acento)">${esc(k.para_nombre)}</b> <small style="color:var(--suave)">· ${new Date(k.created_at).toLocaleDateString('es-ES')}</small><div style="margin-top:4px">${esc(k.texto)}</div></div>`).join('')||'<div style="color:var(--suave)">Aún no hay reconocimientos. ¡Sé el primero!</div>'}</div>`;
+}
+async function createKudo(e){e.preventDefault();const para=document.getElementById('kPara').value;const t=document.getElementById('kT').value.trim();if(!t)return false;const{error}=await sb.from('kudos').insert({de_id:ME.id,de_nombre:PROFILE.nombre,para_nombre:para,texto:t});if(error){alert('Error: '+error.message);return false;}show('kudos');toast('✓ Reconocimiento enviado');return false;}
+
+/* ---------------- INCIDENCIAS ---------------- */
+let incFormOpen=false;
+const INC_EST2={Abierta:'b-red','En curso':'b-amber',Resuelta:'b-green'};
+const INC_PRIO2={Alta:'b-red',Media:'b-amber',Baja:'b-grey'};
+async function pageIncidencias(){
+  const {data}=await sb.from('incidencias').select('*').order('created_at',{ascending:false});
+  const I=data||[];
+  const {data:provs}=await sb.from('proveedores').select('nombre');
+  const provOpts=['<option value="">— Sin asignar —</option>'].concat((provs||[]).map(p=>`<option>${esc(p.nombre)}</option>`)).join('');
+  const ab=I.filter(x=>x.estado==='Abierta').length,enc=I.filter(x=>x.estado==='En curso').length,res=I.filter(x=>x.estado==='Resuelta').length;
+  const rows=I.map(i=>`<tr><td><b>${esc(i.titulo)}</b>${i.nota?`<br><small style="color:var(--suave)">${esc(i.nota)}</small>`:''}</td><td>${esc(i.propiedad||'')}</td><td><span class="badge ${INC_PRIO2[i.prioridad]||'b-grey'}">${esc(i.prioridad)}</span></td><td>${esc(i.proveedor||'—')}</td><td><select onchange="incEstado(${i.id},this.value)" style="padding:5px 8px;border:1px solid var(--gris2);font-size:12.5px">${Object.keys(INC_EST2).map(e=>`<option ${i.estado===e?'selected':''}>${e}</option>`).join('')}</select></td></tr>`).join('');
+  document.getElementById('main').innerHTML=`<div class="page-title">Incidencias y mantenimiento</div><div class="page-sub">Reporta y haz seguimiento de averías por propiedad</div>
+    <div class="cards" style="margin-bottom:18px"><div class="card"><h3>🔴 Abiertas</h3><div class="big" style="color:var(--rojo)">${ab}</div></div><div class="card"><h3>🟡 En curso</h3><div class="big" style="color:var(--amarillo)">${enc}</div></div><div class="card"><h3>🟢 Resueltas</h3><div class="big green">${res}</div></div></div>
+    <div style="margin-bottom:14px"><button class="btn" onclick="incFormOpen=!incFormOpen;show('incidencias')">${incFormOpen?'✕ Cerrar':'➕ Nueva incidencia'}</button></div>
+    ${incFormOpen?`<div class="panel" style="max-width:640px"><form class="box" onsubmit="return incCreate(event)" style="max-width:none"><label>Título</label><input id="iT" required placeholder="Ej: Aire acondicionado con ruido"><div class="row"><div><label>Propiedad / apartamento</label><input id="iP" required></div><div><label>Prioridad</label><select id="iPr"><option>Alta</option><option selected>Media</option><option>Baja</option></select></div></div><label>Proveedor (opcional)</label><select id="iProv">${provOpts}</select><label>Nota</label><textarea id="iN" rows="2"></textarea><div><button class="btn" type="submit">Crear incidencia</button></div></form></div>`:''}
+    <div class="panel"><table><thead><tr><th>Incidencia</th><th>Propiedad</th><th>Prioridad</th><th>Proveedor</th><th>Estado</th></tr></thead><tbody>${rows||'<tr><td colspan="5" style="color:var(--suave)">Sin incidencias.</td></tr>'}</tbody></table></div>`;
+}
+async function incCreate(e){e.preventDefault();const g=id=>{const el=document.getElementById(id);return el?el.value.trim():'';};if(!g('iT'))return false;const{error}=await sb.from('incidencias').insert({titulo:g('iT'),propiedad:g('iP'),prioridad:document.getElementById('iPr').value,proveedor:document.getElementById('iProv').value,estado:'Abierta',nota:g('iN'),creado_por:PROFILE.nombre});if(error){alert('Error: '+error.message);return false;}incFormOpen=false;show('incidencias');toast('✓ Incidencia creada');return false;}
+async function incEstado(id,est){await sb.from('incidencias').update({estado:est}).eq('id',id);show('incidencias');}
+
+/* ---------------- ONBOARDING (lista local) ---------------- */
+const ONB=[{t:"Firmar contrato y entregar documentación a RRHH",done:true},{t:"Crear cuenta y accesos del portal",done:true},{t:"Asignar departamento y rol",done:true},{t:"Entrega de uniforme y llaves",done:false},{t:"Formación: Prevención de Riesgos Laborales",done:false},{t:"Formación: Protección de datos (RGPD)",done:false},{t:"Leer el manual de empleado",done:false},{t:"Presentación al equipo",done:false}];
+function pageOnboarding(){const h=ONB.filter(o=>o.done).length,pct=Math.round(h/ONB.length*100);return `<div class="page-title">Onboarding</div><div class="page-sub">Lista de incorporación de un nuevo empleado</div><div class="panel" style="max-width:680px"><div style="display:flex;align-items:center;gap:12px;margin-bottom:14px"><div style="flex:1;height:12px;background:var(--gris2);overflow:hidden"><i style="display:block;height:100%;width:${pct}%;background:var(--acento)"></i></div><b>${pct}%</b></div>${ONB.map((o,i)=>`<label style="display:flex;align-items:center;gap:11px;padding:11px 0;border-bottom:1px solid var(--gris);font-size:14px;cursor:pointer"><input type="checkbox" ${o.done?'checked':''} onchange="ONB[${i}].done=this.checked;show('onboarding')"> <span style="${o.done?'text-decoration:line-through;color:var(--suave)':''}">${o.t}</span></label>`).join('')}</div>`;}
 
 /* utilidades */
 function val(id){const el=document.getElementById(id);return el?el.value.trim():'';}
