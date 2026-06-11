@@ -142,14 +142,18 @@
   .avatar{border-radius:4px}
   table th{font-weight:600}
   table.sched thead th,table.cal th{background:var(--azul)}
-  /* Menú lateral oscuro */
-  nav.side{background:#1c1b18;border-right:none}
-  nav.side .grp-tog{color:#bcb4a4}
-  nav.side .grp-tog:hover{color:#fff;background:#2a2823}
+  /* Menú lateral marfil claro */
+  nav.side{background:#f3ede1;border-right:1px solid var(--gris2)}
+  nav.side .grp-tog{color:var(--suave)}
+  nav.side .grp-tog:hover{color:var(--azul);background:#ebe1d1}
   nav.side .grp-tog.open{color:var(--acento)}
-  nav.side a{color:#d8d2c4;border-left:3px solid transparent}
-  nav.side a:hover{background:#2a2823;color:#fff}
-  nav.side a.active{background:#2a2823;border-left-color:var(--acento);color:#fff}
+  nav.side a{color:var(--texto);border-left:3px solid transparent}
+  nav.side a:hover{background:#ebe1d1;color:var(--azul)}
+  nav.side a.active{background:#ebe1d1;border-left-color:var(--acento);color:var(--azul);font-weight:600}
+  body.dark nav.side{background:#211f1a;border-right-color:#34302a}
+  body.dark nav.side a{color:#d8d2c4}
+  body.dark nav.side a:hover,body.dark nav.side a.active{background:#2a2823;color:#fff}
+  body.dark nav.side .grp-tog{color:#bcb4a4}
   nav.side a .nic{width:18px;height:18px;display:inline-block;vertical-align:-3px}
   nav.side a .nic *{stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
   /* Controles de cabecera */
