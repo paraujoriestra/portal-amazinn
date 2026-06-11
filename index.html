@@ -256,13 +256,14 @@ function inis(n){return (n||'?').trim().split(/\s+/).slice(0,2).map(w=>w[0]).joi
 const NAV=[
   {grp:'General'},
   {id:'inicio',ic:'🏠',t:'Inicio'},
-  {id:'horarios',ic:'📅',t:'Horarios'},
+  {id:'horarios',ic:'📅',t:'Mis horarios'},
   {id:'fichaje',ic:'⏱️',t:'Fichaje'},
   {id:'comunicados',ic:'📢',t:'Comunicados'},
   {id:'calendario',ic:'🗓️',t:'Calendario'},
   {grp:'RRHH'},
   {id:'vacaciones',ic:'🌴',t:'Vacaciones'},
   {id:'bajas',ic:'🩺',t:'Notificar baja'},
+  {id:'docs',ic:'📁',t:'Documentación'},
   {id:'sugerencias',ic:'💡',t:'Sugerencias'},
   {id:'cumple',ic:'🎂',t:'Cumpleaños'},
   {grp:'Recursos'},
@@ -273,9 +274,13 @@ const NAV=[
   {id:'mensajes',ic:'💬',t:'Mensajes y plantillas', depts:['Atención al cliente']},
   {id:'bitacora',ic:'📝',t:'Bitácora de turnos', depts:['Atención al cliente']},
   {grp:'Marketing'},
+  {id:'marca',ic:'🎨',t:'Marca y recursos'},
   {id:'carteles',ic:'🪧',t:'Carteles'},
   {grp:'Formación'},
-  {id:'formacion',ic:'🎓',t:'Formaciones'},
+  {id:'tutoriales',ic:'🎓',t:'Tutoriales'},
+  {id:'formacion',ic:'📚',t:'Formaciones'},
+  {grp:'Mi departamento'},
+  {id:'depto',ic:'🗂️',t:'Área de equipo'},
   {grp:'Dirección', roles:['admin']},
   {id:'kpis',ic:'📊',t:'Tablero de KPIs', roles:['admin']},
   {id:'auditoria',ic:'🔒',t:'Auditoría', roles:['admin']},
@@ -346,6 +351,10 @@ function show(id){
   else if(id==='formacion'){ m.innerHTML='<div class="page-title">Formaciones</div><div class="page-sub">Cargando…</div>'; pageFormacion(); }
   else if(id==='kpis'){ m.innerHTML='<div class="page-title">KPIs</div><div class="page-sub">Cargando…</div>'; pageKpis(); }
   else if(id==='auditoria'){ m.innerHTML='<div class="page-title">Auditoría</div><div class="page-sub">Cargando…</div>'; pageAuditoria(); }
+  else if(id==='docs'){ m.innerHTML=pageDocs(); }
+  else if(id==='marca'){ m.innerHTML=pageMarca(); }
+  else if(id==='tutoriales'){ m.innerHTML=pageTutoriales(); }
+  else if(id==='depto'){ m.innerHTML=pageDepto(); }
 }
 
 /* ---------------- INICIO ---------------- */
@@ -995,6 +1004,33 @@ async function wallyAnswer(q){const s=q.toLowerCase();const has=(...w)=>w.some(x
 /* ---------------- TOAST ---------------- */
 function toast(m){let t=document.getElementById('toast2');if(!t){t=document.createElement('div');t.id='toast2';t.style.cssText='position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#222;color:#fff;padding:11px 20px;border-radius:10px;font-size:14px;z-index:80;transition:.25s;opacity:0';document.body.appendChild(t);}
   t.textContent=m;t.style.opacity='1';clearTimeout(window._t2);window._t2=setTimeout(()=>t.style.opacity='0',1900);}
+
+/* ---------------- DOCUMENTACIÓN / MARCA / TUTORIALES / DEPARTAMENTO ---------------- */
+function pageDocs(){return `<div class="page-title">Documentación</div><div class="page-sub">Sube documentos a RRHH y consulta los tuyos</div>
+  <div class="panel" style="max-width:620px"><h2>📤 Subir documento a RRHH</h2><form class="box" onsubmit="toast('Documento enviado (demo)');return false" style="max-width:none">
+    <label>Tipo de documento</label><select><option>Justificante</option><option>Titulación / certificado</option><option>Datos bancarios</option><option>Otro</option></select>
+    <label>Archivo</label><input type="file"><div><button class="btn" type="submit">Subir</button></div></form></div>
+  <div class="panel"><h2>📁 Mis documentos</h2><table><thead><tr><th>Documento</th><th>Fecha</th><th>Estado</th></tr></thead><tbody>
+    <tr><td>Nómina (ejemplo)</td><td>—</td><td><span class="badge b-green">Disponible</span></td></tr></tbody></table>
+    <div style="font-size:12px;color:var(--suave);margin-top:10px">El almacenamiento real de archivos se conectará con Supabase Storage en una próxima versión.</div></div>`;
+}
+const MKT=[{cat:'Logos',icon:'🏷️',files:['Logo_AmazinnPlaces_negro.png','Logo_AmazinnPlaces_blanco.png','Manual_de_marca.pdf']},
+  {cat:'Identidad gráfica',icon:'🎨',files:['Paleta_de_colores.pdf','Kit_grafico.zip']},
+  {cat:'Dossiers',icon:'📑',files:['Dossier_comercial.pdf','Dossier_inversores.pdf']},
+  {cat:'Presentaciones',icon:'📊',files:['Presentacion_AmazinnPlaces.pptx']}];
+function pageMarca(){return `<div class="page-title">Marca y recursos</div><div class="page-sub">Logos, identidad gráfica, dossiers y presentaciones</div>
+  ${MKT.map(f=>`<div class="panel"><h2>${f.icon} ${f.cat}</h2><div style="display:flex;flex-wrap:wrap;gap:8px">${f.files.map(n=>`<a href="#" onclick="toast('Descarga de demostración: ${n}');return false" style="display:inline-flex;align-items:center;gap:6px;background:var(--gris);border:1px solid var(--gris2);border-radius:8px;padding:7px 11px;font-size:12.5px;text-decoration:none;color:var(--texto)">📎 ${n}</a>`).join('')}</div></div>`).join('')}
+  <div style="font-size:12px;color:var(--suave)">Los archivos reales se conectarán con almacenamiento en la nube en una próxima versión.</div>`;
+}
+const TUTS=[['🛎️','Check-in exprés','Nuevo flujo de recepción'],['🧹','Estándar de limpieza','Checklist de preparación'],['💬','Atención al cliente 5★','Gestión de incidencias y reseñas'],['📊','Motor de reservas','Uso del panel de reservas']];
+function pageTutoriales(){return `<div class="page-title">Tutoriales</div><div class="page-sub">Aprende cómo trabajamos en Amazinn Places</div>
+  <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:16px">${TUTS.map(t=>`<div class="panel" style="margin:0;padding:0;overflow:hidden"><div style="height:110px;background:linear-gradient(135deg,var(--azul),var(--azul2));display:flex;align-items:center;justify-content:center;font-size:36px;color:#fff">${t[0]}</div><div style="padding:14px"><b>${t[1]}</b><p style="font-size:13px;color:var(--suave);margin-top:5px">${t[2]}</p></div></div>`).join('')}</div>`;
+}
+function pageDepto(){return `<div class="page-title">Área de ${esc(PROFILE.dept||'mi departamento')}</div><div class="page-sub">Contenido específico de tu departamento</div>
+  <div class="cards"><div class="card"><h3>📄 Procedimientos del área</h3><div style="font-size:13.5px;color:var(--suave)">Manual operativo, checklists y plantillas del equipo.</div></div>
+    <div class="card"><h3>👥 Mi equipo</h3><div style="font-size:13.5px;color:var(--suave)">Compañeros de tu departamento (ver Organigrama).</div></div>
+    <div class="card"><h3>📌 Objetivos del mes</h3><div style="font-size:13.5px;color:var(--suave)">Metas y seguimiento del área.</div></div></div>`;
+}
 
 /* utilidades */
 function val(id){const el=document.getElementById(id);return el?el.value.trim():'';}
