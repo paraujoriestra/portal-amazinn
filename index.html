@@ -239,6 +239,7 @@
   .b-red{background:#fbe6e5;color:var(--rojo)}
   .b-amber{background:#fdf3d7;color:var(--amarillo)}
   .b-grey{background:var(--gris2);color:var(--suave)}
+  .b-owner{background:linear-gradient(135deg,#2b2620,#4a4030);color:#e8d6a8;font-weight:700}
 
   /* Comunicado: plantilla fija (logo + tipografía + estructura homogénea) */
   .com-card{background:#fff;border:1px solid var(--gris2);border-radius:14px;box-shadow:var(--sombra);margin-bottom:20px;overflow:hidden;max-width:780px}
@@ -574,7 +575,10 @@ const LOGO="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAWgAAAFCCAYAAADc0keFAA
 
 const DEPTS = ["Dirección","Recursos Humanos","Atención al cliente","Operaciones","Limpieza","Mantenimiento","Almacén","Recepción nocturna","Marketing"];
 const NIVEL = { info:["Informativo","b-blue"], imp:["Importante","b-amber"], urg:["Urgente","b-red"] };
-const CAN_COM = ["responsable","rrhh","admin"];
+const CAN_COM = ["responsable","rrhh","admin","propietario"];
+// El Propietario tiene todos los poderes de admin (y más).
+function isAdmin(){ return PROFILE.role==='admin' || PROFILE.role==='propietario'; }
+function isOwner(){ return PROFILE.role==='propietario'; }
 
 let sb=null, ME=null, PROFILE=null, curPage='inicio';
 
@@ -632,7 +636,7 @@ async function enterApp(user){
   document.getElementById('login').style.display='none';
   document.getElementById('app').style.display='block';
   document.getElementById('uname').textContent = PROFILE.nombre || user.email;
-  document.getElementById('urole').textContent = (PROFILE.dept||'') + (PROFILE.role!=='empleado'?' · '+PROFILE.role:'');
+  document.getElementById('urole').textContent = (PROFILE.dept||'') + (PROFILE.role!=='empleado'?' · '+roleNice(PROFILE.role):'');
   const avEl=document.getElementById('av');
   if(PROFILE.foto){ avEl.textContent=''; avEl.style.background=`#eee url('${PROFILE.foto}') center/cover no-repeat`; }
   else { avEl.textContent = inis(PROFILE.nombre||user.email); avEl.style.background = PROFILE.color || '#1F4E79'; }
@@ -688,7 +692,7 @@ const NAV=[
   {id:'aprobaciones',ic:'✅',t:'Aprobaciones', roles:['responsable','rrhh','admin']},
   {id:'admin',ic:'⚙️',t:'Administración', roles:['admin']},
 ];
-const CAN_MANAGE=['responsable','rrhh','admin'];
+const CAN_MANAGE=['responsable','rrhh','admin','propietario'];
 let supTab='electricidad', navOpen=null;
 const SHIFTS=[{v:"",l:"—",c:"#dfe3ea"},{v:"M",l:"Mañana 09–17",c:"#cfe0f2"},{v:"T",l:"Tarde 14–22",c:"#f7e6b0"},{v:"P",l:"Partido",c:"#cdeee3"},{v:"N",l:"Noche 22–06",c:"#cfe0f2"},{v:"L",l:"Libre",c:"#dfe3ea"},{v:"V",l:"Vacaciones",c:"#f6cfcd"}];
 const SH=Object.fromEntries(SHIFTS.map(s=>[s.v,s]));
@@ -700,8 +704,9 @@ let horTab='mi', horOtherDept=null;
 function navGroups(){
   const groups=[]; let cur=null;
   NAV.forEach(it=>{
-    if(it.roles && !it.roles.includes(PROFILE.role)) return;
-    if(it.depts && !it.depts.includes(PROFILE.dept) && PROFILE.role!=='admin') return;
+    const er = PROFILE.role==='propietario' ? 'admin' : PROFILE.role;
+    if(it.roles && !it.roles.includes(er)) return;
+    if(it.depts && !it.depts.includes(PROFILE.dept) && !isAdmin()) return;
     if(it.grp){ cur={name:it.grp,items:[]}; groups.push(cur); }
     else if(cur){ cur.items.push(it); }
   });
@@ -762,7 +767,7 @@ async function loadNotifs(){
   NOTIF_READ=new Set((r||[]).map(x=>x.notif_id));
   refreshBell();
 }
-function visNotifs(){return NOTIFS.filter(n=>n.dept==='*'||n.dept===PROFILE.dept||PROFILE.role==='admin');}
+function visNotifs(){return NOTIFS.filter(n=>n.dept==='*'||n.dept===PROFILE.dept||isAdmin());}
 function refreshBell(){const d=document.getElementById('bellDot');if(!d)return;const n=visNotifs().filter(x=>!NOTIF_READ.has(x.id)).length;d.textContent=n;d.style.display=n?'block':'none';}
 function toggleBell(e){
   if(e)e.stopPropagation();
@@ -908,7 +913,7 @@ async function pageInicio(){
       </div>
     </div>`;
 }
-function roleNice(r){return ({empleado:'Empleado',responsable:'Responsable',rrhh:'RRHH',admin:'Administrador'})[r]||r;}
+function roleNice(r){return ({empleado:'Empleado',responsable:'Responsable',rrhh:'RRHH',admin:'Administrador',propietario:'Propietario'})[r]||r;}
 
 /* ---------------- COMUNICADOS (datos reales · bandeja + filtros) ---------------- */
 const COM_COLOR={info:'#3b82f6',imp:'#d99100',urg:'#e23b3b'};
@@ -942,7 +947,7 @@ function comCardHTML(c){
   const dest = c.dirigido==='*'?'Toda la empresa':c.dirigido;
   const autor = CC.pr.find(u=>u.id===c.autor_id);
   const aCol = autor?autor.color:null, aFoto = autor?autor.foto:null, aCargo = autor&&autor.cargo?autor.cargo:'';
-  const canDel = PROFILE.role==='admin' || c.autor_id===ME.id;
+  const canDel = isAdmin() || c.autor_id===ME.id;
   const delBtn = canDel?`<button class="btn-del" onclick="deleteCom(${c.id})" title="Eliminar comunicado">🗑 Eliminar</button>`:'';
   const mis = CC.adj.filter(a=>a.comunicado_id===c.id);
   const ico=t=>!t?'📎':(/pdf/.test(t)?'📄':(/image/.test(t)?'🖼️':(/word|document/.test(t)?'📝':(/sheet|excel/.test(t)?'📊':'📎'))));
@@ -1085,7 +1090,7 @@ async function turnosMap(dept){const{data}=await sb.from('turnos').select('*').e
 
 async function pageHorarios(){
   const dept=PROFILE.dept||'';
-  const canEdit=(PROFILE.role==='responsable'||PROFILE.role==='admin');
+  const canEdit=(PROFILE.role==='responsable'||isAdmin());
   const tabs=canEdit?[['editor','🗓️ Crear / editar'],['equipo','👥 Horario del equipo'],['otros','🏢 Otros equipos']]
                     :[['mi','📅 Mi horario'],['equipo','👥 Horario del equipo'],['otros','🏢 Otros equipos']];
   if(!tabs.some(t=>t[0]===horTab)) horTab=tabs[0][0];
@@ -1183,7 +1188,7 @@ async function pageOrganigrama(){
   const ppl=data||[];
   const byDept={};
   ppl.forEach(p=>{const d=p.dept||'Sin departamento';(byDept[d]=byDept[d]||[]).push(p);});
-  const roleNice=r=>({empleado:'Empleado',responsable:'Responsable',rrhh:'RRHH',admin:'Administrador'})[r]||r;
+  const roleNice=r=>({empleado:'Empleado',responsable:'Responsable',rrhh:'RRHH',admin:'Administrador',propietario:'Propietario'})[r]||r;
   const blocks=Object.keys(byDept).sort().map(d=>`
     <div class="panel"><h2>${esc(d)} <span class="badge b-grey" style="font-weight:600">${byDept[d].length}</span></h2>
       <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:12px">
@@ -1257,7 +1262,7 @@ async function createSup(e){e.preventDefault();
 /* ---------------- SUGERENCIAS ---------------- */
 const SUG_EST={Pendiente:'b-amber','En estudio':'b-blue',Aplicada:'b-green',Descartada:'b-grey'};
 async function pageSugerencias(){
-  const manage=(PROFILE.role==='rrhh'||PROFILE.role==='admin');
+  const manage=(PROFILE.role==='rrhh'||isAdmin());
   const{data,error}=await sb.from('sugerencias').select('*').order('created_at',{ascending:false});
   if(error){document.getElementById('main').innerHTML='<div class="panel">Error: '+error.message+'</div>';return;}
   const list=(data||[]).map(g=>{const fecha=new Date(g.created_at).toLocaleDateString('es-ES',{day:'numeric',month:'short',year:'numeric'});
@@ -1294,7 +1299,7 @@ function qrSVG(seed){const n=23,cell=6,pad=2,dim=(n+pad*2)*cell;let h=0;for(cons
   let x='';for(let r=0;r<n;r++)for(let c=0;c<n;c++){const f=fin(r,c,0,0)??fin(r,c,0,n-7)??fin(r,c,n-7,0);const on=(f!==null&&f!==undefined)?f:rnd()>0.52;if(on)x+=`<rect x="${(c+pad)*cell}" y="${(r+pad)*cell}" width="${cell}" height="${cell}"/>`;}
   return `<svg viewBox="0 0 ${dim} ${dim}" width="130" height="130" xmlns="http://www.w3.org/2000/svg"><rect width="${dim}" height="${dim}" fill="#fff"/><g fill="#111">${x}</g></svg>`;}
 async function pageFichaje(){
-  const isRRHH=PROFILE.role==='rrhh'||PROFILE.role==='admin', isMgr=CAN_MANAGE.includes(PROFILE.role), today=hoyISO();
+  const isRRHH=PROFILE.role==='rrhh'||isAdmin(), isMgr=CAN_MANAGE.includes(PROFILE.role), today=hoyISO();
   const{data:mine}=await sb.from('fichajes').select('*').eq('user_id',ME.id).eq('fecha',today).order('hora');
   const mias=mine||[]; const ult=mias.length?mias[mias.length-1]:null; const dentro=ult?ult.tipo==='entrada':false;
   const status=dentro?`<div style="font-size:20px;font-weight:800;color:var(--acento)">🟢 Estás fichado (dentro)</div><div style="color:var(--suave);font-size:13px">Entrada a las ${ult.hora} en ${esc(ult.lugar||'')}</div>`
@@ -1444,10 +1449,16 @@ let userEditId=null, userFormOpen=false;
 async function pageAdmin(){
   const{data}=await sb.from('profiles').select('*').order('dept');
   const us=data||[];
-  const rl=r=>({empleado:'Empleado',responsable:'Responsable',rrhh:'RRHH',admin:'Administrador'})[r]||r;
-  const rows=us.map(u=>`<tr><td>${av(u.nombre,u.color,30,u.foto)}</td><td><b>${esc(u.nombre||'')}</b>${u.id===ME.id?' <span class="badge b-grey">tú</span>':''}<br><small style="color:var(--suave)">${esc(u.email||'')}</small></td>
-    <td>${esc(u.dept||'')}</td><td><span class="badge ${u.role==='admin'?'b-red':u.role==='rrhh'?'b-blue':u.role==='responsable'?'b-amber':'b-grey'}">${rl(u.role)}</span></td><td>${u.vac||0}</td>
-    <td><button class="btn ghost" style="padding:4px 9px" onclick='userEdit(${JSON.stringify(u).replace(/'/g,"&#39;")})'>✏️ Editar</button></td></tr>`).join('');
+  const rl=r=>({empleado:'Empleado',responsable:'Responsable',rrhh:'RRHH',admin:'Administrador',propietario:'Propietario'})[r]||r;
+  const rows=us.map(u=>{
+    const esOwner=u.role==='propietario';
+    const badge=esOwner?'b-owner':u.role==='admin'?'b-red':u.role==='rrhh'?'b-blue':u.role==='responsable'?'b-amber':'b-grey';
+    const accion = (esOwner && u.id!==ME.id)
+      ? '<span style="font-size:12px;color:var(--suave)">🔒 Protegido</span>'
+      : `<button class="btn ghost" style="padding:4px 9px" onclick='userEdit(${JSON.stringify(u).replace(/'/g,"&#39;")})'>✏️ Editar</button>`;
+    return `<tr><td>${av(u.nombre,u.color,30,u.foto)}</td><td><b>${esc(u.nombre||'')}</b>${u.id===ME.id?' <span class="badge b-grey">tú</span>':''}${esOwner?' 👑':''}<br><small style="color:var(--suave)">${esc(u.email||'')}</small></td>
+    <td>${esc(u.dept||'')}</td><td><span class="badge ${badge}">${rl(u.role)}</span></td><td>${u.vac||0}</td>
+    <td>${accion}</td></tr>`;}).join('');
   document.getElementById('main').innerHTML=`<div class="page-title">Administración</div><div class="page-sub">Gestión de empleados y roles</div>
     <div class="panel" style="background:var(--azul-claro);border:none;font-size:13px">ℹ️ Para <b>crear</b> nuevos accesos, los empleados se registran desde la pantalla de inicio (o los añades en Supabase → Authentication). Aquí asignas su <b>departamento, rol, vacaciones y cumpleaños</b>.</div>
     ${userFormOpen?userForm():''}
@@ -1459,7 +1470,9 @@ function userForm(){const u=userDraft;const colores=['#1F4E79','#16a085','#8e44a
   return `<div class="panel" style="max-width:640px"><h2>✏️ Editar ${esc(u.nombre||'usuario')}</h2><form class="box" onsubmit="return userSave(event)" style="max-width:none">
     <div class="row"><div><label>Nombre</label><input id="uN" value="${esc(u.nombre||'')}"></div><div><label>Días vacaciones</label><input id="uV" type="number" value="${u.vac||0}"></div></div>
     <div class="row"><div><label>Departamento</label><select id="uD">${DEPTS.map(d=>`<option ${u.dept===d?'selected':''}>${d}</option>`).join('')}</select></div>
-      <div><label>Rol</label><select id="uR">${['empleado','responsable','rrhh','admin'].map(r=>`<option value="${r}" ${u.role===r?'selected':''}>${r}</option>`).join('')}</select></div></div>
+      <div><label>Rol</label>${u.role==='propietario'
+        ? `<input value="Propietario 👑" disabled style="background:var(--gris)"><small style="color:var(--suave)">El rol de Propietario no se puede cambiar desde aquí.</small>`
+        : `<select id="uR">${['empleado','responsable','rrhh','admin'].map(r=>`<option value="${r}" ${u.role===r?'selected':''}>${r}</option>`).join('')}</select>`}</div></div>
     <label>Cargo / puesto</label><input id="uCargo" value="${esc(u.cargo||'')}" placeholder="Ej: Recepcionista, Responsable de operaciones…">
     <label>Cumpleaños</label><input id="uC" type="date" value="${u.cumple||''}">
     <label>Foto de perfil</label>
@@ -1468,7 +1481,9 @@ function userForm(){const u=userDraft;const colores=['#1F4E79','#16a085','#8e44a
     <div><button class="btn" type="submit">Guardar</button> <button class="btn ghost" type="button" onclick="userFormOpen=false;show('admin')">Cancelar</button></div></form></div>`;}
 async function userSave(e){e.preventDefault();
   const col=document.querySelector('input[name="uCol"]:checked');
-  const row={nombre:val('uN'),dept:document.getElementById('uD').value,role:document.getElementById('uR').value,vac:+val('uV')||0,cumple:val('uC')||null,cargo:val('uCargo'),color:col?col.value:'#1F4E79'};
+  const rolSel=document.getElementById('uR');
+  const nuevoRol = (userDraft.role==='propietario') ? 'propietario' : (rolSel?rolSel.value:userDraft.role);
+  const row={nombre:val('uN'),dept:document.getElementById('uD').value,role:nuevoRol,vac:+val('uV')||0,cumple:val('uC')||null,cargo:val('uCargo'),color:col?col.value:'#1F4E79'};
   const f=document.getElementById('uFoto').files[0];
   if(f){ row.foto=await fileToAvatar(f); }
   else if(userDraft.foto===null){ row.foto=null; }   // se pulsó "Quitar foto"
@@ -1479,8 +1494,8 @@ async function userSave(e){e.preventDefault();
 /* ---------------- MENSAJES Y PLANTILLAS ---------------- */
 const TPL_CAT={Acceso:'b-red',Bienvenida:'b-green',WiFi:'b-blue',Normas:'b-amber','Check-out':'b-grey',General:'b-grey'};
 let msgTab='ver', msgUnit=null, twoFAok=false, tplEditId=null, tplFormOpen=false;
-function canMsg(){return PROFILE.dept==='Atención al cliente'||PROFILE.role==='admin';}
-function canMsgEdit(){return PROFILE.role==='admin'||(PROFILE.role==='responsable'&&PROFILE.dept==='Atención al cliente');}
+function canMsg(){return PROFILE.dept==='Atención al cliente'||isAdmin();}
+function canMsgEdit(){return isAdmin()||(PROFILE.role==='responsable'&&PROFILE.dept==='Atención al cliente');}
 function fillTpl(c,u){return (c||'').split('{apartamento}').join(u.nombre).split('{numero}').join(u.numero).split('{codigo}').join(u.codigo).split('{wifi}').join(u.wifi||'').split('{propiedad}').join(u.prop);}
 async function auditLog(accion,tipo){await sb.from('auditoria').insert({user_nombre:PROFILE.nombre,accion,tipo});}
 function setMsgTab(t){msgTab=t;tplFormOpen=false;show('mensajes');}
