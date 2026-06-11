@@ -91,6 +91,8 @@
   .mbub{max-width:75%;padding:9px 12px;font-size:13.5px;line-height:1.4}
   .mbub.me{background:var(--azul);color:#fff;align-self:flex-end}
   .mbub.ot{background:#fff;border:1px solid var(--gris2);align-self:flex-start}
+  .mbub .mseen{display:block;font-size:10px;margin-top:3px;text-align:right;letter-spacing:.2px}
+  .mbub.me .mseen{color:rgba(255,255,255,.7)}
   .msg-input{display:flex;gap:8px;padding:10px;border-top:1px solid var(--gris2);align-items:center}
   .msg-input input{flex:1;padding:9px 12px;border:1px solid var(--gris2);font-family:inherit;font-size:13.5px}
   .emoji-wrap{position:relative}
@@ -1584,9 +1586,14 @@ async function pageRegistros(){
 }
 async function aprobarReg(id){
   const role=document.getElementById('rgR_'+id).value, dept=document.getElementById('rgD_'+id).value;
+  const { data:prof } = await sb.from('profiles').select('email,nombre').eq('id',id).single();
   const { error } = await sb.from('profiles').update({ estado:'aprobado', role, dept }).eq('id',id);
   if(error){ alert('No se pudo aprobar: '+error.message); return; }
-  loadPendingCount(); show('registros'); toast('✓ Usuario aprobado');
+  // Aviso por email (si el servicio está configurado). No bloquea la aprobación.
+  let mailed=false;
+  try{ const { error:fe } = await sb.functions.invoke('aprobacion-email',{ body:{ email:prof&&prof.email, nombre:prof&&prof.nombre } }); mailed=!fe; }catch(e){ mailed=false; }
+  loadPendingCount(); show('registros');
+  toast(mailed?'✓ Aprobado · email enviado':'✓ Usuario aprobado');
 }
 async function rechazarReg(id){
   if(!confirm('¿Rechazar esta solicitud? El usuario no podrá entrar al portal.')) return;
@@ -1914,7 +1921,7 @@ async function pageMensajeria(){
   else{ const thread=MS.filter(m=>(m.de_id===ME.id&&m.para_id===chatWithId)||(m.de_id===chatWithId&&m.para_id===ME.id));
     chatLastId = thread.length?Math.max(...thread.map(m=>m.id)):0;
     conv=`<div class="msg-conv"><div style="padding:12px 16px;border-bottom:1px solid var(--gris2);display:flex;align-items:center;gap:10px"><b>${esc(chatWithName)}</b></div>
-      <div class="msg-thread" id="msgThread">${thread.map(m=>`<div class="mbub ${m.de_id===ME.id?'me':'ot'}">${esc(m.texto)}</div>`).join('')||'<div id="msgEmpty" style="color:var(--suave);text-align:center;font-size:13px">Aún no hay mensajes. ¡Escribe el primero!</div>'}</div>
+      <div class="msg-thread" id="msgThread">${thread.map(m=>{const mine=m.de_id===ME.id;const st=mine?`<span class="mseen" id="mseen_${m.id}">${m.leido?'✓✓ Visto':'✓ Enviado'}</span>`:'';return `<div class="mbub ${mine?'me':'ot'}">${esc(m.texto)}${st}</div>`;}).join('')||'<div id="msgEmpty" style="color:var(--suave);text-align:center;font-size:13px">Aún no hay mensajes. ¡Escribe el primero!</div>'}</div>
       <div class="msg-input"><div class="emoji-wrap"><button type="button" class="emoji-btn" onclick="toggleEmoji(event)" title="Emojis">😊</button><div id="emojiPanel" class="emoji-panel"></div></div><input id="msgIn" placeholder="Escribe un mensaje…" onkeydown="if(event.key==='Enter')sendMsg()"><button class="btn" onclick="sendMsg()">Enviar</button></div></div>`; }
   setTimeout(()=>{const t=document.getElementById('msgThread');if(t)t.scrollTop=t.scrollHeight;},40);
   document.getElementById('main').innerHTML=`<div class="page-title">Mensajería interna</div><div class="page-sub">Habla con tus compañeros de equipo</div><div class="msg-layout"><div class="msg-contacts"><div class="msg-search"><input id="msgSearch" placeholder="🔍 Buscar persona o palabra…" oninput="msgSearch(this.value)"></div><div id="contactList">${lista}</div></div>${conv}</div>`;
@@ -1922,16 +1929,20 @@ async function pageMensajeria(){
   window._chatPoll=setInterval(pollChat,3000);
 }
 function refreshContactList(){const sv=document.getElementById('msgSearch');const cl=document.getElementById('contactList');if(cl)cl.innerHTML=buildContactList(sv?sv.value:'');}
-function appendBubble(m){const t=document.getElementById('msgThread');if(!t)return;const e=document.getElementById('msgEmpty');if(e)e.remove();const d=document.createElement('div');d.className='mbub '+(m.de_id===ME.id?'me':'ot');d.textContent=m.texto;t.appendChild(d);t.scrollTop=t.scrollHeight;}
+function appendBubble(m){const t=document.getElementById('msgThread');if(!t)return;const e=document.getElementById('msgEmpty');if(e)e.remove();const mine=m.de_id===ME.id;const d=document.createElement('div');d.className='mbub '+(mine?'me':'ot');d.appendChild(document.createTextNode(m.texto));if(mine){const s=document.createElement('span');s.className='mseen';s.id='mseen_'+m.id;s.textContent=m.leido?'✓✓ Visto':'✓ Enviado';d.appendChild(s);}t.appendChild(d);t.scrollTop=t.scrollHeight;}
 async function pollChat(){
   if(curPage!=='mensajeria' || !chatWithId) return;
   const filt=`and(de_id.eq.${ME.id},para_id.eq.${chatWithId}),and(de_id.eq.${chatWithId},para_id.eq.${ME.id})`;
   const {data}=await sb.from('mensajes').select('*').gt('id',chatLastId).or(filt).order('created_at');
-  if(!data||!data.length) return;
-  let recibido=false;
-  for(const m of data){ appendBubble(m); chatLastId=Math.max(chatLastId,m.id); MSG_ALL.push(m); if(m.de_id===chatWithId) recibido=true; }
-  if(recibido){ await sb.from('mensajes').update({leido:true}).eq('para_id',ME.id).eq('de_id',chatWithId).eq('leido',false); loadMsgUnread(); }
-  refreshContactList();
+  if(data&&data.length){
+    let recibido=false;
+    for(const m of data){ appendBubble(m); chatLastId=Math.max(chatLastId,m.id); MSG_ALL.push(m); if(m.de_id===chatWithId) recibido=true; }
+    if(recibido){ await sb.from('mensajes').update({leido:true}).eq('para_id',ME.id).eq('de_id',chatWithId).eq('leido',false); loadMsgUnread(); }
+    refreshContactList();
+  }
+  // actualizar el "Visto" de mis mensajes cuando el otro los lee
+  const {data:seen}=await sb.from('mensajes').select('id').eq('de_id',ME.id).eq('para_id',chatWithId).eq('leido',true);
+  (seen||[]).forEach(r=>{const el=document.getElementById('mseen_'+r.id);if(el&&el.textContent!=='✓✓ Visto')el.textContent='✓✓ Visto';});
 }
 let MSG_CONTACTS=[], MSG_ALL=[];
 function buildContactList(term){
