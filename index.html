@@ -247,6 +247,8 @@
   .com-card .cc-foot .who small{color:var(--suave);font-size:12px;display:block}
   .com-card .cc-read{margin-left:auto;display:flex;align-items:center;gap:14px}
   .btn-read{background:var(--acento);color:#fff;border:none;padding:9px 16px;border-radius:9px;font-weight:600;font-size:13px}
+  .btn-del{background:transparent;color:#c0392b;border:1px solid #e3b7b1;padding:8px 14px;border-radius:9px;font-weight:600;font-size:12.5px;cursor:pointer;margin-left:8px}
+  .btn-del:hover{background:#c0392b;color:#fff;border-color:#c0392b}
   .btn-read:hover{filter:brightness(.95)}
   .read-ok{color:var(--acento);font-weight:700;font-size:13px}
   .read-count{font-size:12px;color:var(--suave)}
@@ -868,6 +870,8 @@ async function pageComunicados(){
   const lecturas = lect||[];
   const { data:profs } = await sb.from('profiles').select('id,nombre,dept,color,foto,cargo');
   const PR = profs||[];
+  const { data:adjs } = await sb.from('comunicado_adjuntos').select('*');
+  const ADJ = adjs||[];
   const visibles = (coms||[]).filter(c=>c.dirigido==='*'||c.dirigido===PROFILE.dept);
   const cardHTML = c=>{
     const nv=NIVEL[c.nivel]||NIVEL.info;
@@ -879,6 +883,11 @@ async function pageComunicados(){
     const dest = c.dirigido==='*'?'Toda la empresa':c.dirigido;
     const autor = PR.find(u=>u.id===c.autor_id);
     const aCol = autor?autor.color:null, aFoto = autor?autor.foto:null, aCargo = autor&&autor.cargo?autor.cargo:'';
+    const canDel = PROFILE.role==='admin' || c.autor_id===ME.id;
+    const delBtn = canDel?`<button class="btn-del" onclick="deleteCom(${c.id})" title="Eliminar comunicado">🗑 Eliminar</button>`:'';
+    const mis = ADJ.filter(a=>a.comunicado_id===c.id);
+    const ico=t=>!t?'📎':(/pdf/.test(t)?'📄':(/image/.test(t)?'🖼️':(/word|document/.test(t)?'📝':(/sheet|excel/.test(t)?'📊':'📎'))));
+    const adjHTML = mis.length?`<div class="cc-adj">${mis.map(a=>`<a class="att" href="${a.url}" target="_blank" rel="noopener" download="${esc(a.nombre)}">${ico(a.tipo)} ${esc(a.nombre)}</a>`).join('')}</div>`:'';
     let detalle='';
     if(canCreate){
       const aud=PR.filter(u=>c.dirigido==='*'||c.dirigido===u.dept);
@@ -898,11 +907,12 @@ async function pageComunicados(){
         <div class="cc-to">📍 Dirigido a: ${esc(dest)}</div>
         <h2 class="cc-title">${esc(c.titulo)}</h2>
         <div class="cc-text">${esc(c.cuerpo)}</div>
+        ${adjHTML}
       </div>
       <div class="cc-foot">
         ${av(c.autor_nombre||'',aCol,40,aFoto)}
         <div class="who"><b>${esc(c.autor_nombre||'')}</b><small>${esc(aCargo?aCargo+' · ':'')}${fecha}</small></div>
-        <div class="cc-read">${read}</div>
+        <div class="cc-read">${read}${delBtn}</div>
       </div>
       ${detalle}
     </div>`;
@@ -925,6 +935,9 @@ function toggleComForm(){
           <div><label>Nivel</label><select id="cNiv"><option value="info">Informativo</option><option value="imp">Importante</option><option value="urg">Urgente</option></select></div>
         </div>
         <label>Contenido</label><textarea id="cCpo" rows="5" required></textarea>
+        <label>Documentos adjuntos (opcional)</label>
+        <input id="cAdj" type="file" multiple>
+        <div style="font-size:12px;color:var(--suave);margin:-4px 0 12px">Puedes adjuntar PDF, imágenes u otros archivos. Máx. 25 MB por archivo.</div>
         <div><button class="btn" type="submit">📢 Publicar</button>
           <button class="btn ghost" type="button" style="margin-left:8px" onclick="toggleComForm()">Cancelar</button></div>
       </form></div>` : '';
@@ -934,8 +947,20 @@ async function createCom(e){
   const row={ titulo:document.getElementById('cTit').value.trim(), cuerpo:document.getElementById('cCpo').value.trim(),
     nivel:document.getElementById('cNiv').value, dirigido:document.getElementById('cDir').value,
     autor_id:ME.id, autor_nombre:PROFILE.nombre };
-  const { error } = await sb.from('comunicados').insert(row);
-  if(error){ alert('No se pudo publicar: '+error.message); return false; }
+  const btn = e.target.querySelector('button[type=submit]');
+  if(btn){ btn.disabled=true; btn.textContent='⏳ Publicando...'; }
+  const { data:ins, error } = await sb.from('comunicados').insert(row).select('id').single();
+  if(error){ alert('No se pudo publicar: '+error.message); if(btn){btn.disabled=false;btn.textContent='📢 Publicar';} return false; }
+  // Subir documentos adjuntos (si los hay)
+  const files = (document.getElementById('cAdj')||{}).files || [];
+  for(const f of files){
+    if(f.size > 25*1024*1024){ alert('El archivo "'+f.name+'" supera 25 MB y no se subió.'); continue; }
+    const path = ins.id+'/'+Date.now()+'_'+f.name.replace(/[^\w.\-]/g,'_');
+    const up = await sb.storage.from('comunicados').upload(path, f, {upsert:false});
+    if(up.error){ alert('No se pudo subir "'+f.name+'": '+up.error.message); continue; }
+    const { data:pub } = sb.storage.from('comunicados').getPublicUrl(path);
+    await sb.from('comunicado_adjuntos').insert({ comunicado_id:ins.id, nombre:f.name, url:pub.publicUrl, path, tipo:f.type });
+  }
   await notifyTeam(row.dirigido, '📢', `Nuevo comunicado de ${PROFILE.nombre}: "${row.titulo}"`, 'comunicados');
   comFormOpen=false; pageComunicados();
   return false;
@@ -943,6 +968,16 @@ async function createCom(e){
 async function confirmRead(id){
   const { error } = await sb.from('comunicado_lecturas').insert({ comunicado_id:id, user_id:ME.id });
   if(error && !String(error.message).includes('duplicate')){ alert('Error: '+error.message); return; }
+  pageComunicados();
+}
+async function deleteCom(id){
+  if(!confirm('¿Eliminar este comunicado de forma permanente? No se puede deshacer.')) return;
+  // borrar archivos del almacenamiento
+  const { data:adjs } = await sb.from('comunicado_adjuntos').select('path').eq('comunicado_id',id);
+  const paths=(adjs||[]).map(a=>a.path).filter(Boolean);
+  if(paths.length) await sb.storage.from('comunicados').remove(paths);
+  const { error } = await sb.from('comunicados').delete().eq('id',id);
+  if(error){ alert('No se pudo eliminar: '+error.message); return; }
   pageComunicados();
 }
 /* ---------------- HORARIOS (datos reales) ---------------- */
