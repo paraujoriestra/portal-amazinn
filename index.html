@@ -101,6 +101,23 @@
   .cartel .c-icon{font-size:74px} .cartel .c-title{font-size:28px;font-weight:900;letter-spacing:1px;margin:12px 0;text-transform:uppercase} .cartel .c-body{font-size:17px;color:#333;line-height:1.5;white-space:pre-line}
   .cartel .c-foot{padding:12px;border-top:1px solid var(--gris2);text-align:center;font-size:11px;color:var(--suave)}
   @media print{body *{visibility:hidden!important}#cartelPrint,#cartelPrint *{visibility:visible!important}#cartelPrint{position:fixed;left:0;top:0;width:100%}#cartelPrint .cartel{border:none;max-width:100%;width:100%;height:99vh;aspect-ratio:auto}}
+  .tpl-card{background:#fff;border:1px solid var(--gris2);border-radius:12px;box-shadow:var(--sombra);margin-bottom:16px;overflow:hidden;max-width:760px}
+  .tpl-card.acc{border:2px solid var(--rojo)}
+  .tpl-card .h{display:flex;align-items:center;gap:10px;padding:12px 18px;border-bottom:1px solid var(--gris2);background:#fafbfd;flex-wrap:wrap}
+  .tpl-text{white-space:pre-line;font-size:14px;color:#2b2f36;padding:16px 18px;line-height:1.6}
+  .tpl-card .foot{padding:9px 18px;border-top:1px solid var(--gris);background:#fafbfd;font-size:12px;color:var(--suave)}
+  .acc-banner{background:#fff3cd;border:1px solid #ffe69c;border-left:5px solid var(--amarillo);border-radius:10px;padding:14px 18px;margin:6px 0 18px;font-size:14px}
+  .acc-banner .big{font-size:18px;font-weight:800;color:var(--azul)} .acc-banner .code{font-size:18px;font-weight:800;color:var(--rojo);letter-spacing:1px}
+  .pend{border:1px solid var(--gris2);border-left:4px solid var(--amarillo);border-radius:10px;padding:12px 14px;margin-bottom:10px;background:#fff}
+  .pend.obs{border-left-color:var(--azul)} .pend.done{border-left-color:var(--acento);background:#f6fbf9}
+  .chat-fab{position:fixed;bottom:22px;right:22px;width:56px;height:56px;border-radius:50%;background:var(--azul);color:#fff;font-size:25px;display:none;align-items:center;justify-content:center;box-shadow:0 6px 20px rgba(0,0,0,.28);cursor:pointer;border:none;z-index:55}
+  .chat-win{display:none;position:fixed;bottom:88px;right:22px;width:360px;max-width:92vw;height:520px;max-height:76vh;background:#fff;border:1px solid var(--gris2);border-radius:16px;box-shadow:0 16px 50px rgba(0,0,0,.28);z-index:56;flex-direction:column;overflow:hidden}
+  .chat-win .ch{background:var(--azul);color:#fff;padding:13px 16px;font-weight:700;display:flex;align-items:center;gap:9px}.chat-win .ch small{font-weight:400;color:#cfe0f2;font-size:11px;display:block}.chat-win .ch .x{margin-left:auto;cursor:pointer}
+  .chat-body{flex:1;overflow-y:auto;padding:14px;background:var(--gris);display:flex;flex-direction:column;gap:10px}
+  .bub{max-width:86%;padding:10px 13px;border-radius:13px;font-size:13.5px;line-height:1.5}.bub.bot{background:#fff;border:1px solid var(--gris2);align-self:flex-start}.bub.me{background:var(--azul);color:#fff;align-self:flex-end}
+  .bub .navb{margin-top:8px;display:flex;flex-wrap:wrap;gap:6px}.bub .navb button{background:var(--azul-claro);color:var(--azul);border:none;border-radius:7px;padding:6px 11px;font-size:12px;font-weight:600;cursor:pointer}
+  .chat-sug{display:flex;gap:6px;flex-wrap:wrap;padding:8px 12px;background:#fff;border-top:1px solid var(--gris2)}.chat-sug button{background:var(--gris);border:1px solid var(--gris2);border-radius:14px;padding:5px 10px;font-size:11.5px;cursor:pointer}
+  .chat-in{display:flex;gap:8px;padding:10px 12px;background:#fff;border-top:1px solid var(--gris2)}.chat-in input{flex:1;padding:9px 13px;border:1px solid var(--gris2);border-radius:20px;font-size:13.5px}.chat-in button{background:var(--azul);color:#fff;border:none;width:38px;height:38px;border-radius:50%;font-size:16px;cursor:pointer}
   .setup{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:#fff;z-index:60;padding:24px}
   .setup .box{max-width:560px;font-size:14px;line-height:1.6}
   .setup code{background:var(--gris);padding:2px 6px;border-radius:5px}
@@ -152,6 +169,9 @@
     <main id="main"></main>
   </div>
 </div>
+
+<button id="chatFab" class="chat-fab" onclick="toggleChat()">💬</button>
+<div id="chatWin" class="chat-win"></div>
 
 <script>
 /* =====================================================================
@@ -226,6 +246,8 @@ async function enterApp(user){
   document.getElementById('av').textContent = inis(PROFILE.nombre||user.email);
   document.getElementById('av').style.background = PROFILE.color || '#1F4E79';
   buildNav();
+  document.getElementById('chatFab').style.display='flex';
+  chatMsgs=[{from:'bot',msg:`¡Hola, ${(PROFILE.nombre||'').split(' ')[0]||''}! 🤖 Soy <b>Wally</b>, el asistente de Amazinn Places. Pregúntame cómo encontrar algo.`}];
   show('inicio');
 }
 function inis(n){return (n||'?').trim().split(/\s+/).slice(0,2).map(w=>w[0]).join('').toUpperCase();}
@@ -247,10 +269,18 @@ const NAV=[
   {id:'organigrama',ic:'🏢',t:'Organigrama'},
   {id:'proveedores',ic:'🚚',t:'Proveedores'},
   {id:'suministros',ic:'🔌',t:'Suministros'},
+  {grp:'Atención al cliente', depts:['Atención al cliente']},
+  {id:'mensajes',ic:'💬',t:'Mensajes y plantillas', depts:['Atención al cliente']},
+  {id:'bitacora',ic:'📝',t:'Bitácora de turnos', depts:['Atención al cliente']},
+  {grp:'Formación'},
+  {id:'formacion',ic:'🎓',t:'Formaciones'},
   {grp:'Marketing'},
   {id:'carteles',ic:'🪧',t:'Carteles'},
   {grp:'Gestión', roles:['responsable','rrhh','admin']},
   {id:'aprobaciones',ic:'✅',t:'Aprobaciones', roles:['responsable','rrhh','admin']},
+  {grp:'Dirección', roles:['admin']},
+  {id:'kpis',ic:'📊',t:'Tablero de KPIs', roles:['admin']},
+  {id:'auditoria',ic:'🔒',t:'Auditoría', roles:['admin']},
   {id:'admin',ic:'⚙️',t:'Administración', roles:['admin']},
 ];
 const CAN_MANAGE=['responsable','rrhh','admin'];
@@ -266,6 +296,7 @@ function navGroups(){
   const groups=[]; let cur=null;
   NAV.forEach(it=>{
     if(it.roles && !it.roles.includes(PROFILE.role)) return;
+    if(it.depts && !it.depts.includes(PROFILE.dept) && PROFILE.role!=='admin') return;
     if(it.grp){ cur={name:it.grp,items:[]}; groups.push(cur); }
     else if(cur){ cur.items.push(it); }
   });
@@ -310,6 +341,11 @@ function show(id){
   else if(id==='cumple'){ m.innerHTML='<div class="page-title">Cumpleaños</div><div class="page-sub">Cargando…</div>'; pageCumple(); }
   else if(id==='carteles'){ pageCarteles(); }
   else if(id==='admin'){ m.innerHTML='<div class="page-title">Administración</div><div class="page-sub">Cargando…</div>'; pageAdmin(); }
+  else if(id==='mensajes'){ m.innerHTML='<div class="page-title">Mensajes y plantillas</div><div class="page-sub">Cargando…</div>'; pageMensajes(); }
+  else if(id==='bitacora'){ m.innerHTML='<div class="page-title">Bitácora</div><div class="page-sub">Cargando…</div>'; pageBitacora(); }
+  else if(id==='formacion'){ m.innerHTML='<div class="page-title">Formaciones</div><div class="page-sub">Cargando…</div>'; pageFormacion(); }
+  else if(id==='kpis'){ m.innerHTML='<div class="page-title">KPIs</div><div class="page-sub">Cargando…</div>'; pageKpis(); }
+  else if(id==='auditoria'){ m.innerHTML='<div class="page-title">Auditoría</div><div class="page-sub">Cargando…</div>'; pageAuditoria(); }
 }
 
 /* ---------------- INICIO ---------------- */
@@ -757,6 +793,208 @@ async function userSave(e){e.preventDefault();
   const{error}=await sb.from('profiles').update(row).eq('id',userEditId);
   if(error){alert('Error: '+error.message);return false;}
   userFormOpen=false;show('admin');return false;}
+
+/* ---------------- MENSAJES Y PLANTILLAS ---------------- */
+const TPL_CAT={Acceso:'b-red',Bienvenida:'b-green',WiFi:'b-blue',Normas:'b-amber','Check-out':'b-grey',General:'b-grey'};
+let msgTab='ver', msgUnit=null, twoFAok=false, tplEditId=null, tplFormOpen=false;
+function canMsg(){return PROFILE.dept==='Atención al cliente'||PROFILE.role==='admin';}
+function canMsgEdit(){return PROFILE.role==='admin'||(PROFILE.role==='responsable'&&PROFILE.dept==='Atención al cliente');}
+function fillTpl(c,u){return (c||'').split('{apartamento}').join(u.nombre).split('{numero}').join(u.numero).split('{codigo}').join(u.codigo).split('{wifi}').join(u.wifi||'').split('{propiedad}').join(u.prop);}
+async function auditLog(accion,tipo){await sb.from('auditoria').insert({user_nombre:PROFILE.nombre,accion,tipo});}
+function setMsgTab(t){msgTab=t;tplFormOpen=false;show('mensajes');}
+async function pageMensajes(){
+  const manage=canMsgEdit();
+  const tabs=[['ver','👁️ Ver mensajes'],['tpl','🗂️ Gestionar plantillas'],['cods','🔑 Códigos de acceso']];
+  if(manage&&!tabs.some(t=>t[0]===msgTab))msgTab='ver';
+  let body;
+  if(!manage||msgTab==='ver') body=await msgViewer();
+  else if(msgTab==='tpl') body=await msgManage();
+  else body=await msgCodes();
+  document.getElementById('main').innerHTML=`<div class="page-title">Mensajes y plantillas</div><div class="page-sub">Plantillas por apartamento para Atención al cliente</div>
+    ${manage?`<div class="tabs">${tabs.map(t=>`<button class="${msgTab===t[0]?'on':''}" onclick="setMsgTab('${t[0]}')">${t[1]}</button>`).join('')}</div>`:''}${body}`;
+}
+async function loadUnidades(){const{data}=await sb.from('unidades').select('*').order('id');return data||[];}
+async function msgViewer(){
+  const uni=await loadUnidades();
+  const props=[...new Set(uni.map(u=>u.prop))];
+  const sel=`<div style="margin-bottom:16px"><label style="font-weight:600;font-size:14px;margin-right:8px">🏠 Apartamento:</label>
+    <select onchange="msgUnit=this.value;show('mensajes')" style="padding:10px 12px;border:1px solid var(--gris2);border-radius:9px;font-size:15px;min-width:240px">
+    <option value="">— Elige —</option>${props.map(p=>`<optgroup label="${esc(p)}">${uni.filter(u=>u.prop===p).map(u=>`<option value="${u.id}" ${u.id===msgUnit?'selected':''}>${esc(u.nombre)}</option>`).join('')}</optgroup>`).join('')}</select></div>`;
+  if(!msgUnit) return sel+`<div class="panel">Selecciona un apartamento para ver sus plantillas. ⚠️ El código de acceso es específico de cada uno.</div>`;
+  const u=uni.find(x=>x.id===msgUnit); if(!u) return sel+`<div class="panel">Apartamento no encontrado.</div>`;
+  const{data:tpls}=await sb.from('plantillas').select('*');
+  const mine=(tpls||[]).filter(t=>(t.unidades||[]).includes(u.id));
+  const banner=`<div class="acc-banner">📍 Estás viendo: <span class="big">${esc(u.nombre)}</span> · Nº <b>${esc(u.numero)}</b> · Código de acceso <span class="code">${esc(u.codigo)}</span><br><small>Verifica que es el apartamento de la reserva antes de enviar el mensaje.</small></div>`;
+  const cards=mine.map(t=>{const filled=fillTpl(t.cuerpo,u);const cat=TPL_CAT[t.cat]||'b-grey';
+    return `<div class="tpl-card ${t.cat==='Acceso'?'acc':''}"><div class="h"><span class="badge ${cat}">${esc(t.cat||'')}</span><b>${esc(t.titulo)}</b>
+      <button class="btn" style="margin-left:auto;padding:7px 14px" onclick="copyTxt(this)" data-t="${esc(filled).replace(/"/g,'&quot;')}">📋 Copiar</button></div>
+      <div class="tpl-text">${esc(filled)}</div>
+      <div class="foot">Creada por <b>${esc(t.autor_nombre||'')}</b>${t.editor_nombre?` · ✏️ editada por <b>${esc(t.editor_nombre)}</b> (${esc(t.edit_fecha||'')})`:''}</div></div>`;}).join('')||'<div class="panel">No hay plantillas asignadas a este apartamento.</div>';
+  return sel+banner+cards;
+}
+function copyTxt(btn){const t=btn.getAttribute('data-t');navigator.clipboard?navigator.clipboard.writeText(t).then(()=>toast('✓ Copiado')).catch(()=>toast('No se pudo copiar')):toast('No disponible');}
+async function msgManage(){
+  const{data:tpls}=await sb.from('plantillas').select('*').order('id');
+  const rows=(tpls||[]).map(t=>`<div style="display:flex;align-items:center;gap:10px;padding:12px 0;border-bottom:1px solid var(--gris);flex-wrap:wrap">
+    <span class="badge ${TPL_CAT[t.cat]||'b-grey'}">${esc(t.cat||'')}</span><b style="min-width:220px">${esc(t.titulo)}</b><span style="color:var(--suave);font-size:13px">${(t.unidades||[]).length} apto(s)</span>
+    <span style="margin-left:auto;display:flex;gap:6px"><button class="btn ghost" style="padding:5px 11px" onclick='tplEdit(${JSON.stringify(t).replace(/'/g,"&#39;")})'>✏️ Editar</button>
+    <button class="btn ghost" style="padding:5px 11px" onclick="tplDup(${t.id})">⧉ Duplicar</button></span></div>`).join('');
+  return `<div style="margin-bottom:14px"><button class="btn" onclick="tplNew()">➕ Nueva plantilla</button></div>${tplFormOpen?await tplForm():''}
+    <div class="panel"><h2>Plantillas (${(tpls||[]).length})</h2>${rows||'<div style="color:var(--suave)">Sin plantillas.</div>'}</div>`;
+}
+let tplDraft={};
+function tplNew(){tplEditId=null;tplDraft={};tplFormOpen=true;show('mensajes');}
+function tplEdit(t){tplEditId=t.id;tplDraft=t;tplFormOpen=true;show('mensajes');}
+async function tplDup(id){const{data}=await sb.from('plantillas').select('*').eq('id',id).single();if(!data)return;
+  const{error}=await sb.from('plantillas').insert({titulo:data.titulo+' (copia)',cat:data.cat,cuerpo:data.cuerpo,unidades:data.unidades,autor_nombre:PROFILE.nombre});
+  if(error){alert(error.message);return;}auditLog('Duplicó la plantilla «'+data.titulo+'»','plantilla');show('mensajes');}
+async function tplForm(){
+  const t=tplDraft;const cats=['Acceso','Bienvenida','WiFi','Normas','Check-out','General'];const uni=await loadUnidades();
+  const checked=new Set(t.unidades||[]);const props=[...new Set(uni.map(u=>u.prop))];
+  return `<div class="panel" style="max-width:760px"><h2>${tplEditId?'✏️ Editar plantilla':'➕ Nueva plantilla'}</h2><form class="box" onsubmit="return tplSave(event)" style="max-width:none">
+    <div class="row"><div><label>Título</label><input id="tT" required value="${t.titulo?esc(t.titulo):''}"></div><div><label>Categoría</label><select id="tC">${cats.map(c=>`<option ${t.cat===c?'selected':''}>${c}</option>`).join('')}</select></div></div>
+    <label>Contenido</label><textarea id="tB" rows="5" required>${t.cuerpo?esc(t.cuerpo):''}</textarea>
+    <small style="color:var(--suave)">Variables: {apartamento} {numero} {codigo} {wifi} {propiedad}</small>
+    <label>Aplica a apartamentos</label><div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:6px 12px;padding:12px;background:var(--gris);border-radius:9px;max-height:220px;overflow:auto">
+      ${props.map(p=>`<div style="grid-column:1/-1;font-weight:700;color:var(--azul);font-size:12px">${esc(p)}</div>`+uni.filter(u=>u.prop===p).map(u=>`<label style="font-size:13px"><input type="checkbox" class="tU" value="${u.id}" ${checked.has(u.id)?'checked':''}> ${esc(u.nombre)}</label>`).join('')).join('')}</div>
+    <div><button class="btn" type="submit">Guardar</button> <button class="btn ghost" type="button" onclick="tplFormOpen=false;show('mensajes')">Cancelar</button></div></form></div>`;
+}
+async function tplSave(e){e.preventDefault();
+  const unidades=[...document.querySelectorAll('.tU:checked')].map(c=>c.value);
+  if(!unidades.length){alert('Selecciona al menos un apartamento.');return false;}
+  const row={titulo:val('tT'),cat:document.getElementById('tC').value,cuerpo:document.getElementById('tB').value,unidades};
+  let error;
+  if(tplEditId){row.editor_nombre=PROFILE.nombre;row.edit_fecha=new Date().toLocaleDateString('es-ES');({error}=await sb.from('plantillas').update(row).eq('id',tplEditId));auditLog('Editó la plantilla «'+row.titulo+'»','plantilla');}
+  else{row.autor_nombre=PROFILE.nombre;({error}=await sb.from('plantillas').insert(row));auditLog('Creó la plantilla «'+row.titulo+'»','plantilla');}
+  if(error){alert(error.message);return false;}tplFormOpen=false;show('mensajes');return false;
+}
+async function msgCodes(){
+  if(!twoFAok) return `<div class="panel" style="max-width:430px;text-align:center;margin:0 auto"><div style="font-size:42px">🔐</div><h2 style="justify-content:center">Verificación en dos pasos</h2>
+    <p style="font-size:13.5px;color:var(--suave)">Información sensible. Introduce el código de tu app de autenticación.</p>
+    <input id="twofa" maxlength="6" inputmode="numeric" placeholder="••••••" style="text-align:center;letter-spacing:10px;font-size:24px;padding:12px;border:1px solid var(--gris2);border-radius:10px;width:210px" onkeydown="if(event.key==='Enter')verify2FA()">
+    <div style="margin-top:14px"><button class="btn" onclick="verify2FA()">Verificar</button></div><small style="color:var(--suave)">Demo: cualquier 6 dígitos.</small></div>`;
+  const uni=await loadUnidades();
+  const rows=uni.map(u=>`<tr><td><b>${esc(u.nombre)}</b></td><td>${esc(u.prop)}</td><td><input id="n_${u.id}" value="${esc(u.numero||'')}" style="padding:7px;border:1px solid var(--gris2);border-radius:7px;width:90px"></td>
+    <td><input id="c_${u.id}" value="${esc(u.codigo||'')}" style="padding:7px;border:1px solid var(--gris2);border-radius:7px;width:110px;font-weight:700;color:var(--rojo)"></td></tr>`).join('');
+  return `<div class="panel" style="background:var(--azul-claro);border:none;font-size:13.5px">🔑 Edita el nº y el código de cada apartamento. Cada cambio queda en <b>Auditoría</b> y se refleja en las plantillas.</div>
+    <div class="panel"><table><thead><tr><th>Apartamento</th><th>Propiedad</th><th>Nº</th><th>Código</th></tr></thead><tbody>${rows}</tbody></table>
+    <div style="margin-top:14px"><button class="btn" onclick="saveCodes()">💾 Guardar cambios</button></div></div>`;
+}
+function verify2FA(){const v=(document.getElementById('twofa').value||'').trim();if(/^\d{6}$/.test(v)){twoFAok=true;show('mensajes');}else toast('Introduce 6 dígitos');}
+async function saveCodes(){
+  const uni=await loadUnidades();let n=0;
+  for(const u of uni){const num=val('n_'+u.id),cod=val('c_'+u.id);
+    if(num!==u.numero||cod!==u.codigo){await sb.from('unidades').update({numero:num,codigo:cod}).eq('id',u.id);
+      if(cod!==u.codigo)auditLog(`Cambió el código de acceso de ${u.nombre} (${u.codigo}→${cod})`,'codigo');n++;}}
+  toast(n?`✓ ${n} cambio(s) guardados`:'Sin cambios');show('mensajes');
+}
+
+/* ---------------- BITÁCORA ---------------- */
+let bitFormOpen=false;
+const EST_P={pendiente:['Pendiente','b-amber'],'en observacion':['En seguimiento','b-blue'],realizado:['Realizado','b-green']};
+async function pageBitacora(){
+  const{data:pen}=await sb.from('bitacora_pendientes').select('*').order('created_at',{ascending:false});
+  const{data:bits}=await sb.from('bitacoras').select('*').order('created_at',{ascending:false});
+  const open=(pen||[]).filter(p=>p.estado!=='realizado'),done=(pen||[]).filter(p=>p.estado==='realizado');
+  const card=p=>{const e=EST_P[p.estado]||EST_P.pendiente;const cls=p.estado==='realizado'?'done':(p.estado==='en observacion'?'obs':'');
+    let acts=p.estado==='pendiente'?`<button class="btn ghost" style="padding:5px 11px" onclick="penSeg(${p.id})">👁 Seguimiento</button><button class="btn" style="padding:5px 11px" onclick="penDone(${p.id})">✅ Realizado</button>`
+      :p.estado==='en observacion'?`<button class="btn" style="padding:5px 11px" onclick="penDone(${p.id})">✅ Realizado</button><button class="btn ghost" style="padding:5px 11px" onclick="penReopen(${p.id})">↩ Pendiente</button>`
+      :`<button class="btn ghost" style="padding:5px 11px" onclick="penReopen(${p.id})">↩ Reabrir</button>`;
+    const meta=p.estado==='realizado'?`Dejado por ${esc(p.por_quien||'')} (${esc(p.turno||'')}) · ✅ ${esc(p.hecho_por||'')} el ${esc(p.hecho_fecha||'')}`:`Dejado por <b>${esc(p.por_quien||'')}</b> · turno ${esc(p.turno||'')}${p.seg_por?` · 👁 ${esc(p.seg_por)}`:''}`;
+    return `<div class="pend ${cls}"><div style="font-size:14px"><span class="badge ${e[1]}">${e[0]}</span> ${esc(p.texto)}</div><div style="font-size:12px;color:var(--suave);margin:6px 0">${meta}</div><div style="display:flex;gap:6px;flex-wrap:wrap">${acts}</div></div>`;};
+  document.getElementById('main').innerHTML=`<div class="page-title">Bitácora de turnos · Atención al cliente</div><div class="page-sub">Registra tu turno y deja los pendientes para el siguiente compañero</div>
+    <div class="panel"><h2>🔁 Pendientes del equipo (${open.length})</h2><div style="font-size:13px;color:var(--suave);margin-bottom:8px">Se traspasan de turno a turno hasta completarse.</div>
+      <div style="display:flex;gap:8px;margin-bottom:10px"><input id="penQ" placeholder="Añadir un pendiente rápido…" style="flex:1;padding:9px 12px;border:1px solid var(--gris2);border-radius:9px" onkeydown="if(event.key==='Enter')penAdd()"><button class="btn" onclick="penAdd()">+ Añadir</button></div>
+      ${open.length?open.map(card).join(''):'<div style="color:var(--suave);font-size:13.5px">🎉 No hay pendientes abiertos.</div>'}
+      ${done.length?`<details style="margin-top:10px"><summary style="cursor:pointer;color:var(--suave);font-size:13px">Resueltos recientemente (${done.length})</summary>${done.map(card).join('')}</details>`:''}</div>
+    <div style="margin:8px 0 16px"><button class="btn" onclick="bitFormOpen=!bitFormOpen;show('bitacora')">${bitFormOpen?'✕ Cerrar':'📝 Cerrar mi turno / nueva entrada'}</button></div>
+    ${bitFormOpen?bitForm():''}
+    <div class="panel"><h2>📚 Historial (${(bits||[]).length})</h2>${(bits||[]).map(b=>`<div style="border:1px solid var(--gris2);border-radius:10px;margin-bottom:12px;padding:12px 16px"><div style="display:flex;gap:8px;align-items:center"><b>${esc(b.autor_nombre||'')}</b><span class="badge b-blue">${esc(b.turno||'')}</span><small style="color:var(--suave)">${esc(b.fecha||'')}</small></div>
+      <div style="font-size:13px;margin-top:8px"><b style="color:var(--azul);font-size:11px">RESUMEN</b><br>${esc(b.resumen||'—')}<br><b style="color:var(--azul);font-size:11px">INCIDENCIAS</b><br>${esc(b.incidencias||'—')}<br><b style="color:var(--azul);font-size:11px">REALIZADAS</b><br>${esc(b.realizadas||'—')}</div></div>`).join('')||'<div style="color:var(--suave)">Sin entradas.</div>'}</div>`;
+}
+function bitForm(){return `<div class="panel" style="max-width:760px"><h2>📝 Cerrar turno</h2><form class="box" onsubmit="return bitSave(event)" style="max-width:none">
+  <div class="row"><div><label>Turno</label><select id="bT"><option>Mañana</option><option>Tarde</option><option>Noche</option></select></div><div><label>Fecha</label><input id="bF" type="date" value="${hoyISO()}"></div></div>
+  <label>¿Cómo fue el turno?</label><textarea id="bR" rows="3" required></textarea><label>Incidencias</label><textarea id="bI" rows="2"></textarea>
+  <label>Tareas realizadas</label><textarea id="bH" rows="2"></textarea><label>Pendientes para el siguiente turno (uno por línea)</label><textarea id="bP" rows="3"></textarea>
+  <div><button class="btn" type="submit">Guardar bitácora</button> <button class="btn ghost" type="button" onclick="bitFormOpen=false;show('bitacora')">Cancelar</button></div></form></div>`;}
+async function bitSave(e){e.preventDefault();
+  const turno=document.getElementById('bT').value,fecha=val('bF')||hoyISO();
+  await sb.from('bitacoras').insert({autor_nombre:PROFILE.nombre,dept:PROFILE.dept,fecha,turno,resumen:val('bR'),incidencias:val('bI'),realizadas:val('bH')});
+  const lineas=document.getElementById('bP').value.split('\n').map(s=>s.trim()).filter(Boolean);
+  for(const tx of lineas) await sb.from('bitacora_pendientes').insert({texto:tx,por_quien:PROFILE.nombre,dept:PROFILE.dept,turno,estado:'pendiente'});
+  bitFormOpen=false;show('bitacora');return false;}
+async function penAdd(){const v=val('penQ');if(!v)return;await sb.from('bitacora_pendientes').insert({texto:v,por_quien:PROFILE.nombre,dept:PROFILE.dept,turno:'—',estado:'pendiente'});show('bitacora');}
+async function penSeg(id){await sb.from('bitacora_pendientes').update({estado:'en observacion',seg_por:PROFILE.nombre}).eq('id',id);show('bitacora');}
+async function penDone(id){await sb.from('bitacora_pendientes').update({estado:'realizado',hecho_por:PROFILE.nombre,hecho_fecha:new Date().toLocaleDateString('es-ES')}).eq('id',id);show('bitacora');}
+async function penReopen(id){await sb.from('bitacora_pendientes').update({estado:'pendiente',seg_por:null,hecho_por:null,hecho_fecha:null}).eq('id',id);show('bitacora');}
+
+/* ---------------- FORMACIONES ---------------- */
+let forFormOpen=false;
+async function pageFormacion(){
+  const canEdit=CAN_MANAGE.includes(PROFILE.role);
+  const{data}=await sb.from('formaciones').select('*').order('created_at',{ascending:false});
+  const rows=(data||[]).map(f=>`<tr><td><b>${esc(f.titulo)}</b></td><td><span class="badge ${f.tipo==='Obligatoria'?'b-red':f.tipo==='Recomendada'?'b-blue':'b-grey'}">${esc(f.tipo||'')}</span></td><td>${esc(f.fecha||'')}</td>${canEdit?`<td><button class="btn ghost" style="padding:4px 9px" onclick="delRow('formaciones',${f.id},'formacion')">🗑️</button></td>`:''}</tr>`).join('');
+  document.getElementById('main').innerHTML=`<div class="page-title">Formaciones</div><div class="page-sub">Catálogo de formación del equipo</div>
+    ${canEdit?`<div style="margin-bottom:14px"><button class="btn" onclick="forFormOpen=!forFormOpen;show('formacion')">${forFormOpen?'✕ Cerrar':'➕ Nueva formación'}</button></div>${forFormOpen?`<div class="panel" style="max-width:560px"><form class="box" onsubmit="return forSave(event)" style="max-width:none"><label>Título</label><input id="fT" required><label>Tipo</label><select id="fTipo"><option>Obligatoria</option><option>Recomendada</option><option>Voluntaria</option></select><label>Fecha</label><input id="fF" placeholder="15 jun 2026 o Continuo"><div><button class="btn" type="submit">Guardar</button></div></form></div>`:''}`:''}
+    <div class="panel"><table><thead><tr><th>Formación</th><th>Tipo</th><th>Fecha</th>${canEdit?'<th></th>':''}</tr></thead><tbody>${rows||'<tr><td colspan="4" style="color:var(--suave)">Sin formaciones.</td></tr>'}</tbody></table></div>`;
+}
+async function forSave(e){e.preventDefault();await sb.from('formaciones').insert({titulo:val('fT'),tipo:document.getElementById('fTipo').value,fecha:val('fF')});forFormOpen=false;show('formacion');return false;}
+
+/* ---------------- KPIs ---------------- */
+async function pageKpis(){
+  const[com,lec,sug,sol,pen,fic]=await Promise.all([
+    sb.from('comunicados').select('id'),sb.from('comunicado_lecturas').select('comunicado_id'),
+    sb.from('sugerencias').select('estado'),sb.from('solicitudes').select('estado'),
+    sb.from('bitacora_pendientes').select('estado'),sb.from('fichajes').select('id').eq('fecha',hoyISO())]);
+  const nCom=(com.data||[]).length,nLec=(lec.data||[]).length;
+  const incid=(pen.data||[]).filter(p=>p.estado!=='realizado').length;
+  const solPend=(sol.data||[]).filter(s=>s.estado==='Pendiente').length;
+  const sugC={};(sug.data||[]).forEach(s=>sugC[s.estado]=(sugC[s.estado]||0)+1);
+  const SUGE={Pendiente:'b-amber','En estudio':'b-blue',Aplicada:'b-green',Descartada:'b-grey'};
+  document.getElementById('main').innerHTML=`<div class="page-title">Tablero de KPIs · Dirección</div><div class="page-sub">Visión general en tiempo real</div>
+    <div class="cards"><div class="card"><h3>📢 Comunicados</h3><div class="big">${nCom}</div><small style="color:var(--suave)">${nLec} confirmaciones</small></div>
+      <div class="card"><h3>🛠️ Incidencias abiertas</h3><div class="big" style="color:var(--rojo)">${incid}</div><small style="color:var(--suave)">pendientes bitácora</small></div>
+      <div class="card"><h3>📝 Solicitudes pendientes</h3><div class="big">${solPend}</div><small style="color:var(--suave)">vacaciones/bajas</small></div>
+      <div class="card"><h3>⏱️ Fichajes hoy</h3><div class="big">${(fic.data||[]).length}</div></div></div>
+    <div class="panel"><h2>💡 Sugerencias por estado</h2>${Object.keys(SUGE).map(e=>`<div style="display:flex;align-items:center;gap:12px;margin:9px 0"><span style="min-width:120px"><span class="badge ${SUGE[e]}">${e}</span></span><b>${sugC[e]||0}</b></div>`).join('')}</div>`;
+}
+
+/* ---------------- AUDITORÍA ---------------- */
+async function pageAuditoria(){
+  const{data}=await sb.from('auditoria').select('*').order('fecha',{ascending:false});
+  const rows=(data||[]).map(a=>`<tr><td>${new Date(a.fecha).toLocaleString('es-ES')}</td><td><b>${esc(a.user_nombre||'')}</b></td><td>${esc(a.accion||'')}</td><td><span class="badge ${a.tipo==='codigo'?'b-red':'b-blue'}">${a.tipo==='codigo'?'Código':'Plantilla'}</span></td></tr>`).join('');
+  document.getElementById('main').innerHTML=`<div class="page-title">Auditoría</div><div class="page-sub">Registro de cambios en información sensible (códigos y plantillas)</div>
+    <div class="panel"><table><thead><tr><th>Fecha</th><th>Usuario</th><th>Acción</th><th>Tipo</th></tr></thead><tbody>${rows||'<tr><td colspan="4" style="color:var(--suave)">Sin registros.</td></tr>'}</tbody></table></div>`;
+}
+
+/* ---------------- WALLY (asistente) ---------------- */
+let chatOpen=false, chatMsgs=[];
+const SUGS=['Mi horario','¿Hay comunicados?','Teléfono de un proveedor','¿Cuándo son los cumpleaños?','¿Cómo pido vacaciones?'];
+function toggleChat(){chatOpen=!chatOpen;const w=document.getElementById('chatWin');if(chatOpen){buildChat();w.style.display='flex';}else w.style.display='none';}
+function buildChat(){document.getElementById('chatWin').innerHTML=`<div class="ch">🤖 <div>Wally<small>Asistente de Amazinn Places</small></div><span class="x" onclick="toggleChat()">✕</span></div>
+  <div class="chat-body" id="chatBody"></div><div class="chat-sug">${SUGS.map(s=>`<button onclick="askWally('${s.replace(/'/g,"\\'")}')">${s}</button>`).join('')}</div>
+  <div class="chat-in"><input id="chatIn" placeholder="Escribe tu pregunta…" onkeydown="if(event.key==='Enter')sendWally()"><button onclick="sendWally()">➤</button></div>`;renderChat();}
+function renderChat(){const b=document.getElementById('chatBody');if(!b)return;b.innerHTML=chatMsgs.map(m=>`<div class="bub ${m.from==='me'?'me':'bot'}">${m.msg}${(m.nav||[]).length?`<div class="navb">${m.nav.map(n=>`<button onclick="show('${n.s}')">${n.l} →</button>`).join('')}</div>`:''}</div>`).join('');b.scrollTop=b.scrollHeight;}
+function askWally(t){const i=document.getElementById('chatIn');if(i)i.value=t;sendWally();}
+async function sendWally(){const i=document.getElementById('chatIn');const q=(i.value||'').trim();if(!q)return;i.value='';chatMsgs.push({from:'me',msg:esc(q)});renderChat();const a=await wallyAnswer(q);chatMsgs.push({from:'bot',msg:a.msg,nav:a.nav});renderChat();}
+async function wallyAnswer(q){const s=q.toLowerCase();const has=(...w)=>w.some(x=>s.includes(x));
+  if(has('hola','ayuda','qué puedes','que puedes')) return{msg:'Soy Wally 🤖. Puedo ayudarte con horarios, comunicados, proveedores, suministros, cumpleaños, vacaciones, plantillas y más. Prueba una sugerencia.',nav:[]};
+  if(has('horario','turno')) return{msg:'Tu horario está en la sección Horarios, pestaña «Mi horario».',nav:[{l:'Horarios',s:'horarios'}]};
+  if(has('vacacion')) return{msg:`Pide tus vacaciones desde la sección Vacaciones. Tienes ${PROFILE.vac||0} días.`,nav:[{l:'Vacaciones',s:'vacaciones'}]};
+  if(has('baja','enferm')) return{msg:'Notifica una baja desde la sección correspondiente.',nav:[{l:'Notificar baja',s:'bajas'}]};
+  if(has('fichaje','fichar','entrada','salida')) return{msg:'Ficha entrada/salida escaneando el QR de tu lugar de trabajo.',nav:[{l:'Fichaje',s:'fichaje'}]};
+  if(has('comunicado','aviso','novedad')){const{data}=await sb.from('comunicados').select('titulo').order('created_at',{ascending:false}).limit(3);return{msg:'Últimos comunicados:<br>'+((data||[]).map(c=>'• '+esc(c.titulo)).join('<br>')||'ninguno'),nav:[{l:'Comunicados',s:'comunicados'}]};}
+  if(has('proveedor','teléfono','telefono','contacto')){const{data}=await sb.from('proveedores').select('nombre,tel,cat').limit(4);return{msg:(data&&data.length?data.map(p=>`<b>${esc(p.nombre)}</b> (${esc(p.cat||'')}) · ${esc(p.tel||'')}`).join('<br>'):'No hay proveedores cargados.'),nav:[{l:'Proveedores',s:'proveedores'}]};}
+  if(has('suministro','nis','idaan','luz','agua','internet')) return{msg:'Las referencias de suministros están por propiedad en Suministros.',nav:[{l:'Suministros',s:'suministros'}]};
+  if(has('cumple')){const{data}=await sb.from('profiles').select('nombre').not('cumple','is',null).limit(5);return{msg:'Mira los próximos cumpleaños en su sección.',nav:[{l:'Cumpleaños',s:'cumple'}]};}
+  if(has('evento','calendario')) return{msg:'Los eventos están en el Calendario.',nav:[{l:'Calendario',s:'calendario'}]};
+  if(has('plantilla','mensaje','acceso','código','codigo','wifi')){if(!canMsg())return{msg:'Las plantillas son del equipo de Atención al cliente.',nav:[]};return{msg:'En Mensajes y plantillas eliges el apartamento y ves sus plantillas listas para copiar.',nav:[{l:'Mensajes y plantillas',s:'mensajes'}]};}
+  if(has('organigrama','quién','quien')) return{msg:'En Organigrama ves el equipo por departamento.',nav:[{l:'Organigrama',s:'organigrama'}]};
+  return{msg:'No estoy seguro 🤔. Puedo ayudarte con horarios, comunicados, proveedores, suministros, cumpleaños, vacaciones o plantillas.',nav:[{l:'Comunicados',s:'comunicados'},{l:'Horarios',s:'horarios'}]};}
+
+/* ---------------- TOAST ---------------- */
+function toast(m){let t=document.getElementById('toast2');if(!t){t=document.createElement('div');t.id='toast2';t.style.cssText='position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#222;color:#fff;padding:11px 20px;border-radius:10px;font-size:14px;z-index:80;transition:.25s;opacity:0';document.body.appendChild(t);}
+  t.textContent=m;t.style.opacity='1';clearTimeout(window._t2);window._t2=setTimeout(()=>t.style.opacity='0',1900);}
 
 /* utilidades */
 function val(id){const el=document.getElementById(id);return el?el.value.trim():'';}
