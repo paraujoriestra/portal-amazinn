@@ -1782,7 +1782,7 @@ function pageDepto(){return `<div class="page-title">Área de ${esc(PROFILE.dept
 }
 
 /* ---------------- MENSAJERÍA (datos reales) ---------------- */
-let chatWithId=null, chatWithName=null;
+let chatWithId=null, chatWithName=null, chatLastId=0;
 async function pageMensajeria(){
   const {data:profs}=await sb.from('profiles').select('id,nombre,color,foto').neq('id',ME.id).order('nombre');
   const contacts=profs||[];
@@ -1799,11 +1799,26 @@ async function pageMensajeria(){
   let conv;
   if(!chatWithId) conv=`<div class="msg-conv" style="align-items:center;justify-content:center;color:var(--suave);font-size:14px">Selecciona un compañero para chatear</div>`;
   else{ const thread=MS.filter(m=>(m.de_id===ME.id&&m.para_id===chatWithId)||(m.de_id===chatWithId&&m.para_id===ME.id));
+    chatLastId = thread.length?Math.max(...thread.map(m=>m.id)):0;
     conv=`<div class="msg-conv"><div style="padding:12px 16px;border-bottom:1px solid var(--gris2);display:flex;align-items:center;gap:10px"><b>${esc(chatWithName)}</b></div>
-      <div class="msg-thread" id="msgThread">${thread.map(m=>`<div class="mbub ${m.de_id===ME.id?'me':'ot'}">${esc(m.texto)}</div>`).join('')||'<div style="color:var(--suave);text-align:center;font-size:13px">Aún no hay mensajes. ¡Escribe el primero!</div>'}</div>
+      <div class="msg-thread" id="msgThread">${thread.map(m=>`<div class="mbub ${m.de_id===ME.id?'me':'ot'}">${esc(m.texto)}</div>`).join('')||'<div id="msgEmpty" style="color:var(--suave);text-align:center;font-size:13px">Aún no hay mensajes. ¡Escribe el primero!</div>'}</div>
       <div class="msg-input"><div class="emoji-wrap"><button type="button" class="emoji-btn" onclick="toggleEmoji(event)" title="Emojis">😊</button><div id="emojiPanel" class="emoji-panel"></div></div><input id="msgIn" placeholder="Escribe un mensaje…" onkeydown="if(event.key==='Enter')sendMsg()"><button class="btn" onclick="sendMsg()">Enviar</button></div></div>`; }
   setTimeout(()=>{const t=document.getElementById('msgThread');if(t)t.scrollTop=t.scrollHeight;},40);
   document.getElementById('main').innerHTML=`<div class="page-title">Mensajería interna</div><div class="page-sub">Habla con tus compañeros de equipo</div><div class="msg-layout"><div class="msg-contacts"><div class="msg-search"><input id="msgSearch" placeholder="🔍 Buscar persona o palabra…" oninput="msgSearch(this.value)"></div><div id="contactList">${lista}</div></div>${conv}</div>`;
+  if(window._chatPoll) clearInterval(window._chatPoll);
+  window._chatPoll=setInterval(pollChat,3000);
+}
+function refreshContactList(){const sv=document.getElementById('msgSearch');const cl=document.getElementById('contactList');if(cl)cl.innerHTML=buildContactList(sv?sv.value:'');}
+function appendBubble(m){const t=document.getElementById('msgThread');if(!t)return;const e=document.getElementById('msgEmpty');if(e)e.remove();const d=document.createElement('div');d.className='mbub '+(m.de_id===ME.id?'me':'ot');d.textContent=m.texto;t.appendChild(d);t.scrollTop=t.scrollHeight;}
+async function pollChat(){
+  if(curPage!=='mensajeria' || !chatWithId) return;
+  const filt=`and(de_id.eq.${ME.id},para_id.eq.${chatWithId}),and(de_id.eq.${chatWithId},para_id.eq.${ME.id})`;
+  const {data}=await sb.from('mensajes').select('*').gt('id',chatLastId).or(filt).order('created_at');
+  if(!data||!data.length) return;
+  let recibido=false;
+  for(const m of data){ appendBubble(m); chatLastId=Math.max(chatLastId,m.id); MSG_ALL.push(m); if(m.de_id===chatWithId) recibido=true; }
+  if(recibido){ await sb.from('mensajes').update({leido:true}).eq('para_id',ME.id).eq('de_id',chatWithId).eq('leido',false); loadMsgUnread(); }
+  refreshContactList();
 }
 let MSG_CONTACTS=[], MSG_ALL=[];
 function buildContactList(term){
@@ -1826,7 +1841,14 @@ function buildContactList(term){
 }
 function msgSearch(v){const l=document.getElementById('contactList');if(l)l.innerHTML=buildContactList(v);}
 function openChat(id,name){chatWithId=id;chatWithName=name;show('mensajeria');}
-async function sendMsg(){const i=document.getElementById('msgIn');const t=(i.value||'').trim();if(!t||!chatWithId)return;const{error}=await sb.from('mensajes').insert({de_id:ME.id,para_id:chatWithId,de_nombre:PROFILE.nombre,para_nombre:chatWithName,texto:t});if(error){alert('Error: '+error.message);return;}show('mensajeria');}
+async function sendMsg(){
+  const i=document.getElementById('msgIn');const t=(i.value||'').trim();if(!t||!chatWithId)return;
+  i.value='';i.focus();
+  const{data,error}=await sb.from('mensajes').insert({de_id:ME.id,para_id:chatWithId,de_nombre:PROFILE.nombre,para_nombre:chatWithName,texto:t,leido:false}).select().single();
+  if(error){alert('Error: '+error.message);i.value=t;return;}
+  appendBubble(data);chatLastId=Math.max(chatLastId,data.id);MSG_ALL.push(data);
+  refreshContactList();
+}
 const EMOJIS=['😀','😁','😂','🤣','😊','😍','😘','😎','🤩','🥳','😉','🙂','😇','🤔','😅','😬','😴','🥹','😢','😭','😤','😡','👍','👎','👏','🙏','💪','🙌','👋','🤝','✌️','🤞','❤️','🧡','💛','💚','💙','💜','🔥','✨','🎉','🎊','✅','❌','⭐','💯','👀','🚀','☕','🍕','🎂','💼','📌','⏰'];
 function toggleEmoji(e){
   if(e) e.stopPropagation();
