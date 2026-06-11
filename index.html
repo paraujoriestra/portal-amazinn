@@ -36,6 +36,10 @@
   nav.side a{display:flex;align-items:center;gap:11px;padding:11px 22px;color:var(--texto);text-decoration:none;font-size:14.5px;border-left:3px solid transparent;cursor:pointer}
   nav.side a:hover{background:var(--azul-claro)}
   nav.side a.active{background:var(--azul-claro);border-left-color:var(--azul);color:var(--azul);font-weight:600}
+  nav.side .grp-tog{display:flex;align-items:center;justify-content:space-between;cursor:pointer;user-select:none;padding:11px 22px;font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:var(--suave);font-weight:700}
+  nav.side .grp-tog:hover{color:var(--azul);background:var(--gris)}
+  nav.side .grp-tog.open{color:var(--azul)}
+  nav.side .grp-tog .car{font-size:9px;opacity:.7}
   main{flex:1;padding:28px 34px;max-width:1000px}
   .page-title{font-size:24px;font-weight:700;color:var(--azul);margin-bottom:4px}
   .page-sub{color:var(--suave);font-size:14px;margin-bottom:22px}
@@ -79,6 +83,24 @@
   .cell-b{display:inline-block;padding:3px 7px;border-radius:6px;font-size:11.5px;font-weight:600;min-width:30px}
   .legend{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--suave);margin-top:14px}
   .legend span{display:flex;align-items:center;gap:6px}.legend i{width:12px;height:12px;border-radius:3px;display:inline-block}
+  .cal{width:100%;border-collapse:collapse;table-layout:fixed}
+  .cal th{background:var(--azul);color:#fff;font-size:12px;padding:8px;border:1px solid #cdd7e3;font-weight:600}
+  .cal td{border:1px solid var(--gris2);vertical-align:top;height:78px;padding:5px;font-size:12px;background:#fff}
+  .cal td.empty{background:var(--gris)} .cal td.today{background:var(--azul-claro)}
+  .cal .num{font-weight:700;color:var(--suave);font-size:12px}
+  .cal .ev{display:block;font-size:10px;color:#fff;border-radius:4px;padding:2px 5px;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .qr-card{display:inline-flex;flex-direction:column;align-items:center;gap:6px;background:#fff;border:1px solid var(--gris2);border-radius:12px;padding:14px;box-shadow:var(--sombra)}
+  .qr-cam{max-width:520px;background:#111;border-radius:14px;padding:22px;text-align:center;color:#fff;margin-bottom:14px}
+  .qr-cam .frame{width:150px;height:150px;margin:14px auto;border:3px solid #fff;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:40px}
+  .qr-choices{display:flex;flex-wrap:wrap;gap:8px;justify-content:center}.qr-choices button{background:#fff;border:none;border-radius:9px;padding:9px 14px;font-weight:600;cursor:pointer}
+  .cartel-pick{display:flex;flex-wrap:wrap;gap:8px}.cartel-pick .cp{background:var(--gris);border:1px solid var(--gris2);border-radius:9px;padding:9px 14px;font-size:13px;font-weight:600;cursor:pointer}.cartel-pick .cp.on{background:var(--azul);color:#fff}
+  .cartel-wrap{display:grid;grid-template-columns:1fr 1fr;gap:24px;align-items:start}@media(max-width:820px){.cartel-wrap{grid-template-columns:1fr}}
+  .cartel{background:#fff;border:1px solid var(--gris2);width:100%;max-width:430px;aspect-ratio:1/1.414;margin:0 auto;display:flex;flex-direction:column}
+  .cartel .c-top{padding:16px;text-align:center;border-bottom:5px solid var(--azul)} .cartel .c-top .brand{font-size:20px}
+  .cartel .c-mid{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:20px}
+  .cartel .c-icon{font-size:74px} .cartel .c-title{font-size:28px;font-weight:900;letter-spacing:1px;margin:12px 0;text-transform:uppercase} .cartel .c-body{font-size:17px;color:#333;line-height:1.5;white-space:pre-line}
+  .cartel .c-foot{padding:12px;border-top:1px solid var(--gris2);text-align:center;font-size:11px;color:var(--suave)}
+  @media print{body *{visibility:hidden!important}#cartelPrint,#cartelPrint *{visibility:visible!important}#cartelPrint{position:fixed;left:0;top:0;width:100%}#cartelPrint .cartel{border:none;max-width:100%;width:100%;height:99vh;aspect-ratio:auto}}
   .setup{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:#fff;z-index:60;padding:24px}
   .setup .box{max-width:560px;font-size:14px;line-height:1.6}
   .setup code{background:var(--gris);padding:2px 6px;border-radius:5px}
@@ -210,16 +232,29 @@ function inis(n){return (n||'?').trim().split(/\s+/).slice(0,2).map(w=>w[0]).joi
 
 /* ---------------- NAVEGACIÓN ---------------- */
 const NAV=[
+  {grp:'General'},
   {id:'inicio',ic:'🏠',t:'Inicio'},
   {id:'horarios',ic:'📅',t:'Horarios'},
+  {id:'fichaje',ic:'⏱️',t:'Fichaje'},
   {id:'comunicados',ic:'📢',t:'Comunicados'},
+  {id:'calendario',ic:'🗓️',t:'Calendario'},
+  {id:'cumple',ic:'🎂',t:'Cumpleaños'},
+  {grp:'RRHH'},
+  {id:'vacaciones',ic:'🌴',t:'Vacaciones'},
+  {id:'bajas',ic:'🩺',t:'Notificar baja'},
+  {id:'sugerencias',ic:'💡',t:'Sugerencias'},
+  {grp:'Recursos'},
   {id:'organigrama',ic:'🏢',t:'Organigrama'},
   {id:'proveedores',ic:'🚚',t:'Proveedores'},
   {id:'suministros',ic:'🔌',t:'Suministros'},
-  {id:'sugerencias',ic:'💡',t:'Sugerencias'},
+  {grp:'Marketing'},
+  {id:'carteles',ic:'🪧',t:'Carteles'},
+  {grp:'Gestión', roles:['responsable','rrhh','admin']},
+  {id:'aprobaciones',ic:'✅',t:'Aprobaciones', roles:['responsable','rrhh','admin']},
+  {id:'admin',ic:'⚙️',t:'Administración', roles:['admin']},
 ];
 const CAN_MANAGE=['responsable','rrhh','admin'];
-let supTab='electricidad';
+let supTab='electricidad', navOpen=null;
 const SHIFTS=[{v:"",l:"—",c:"#dfe3ea"},{v:"M",l:"Mañana 09–17",c:"#cfe0f2"},{v:"T",l:"Tarde 14–22",c:"#f7e6b0"},{v:"P",l:"Partido",c:"#cdeee3"},{v:"N",l:"Noche 22–06",c:"#cfe0f2"},{v:"L",l:"Libre",c:"#dfe3ea"},{v:"V",l:"Vacaciones",c:"#f6cfcd"}];
 const SH=Object.fromEntries(SHIFTS.map(s=>[s.v,s]));
 function nextDays(n){const out=[],d=new Date();d.setHours(0,0,0,0);for(let i=0;i<n;i++){const x=new Date(d);x.setDate(d.getDate()+i);out.push(x);}return out;}
@@ -227,13 +262,38 @@ function isoD(x){return `${x.getFullYear()}-${String(x.getMonth()+1).padStart(2,
 function lblD(x){const ds=['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'],ms=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];return `${ds[x.getDay()]} ${x.getDate()} ${ms[x.getMonth()]}`;}
 function isWk(x){return x.getDay()===0||x.getDay()===6;}
 let horTab='mi', horOtherDept=null;
+function navGroups(){
+  const groups=[]; let cur=null;
+  NAV.forEach(it=>{
+    if(it.roles && !it.roles.includes(PROFILE.role)) return;
+    if(it.grp){ cur={name:it.grp,items:[]}; groups.push(cur); }
+    else if(cur){ cur.items.push(it); }
+  });
+  return groups.filter(g=>g.items.length);
+}
+function groupOf(id){let c=null;for(const it of NAV){if(it.grp)c=it.grp;else if(it.id===id)return c;}return null;}
 function buildNav(){
   const nav=document.getElementById('nav');
-  nav.innerHTML=NAV.map(i=>`<a data-id="${i.id}" onclick="show('${i.id}')"><span>${i.ic}</span> ${i.t}</a>`).join('');
+  const groups=navGroups();
+  if(navOpen===null) navOpen=new Set(groups[0]?[groups[0].name]:[]);
+  nav.innerHTML='';
+  groups.forEach(g=>{
+    const open=navOpen.has(g.name);
+    const head=document.createElement('div'); head.className='grp-tog'+(open?' open':'');
+    head.innerHTML=`<span>${g.name}</span><span class="car">${open?'▾':'▸'}</span>`;
+    head.onclick=()=>{navOpen.has(g.name)?navOpen.delete(g.name):navOpen.add(g.name);buildNav();};
+    nav.appendChild(head);
+    const box=document.createElement('div'); if(!open) box.style.display='none';
+    g.items.forEach(it=>{const a=document.createElement('a');a.dataset.id=it.id;a.innerHTML=`<span>${it.ic}</span> ${it.t}`;a.onclick=()=>show(it.id);box.appendChild(a);});
+    nav.appendChild(box);
+  });
+  highlightNav();
 }
+function highlightNav(){document.querySelectorAll('#nav a').forEach(a=>a.classList.toggle('active',a.dataset.id===curPage));}
+function ensureGroupOpen(id){const g=groupOf(id);if(g&&navOpen&&!navOpen.has(g)){navOpen.add(g);buildNav();}}
 function show(id){
   curPage=id;
-  document.querySelectorAll('#nav a').forEach(a=>a.classList.toggle('active',a.dataset.id===id));
+  ensureGroupOpen(id); highlightNav();
   const m=document.getElementById('main');
   if(id==='inicio') m.innerHTML=pageInicio();
   else if(id==='comunicados'){ m.innerHTML='<div class="page-title">Comunicados</div><div class="page-sub">Cargando…</div>'; pageComunicados(); }
@@ -242,6 +302,14 @@ function show(id){
   else if(id==='proveedores'){ m.innerHTML='<div class="page-title">Proveedores</div><div class="page-sub">Cargando…</div>'; pageProveedores(); }
   else if(id==='suministros'){ m.innerHTML='<div class="page-title">Suministros</div><div class="page-sub">Cargando…</div>'; pageSuministros(); }
   else if(id==='sugerencias'){ m.innerHTML='<div class="page-title">Sugerencias</div><div class="page-sub">Cargando…</div>'; pageSugerencias(); }
+  else if(id==='fichaje'){ m.innerHTML='<div class="page-title">Fichaje</div><div class="page-sub">Cargando…</div>'; pageFichaje(); }
+  else if(id==='vacaciones'){ m.innerHTML='<div class="page-title">Vacaciones</div><div class="page-sub">Cargando…</div>'; pageSolicitud('vacaciones'); }
+  else if(id==='bajas'){ m.innerHTML='<div class="page-title">Notificar baja</div><div class="page-sub">Cargando…</div>'; pageSolicitud('baja'); }
+  else if(id==='aprobaciones'){ m.innerHTML='<div class="page-title">Aprobaciones</div><div class="page-sub">Cargando…</div>'; pageAprobaciones(); }
+  else if(id==='calendario'){ m.innerHTML='<div class="page-title">Calendario</div><div class="page-sub">Cargando…</div>'; pageCalendario(); }
+  else if(id==='cumple'){ m.innerHTML='<div class="page-title">Cumpleaños</div><div class="page-sub">Cargando…</div>'; pageCumple(); }
+  else if(id==='carteles'){ pageCarteles(); }
+  else if(id==='admin'){ m.innerHTML='<div class="page-title">Administración</div><div class="page-sub">Cargando…</div>'; pageAdmin(); }
 }
 
 /* ---------------- INICIO ---------------- */
@@ -503,6 +571,192 @@ async function createSug(e){e.preventDefault();
   show('sugerencias');return false;
 }
 async function setSugEstado(id,val2){await sb.from('sugerencias').update({estado:val2}).eq('id',id);show('sugerencias');}
+
+/* ---------------- FICHAJE QR ---------------- */
+let fichScanOpen=false;
+const FICHA_LUGARES=['Casa Diez','Apartamentos Sol','Apartamentos Mar','Oficina central'];
+function hoyISO(){return isoD(new Date());}
+function horaAhora(){const d=new Date();return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');}
+function qrSVG(seed){const n=23,cell=6,pad=2,dim=(n+pad*2)*cell;let h=0;for(const c of seed)h=(h*31+c.charCodeAt(0))>>>0;const rnd=()=>{h=(h*1103515245+12345)>>>0;return (h>>>16)/65536;};
+  const fin=(r,c,R,C)=>{const rr=r-R,cc=c-C;if(rr<0||rr>6||cc<0||cc>6)return null;return (rr===0||rr===6||cc===0||cc===6)||(rr>=2&&rr<=4&&cc>=2&&cc<=4);};
+  let x='';for(let r=0;r<n;r++)for(let c=0;c<n;c++){const f=fin(r,c,0,0)??fin(r,c,0,n-7)??fin(r,c,n-7,0);const on=(f!==null&&f!==undefined)?f:rnd()>0.52;if(on)x+=`<rect x="${(c+pad)*cell}" y="${(r+pad)*cell}" width="${cell}" height="${cell}"/>`;}
+  return `<svg viewBox="0 0 ${dim} ${dim}" width="130" height="130" xmlns="http://www.w3.org/2000/svg"><rect width="${dim}" height="${dim}" fill="#fff"/><g fill="#111">${x}</g></svg>`;}
+async function pageFichaje(){
+  const isRRHH=PROFILE.role==='rrhh'||PROFILE.role==='admin', isMgr=CAN_MANAGE.includes(PROFILE.role), today=hoyISO();
+  const{data:mine}=await sb.from('fichajes').select('*').eq('user_id',ME.id).eq('fecha',today).order('hora');
+  const mias=mine||[]; const ult=mias.length?mias[mias.length-1]:null; const dentro=ult?ult.tipo==='entrada':false;
+  const status=dentro?`<div style="font-size:20px;font-weight:800;color:var(--acento)">🟢 Estás fichado (dentro)</div><div style="color:var(--suave);font-size:13px">Entrada a las ${ult.hora} en ${esc(ult.lugar||'')}</div>`
+    :(ult?`<div style="font-size:20px;font-weight:800;color:var(--suave)">⚪ Fuera de turno</div><div style="color:var(--suave);font-size:13px">Última salida a las ${ult.hora}</div>`:`<div style="font-size:20px;font-weight:800;color:var(--suave)">⚪ Aún no has fichado hoy</div>`);
+  const scan=fichScanOpen?`<div class="qr-cam"><div style="font-weight:700">📷 Escanea el QR de tu lugar de trabajo</div><div class="frame">⬛</div>
+    <div style="font-size:12px;color:#aaa;margin-bottom:8px">Simulación: elige el QR que escaneas</div><div class="qr-choices">${FICHA_LUGARES.map(l=>`<button onclick="doFichar('${l}')">${l}</button>`).join('')}</div>
+    <div style="margin-top:12px"><button class="btn ghost" style="color:#fff;border-color:#555" onclick="fichScanOpen=false;show('fichaje')">Cancelar</button></div></div>`:'';
+  let rrhh='';
+  if(isRRHH){const{data:all}=await sb.from('fichajes').select('*').eq('fecha',today).order('hora');const byU={};(all||[]).forEach(f=>{(byU[f.user_nombre]=byU[f.user_nombre]||[]).push(f);});
+    rrhh=`<div class="panel"><h2>👥 Equipo · hoy</h2><table><thead><tr><th>Empleado</th><th>Estado</th><th>Entrada</th><th>Salida</th><th>Lugar</th></tr></thead><tbody>
+      ${Object.keys(byU).map(u=>{const fs=byU[u];const ent=fs.find(x=>x.tipo==='entrada');const sal=[...fs].reverse().find(x=>x.tipo==='salida');const dent=fs[fs.length-1].tipo==='entrada';
+        return `<tr><td>${esc(u)}</td><td>${dent?'<span class="badge b-green">Dentro</span>':'<span class="badge b-grey">Fuera</span>'}</td><td>${ent?ent.hora:'—'}</td><td>${sal&&!dent?sal.hora:'—'}</td><td>${esc((ent||sal||{}).lugar||'')}</td></tr>`;}).join('')||'<tr><td colspan="5" style="color:var(--suave)">Sin fichajes hoy.</td></tr>'}
+      </tbody></table></div>`;}
+  const qr=isMgr?`<div class="panel"><h2>🔳 Códigos QR de las propiedades</h2><div style="font-size:13px;color:var(--suave);margin-bottom:12px">Imprime cada QR y pégalo en la entrada.</div>
+    <div style="display:flex;flex-wrap:wrap;gap:14px">${FICHA_LUGARES.map(l=>`<div class="qr-card">${qrSVG(l)}<b>${l}</b></div>`).join('')}</div></div>`:'';
+  document.getElementById('main').innerHTML=`<div class="page-title">Fichaje</div><div class="page-sub">Ficha tu entrada y salida escaneando el QR de tu lugar de trabajo</div>
+    <div class="panel" style="max-width:540px;text-align:center">${status}${!fichScanOpen?`<button class="btn" style="margin-top:14px;background:${dentro?'var(--rojo)':'var(--acento)'}" onclick="fichScanOpen=true;show('fichaje')">📷 Escanear QR para fichar ${dentro?'SALIDA':'ENTRADA'}</button>`:''}</div>
+    ${scan}
+    <div class="panel"><h2>🕘 Mis fichajes de hoy</h2>${mias.length?`<table><thead><tr><th>Hora</th><th>Tipo</th><th>Lugar</th></tr></thead><tbody>${mias.map(f=>`<tr><td><b>${f.hora}</b></td><td>${f.tipo==='entrada'?'<span class="badge b-green">Entrada</span>':'<span class="badge b-red">Salida</span>'}</td><td>${esc(f.lugar||'')}</td></tr>`).join('')}</tbody></table>`:'<div style="color:var(--suave);font-size:13.5px">Todavía no tienes fichajes hoy.</div>'}</div>
+    ${rrhh}${qr}`;
+}
+async function doFichar(lugar){const today=hoyISO();const{data}=await sb.from('fichajes').select('tipo,hora').eq('user_id',ME.id).eq('fecha',today).order('hora');
+  const dentro=(data&&data.length)?data[data.length-1].tipo==='entrada':false;const tipo=dentro?'salida':'entrada';
+  const{error}=await sb.from('fichajes').insert({user_id:ME.id,user_nombre:PROFILE.nombre,fecha:today,hora:horaAhora(),tipo,lugar});
+  if(error){alert('Error: '+error.message);return;}fichScanOpen=false;show('fichaje');}
+
+/* ---------------- VACACIONES / BAJAS ---------------- */
+const SOL_EST={Pendiente:'b-amber',Aprobada:'b-green',Rechazada:'b-red',Registrada:'b-blue'};
+async function pageSolicitud(tipo){
+  const{data}=await sb.from('solicitudes').select('*').eq('user_id',ME.id).eq('tipo',tipo).order('created_at',{ascending:false});
+  const mine=data||[];
+  const esVac=tipo==='vacaciones';
+  const form=esVac?`
+    <div class="row"><div><label>Fecha inicio</label><input id="solD" type="date" required></div><div><label>Fecha fin</label><input id="solH" type="date" required></div></div>
+    <label>Comentario (opcional)</label><textarea id="solM" rows="2"></textarea>`
+    :`<label>Tipo</label><select id="solSub"><option>Baja médica</option><option>Cita médica</option><option>Asuntos familiares</option><option>Otro</option></select>
+    <div class="row"><div><label>Desde</label><input id="solD" type="date" required></div><div><label>Hasta (estimado)</label><input id="solH" type="date"></div></div>
+    <label>Observaciones</label><textarea id="solM" rows="2"></textarea>`;
+  document.getElementById('main').innerHTML=`<div class="page-title">${esVac?'Solicitar vacaciones':'Notificar baja o ausencia'}</div>
+    <div class="page-sub">${esVac?`Tienes ${PROFILE.vac||0} días disponibles este año`:'Comunica una baja médica, permiso o ausencia'}</div>
+    <div class="panel" style="max-width:620px"><form class="box" onsubmit="return createSol(event,'${tipo}')" style="max-width:none">${form}
+      <div><button class="btn" type="submit">${esVac?'Enviar solicitud':'Notificar'}</button></div></form></div>
+    <div class="panel"><h2>Mis ${esVac?'solicitudes':'avisos'}</h2>${mine.length?`<table><thead><tr><th>Fechas</th>${esVac?'':'<th>Tipo</th>'}<th>Estado</th></tr></thead><tbody>
+      ${mine.map(s=>`<tr><td>${s.desde||''}${s.hasta?' → '+s.hasta:''}</td>${esVac?'':`<td>${esc(s.motivo||'')}</td>`}<td><span class="badge ${SOL_EST[s.estado]||'b-grey'}">${esc(s.estado)}</span></td></tr>`).join('')}</tbody></table>`:'<div style="color:var(--suave);font-size:13.5px">Sin registros.</div>'}</div>`;
+}
+async function createSol(e,tipo){e.preventDefault();
+  const sub=document.getElementById('solSub');
+  const row={user_id:ME.id,user_nombre:PROFILE.nombre,dept:PROFILE.dept,tipo,desde:val('solD')||null,hasta:val('solH')||null,
+    motivo: tipo==='vacaciones'?val('solM'):(sub?sub.value:'')+(val('solM')?' · '+val('solM'):''),
+    estado: tipo==='vacaciones'?'Pendiente':'Registrada'};
+  if(!row.desde){alert('Indica la fecha de inicio.');return false;}
+  const{error}=await sb.from('solicitudes').insert(row);
+  if(error){alert('Error: '+error.message);return false;}
+  show(tipo==='vacaciones'?'vacaciones':'bajas');return false;
+}
+async function pageAprobaciones(){
+  const{data}=await sb.from('solicitudes').select('*').order('created_at',{ascending:false});
+  const all=data||[];
+  document.getElementById('main').innerHTML=`<div class="page-title">Aprobaciones</div><div class="page-sub">Solicitudes del equipo</div>
+    <div class="panel"><table><thead><tr><th>Empleado</th><th>Tipo</th><th>Fechas</th><th>Detalle</th><th>Estado / acción</th></tr></thead><tbody>
+    ${all.map(s=>`<tr><td>${esc(s.user_nombre||'')}</td><td>${esc(s.tipo)}</td><td>${s.desde||''}${s.hasta?' → '+s.hasta:''}</td><td style="color:var(--suave)">${esc(s.motivo||'')}</td>
+      <td>${s.estado==='Pendiente'?`<button class="btn" style="padding:5px 11px" onclick="setSol(${s.id},'Aprobada')">Aprobar</button> <button class="btn ghost" style="padding:5px 11px" onclick="setSol(${s.id},'Rechazada')">Rechazar</button>`:`<span class="badge ${SOL_EST[s.estado]||'b-grey'}">${esc(s.estado)}</span>`}</td></tr>`).join('')||'<tr><td colspan="5" style="color:var(--suave)">No hay solicitudes.</td></tr>'}
+    </tbody></table></div>`;
+}
+async function setSol(id,estado){await sb.from('solicitudes').update({estado}).eq('id',id);show('aprobaciones');}
+
+/* ---------------- CALENDARIO ---------------- */
+let evFormOpen=false, evEditId=null;
+const TIPO_EV={aviso:['Aviso','#d9534f'],evento:['Evento','#e0a800'],formacion:['Formación','#16a085'],comunicado:['Comunicado','#1F4E79']};
+async function pageCalendario(){
+  const canEdit=CAN_MANAGE.includes(PROFILE.role);
+  const{data}=await sb.from('eventos').select('*').order('ini');
+  const evs=data||[];
+  const now=new Date(),Y=now.getFullYear(),M=now.getMonth();
+  const ms=['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+  const first=new Date(Y,M,1);const start=(first.getDay()+6)%7;const dim=new Date(Y,M+1,0).getDate();
+  const cells=[];for(let i=0;i<start;i++)cells.push(null);for(let d=1;d<=dim;d++)cells.push(d);while(cells.length%7)cells.push(null);
+  const dayISO=d=>`${Y}-${String(M+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+  const todayD=now.getDate();
+  let body='';for(let w=0;w<cells.length/7;w++){body+='<tr>';for(let i=0;i<7;i++){const d=cells[w*7+i];if(!d){body+='<td class="empty"></td>';continue;}
+    const iso=dayISO(d);const dayEv=evs.filter(e=>iso>=e.ini&&iso<=e.fin);
+    body+=`<td class="${d===todayD?'today':''}"><span class="num">${d}</span>${dayEv.map(e=>`<span class="ev" style="background:${(TIPO_EV[e.tipo]||TIPO_EV.evento)[1]}" title="${esc(e.titulo)}">${esc(e.titulo)}</span>`).join('')}</td>`;}
+    body+='</tr>';}
+  const grid=`<table class="cal"><thead><tr>${['L','M','X','J','V','S','D'].map(x=>`<th>${x}</th>`).join('')}</tr></thead><tbody>${body}</tbody></table>`;
+  const lista=[...evs].sort((a,b)=>a.ini<b.ini?-1:1).map(e=>{const t=TIPO_EV[e.tipo]||TIPO_EV.evento;const r=e.ini===e.fin?e.ini:e.ini+' → '+e.fin;
+    return `<div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--gris);font-size:13.5px"><span style="font-weight:700;color:var(--azul);min-width:170px">${r}</span><span style="width:10px;height:10px;border-radius:50%;background:${t[1]}"></span>${esc(e.titulo)}
+      ${canEdit?`<span style="margin-left:auto;display:flex;gap:6px"><button class="btn ghost" style="padding:3px 9px" onclick="evEdit(${e.id},'${esc(e.titulo).replace(/'/g,"\\'")}','${e.ini}','${e.fin}','${e.tipo}')">✏️</button><button class="btn ghost" style="padding:3px 9px" onclick="evDel(${e.id})">🗑️</button></span>`:`<span class="badge b-grey" style="margin-left:auto">${t[0]}</span>`}</div>`;}).join('');
+  document.getElementById('main').innerHTML=`<div class="page-title">Calendario · ${ms[M]} ${Y}</div><div class="page-sub">Eventos importantes: avisos, formaciones y fechas marcadas</div>
+    ${canEdit?`<div style="margin-bottom:16px"><button class="btn" onclick="evNew()">➕ Nuevo evento</button></div>${evFormOpen?evForm():''}`:''}
+    <div class="panel">${grid}<div style="display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--suave);margin-top:12px">${Object.values(TIPO_EV).map(t=>`<span><i style="display:inline-block;width:12px;height:12px;border-radius:3px;background:${t[1]}"></i> ${t[0]}</span>`).join('')}</div></div>
+    <div class="panel"><h2>📌 Eventos</h2>${lista||'<div style="color:var(--suave);font-size:13.5px">No hay eventos.</div>'}</div>`;
+}
+let evDraft={};
+function evNew(){evEditId=null;evDraft={};evFormOpen=true;show('calendario');}
+function evEdit(id,titulo,ini,fin,tipo){evEditId=id;evDraft={titulo,ini,fin,tipo};evFormOpen=true;show('calendario');}
+function evForm(){const e=evDraft;const tipos=[['aviso','Aviso'],['evento','Evento'],['formacion','Formación'],['comunicado','Comunicado']];
+  return `<div class="panel" style="max-width:620px"><h2>${evEditId?'✏️ Editar evento':'🗓️ Nuevo evento'}</h2><form class="box" onsubmit="return evSave(event)" style="max-width:none">
+    <label>Título</label><input id="evT" required value="${e.titulo?esc(e.titulo):''}">
+    <div class="row"><div><label>Desde</label><input id="evI" type="date" required value="${e.ini||''}"></div><div><label>Hasta</label><input id="evF" type="date" required value="${e.fin||''}"></div>
+    <div><label>Tipo</label><select id="evTipo">${tipos.map(t=>`<option value="${t[0]}" ${e.tipo===t[0]?'selected':''}>${t[1]}</option>`).join('')}</select></div></div>
+    <div><button class="btn" type="submit">Guardar</button> <button class="btn ghost" type="button" onclick="evFormOpen=false;show('calendario')">Cancelar</button></div></form></div>`;}
+async function evSave(e){e.preventDefault();let ini=val('evI'),fin=val('evF')||val('evI');if(fin<ini)fin=ini;
+  const row={titulo:val('evT'),ini,fin,tipo:document.getElementById('evTipo').value};if(!row.titulo)return false;
+  const{error}=evEditId?await sb.from('eventos').update(row).eq('id',evEditId):await sb.from('eventos').insert(row);
+  if(error){alert('Error: '+error.message);return false;}evFormOpen=false;show('calendario');return false;}
+async function evDel(id){if(!confirm('¿Eliminar evento?'))return;await sb.from('eventos').delete().eq('id',id);show('calendario');}
+
+/* ---------------- CUMPLEAÑOS ---------------- */
+async function pageCumple(){
+  const{data}=await sb.from('profiles').select('nombre,dept,cumple').not('cumple','is',null);
+  const ppl=data||[];const now=new Date();const ms=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+  const conDias=ppl.map(p=>{const[,mm,dd]=p.cumple.split('-').map(Number);let nx=new Date(now.getFullYear(),mm-1,dd);if(nx<new Date(now.getFullYear(),now.getMonth(),now.getDate()))nx=new Date(now.getFullYear()+1,mm-1,dd);
+    return {...p,mm,dd,dias:Math.round((nx-new Date(now.getFullYear(),now.getMonth(),now.getDate()))/864e5)};}).sort((a,b)=>a.dias-b.dias);
+  document.getElementById('main').innerHTML=`<div class="page-title">Cumpleaños</div><div class="page-sub">No te olvides de felicitar al equipo 🎉</div>
+    <div class="panel">${conDias.length?conDias.map(p=>`<div style="display:flex;align-items:center;gap:14px;padding:11px 0;border-bottom:1px solid var(--gris)">
+      <div style="background:var(--azul-claro);color:var(--azul);border-radius:10px;width:54px;text-align:center;padding:6px 0;font-weight:700;font-size:13px">${p.dd}<br><small style="font-size:11px">${ms[p.mm-1]}</small></div>
+      <div><b>${esc(p.nombre)}</b><br><small style="color:var(--suave)">${esc(p.dept||'')}${p.dias===0?' · ¡Hoy! 🎂':p.dias<=7?' · en '+p.dias+' días':''}</small></div></div>`).join(''):'<div style="color:var(--suave);font-size:13.5px">Aún no hay fechas de cumpleaños. El administrador puede añadirlas en Administración.</div>'}</div>`;
+}
+
+/* ---------------- CARTELES ---------------- */
+let cartelTpl=0;
+const CARTELES=[
+  {nombre:'Fuera de servicio',icon:'⚠️',color:'#d9534f',titulo:'Fuera de servicio',cuerpo:'Disculpe las molestias.\nEstamos trabajando para solucionarlo lo antes posible.'},
+  {nombre:'Aviso',icon:'📢',color:'#1F4E79',titulo:'Aviso importante',cuerpo:'Escribe aquí tu mensaje.'},
+  {nombre:'Limpieza en curso',icon:'🧹',color:'#1F4E79',titulo:'Limpieza en curso',cuerpo:'Estamos preparando este espacio.\nGracias por su paciencia.'},
+  {nombre:'No fumar',icon:'🚭',color:'#d9534f',titulo:'Prohibido fumar',cuerpo:'Este es un espacio libre de humo.\nGracias por respetarlo.'},
+  {nombre:'Bienvenida',icon:'🧡',color:'#16a085',titulo:'¡Bienvenido!',cuerpo:'Esperamos que disfrute de su estancia con Amazinn Places.'},
+  {nombre:'Zona privada',icon:'🔒',color:'#d9534f',titulo:'Zona privada',cuerpo:'Acceso exclusivo para personal autorizado.'},
+];
+function cartelHTML(t,c,u,color,icon){const e=esc;return `<div class="cartel"><div class="c-top" style="border-color:${color}"><div class="brand">AMAZINN places</div></div>
+  <div class="c-mid"><div class="c-icon" style="color:${color}">${icon}</div><div class="c-title" style="color:${color}">${e(t)}</div><div class="c-body">${e(c)}</div>${u?`<div style="font-size:15px;font-weight:700;color:var(--azul);margin-top:14px;border:2px dashed var(--gris2);padding:8px 14px;border-radius:8px">📍 ${e(u)}</div>`:''}</div>
+  <div class="c-foot">Amazinn Places · ${new Date().toLocaleDateString('es-ES',{day:'numeric',month:'long',year:'numeric'})}</div></div>`;}
+function pageCarteles(){const t=CARTELES[cartelTpl];
+  document.getElementById('main').innerHTML=`<div class="page-title">Carteles</div><div class="page-sub">Crea carteles con la marca de Amazinn Places, listos para imprimir</div>
+    <div class="panel"><label style="font-weight:600;font-size:13px;color:var(--suave)">Elige un modelo:</label><div class="cartel-pick">${CARTELES.map((c,i)=>`<button class="cp ${i===cartelTpl?'on':''}" onclick="cartelTpl=${i};show('carteles')">${c.icon} ${c.nombre}</button>`).join('')}</div></div>
+    <div class="cartel-wrap"><div class="panel"><h2>✏️ Personaliza</h2><form class="box" onsubmit="return false" style="max-width:none">
+      <label>Título</label><input id="caT" value="${esc(t.titulo)}" oninput="updateCartel()"><label>Mensaje</label><textarea id="caB" rows="4" oninput="updateCartel()">${t.cuerpo}</textarea>
+      <label>Ubicación (opcional)</label><input id="caU" placeholder="Ej: Ascensor — Edificio Casa Diez" oninput="updateCartel()">
+      <div><button class="btn" type="button" onclick="window.print()">🖨️ Imprimir / PDF</button></div>
+      <small style="color:var(--suave)">El formato, el logo y la tipografía se aplican automáticamente.</small></form></div>
+      <div><div style="font-size:12px;color:var(--suave);margin-bottom:6px">Vista previa</div><div id="cartelPrint">${cartelHTML(t.titulo,t.cuerpo,'',t.color,t.icon)}</div></div></div>`;
+}
+function updateCartel(){const t=CARTELES[cartelTpl];document.getElementById('cartelPrint').innerHTML=cartelHTML(val('caT'),document.getElementById('caB').value,val('caU'),t.color,t.icon);}
+
+/* ---------------- ADMINISTRACIÓN (usuarios) ---------------- */
+let userEditId=null, userFormOpen=false;
+async function pageAdmin(){
+  const{data}=await sb.from('profiles').select('*').order('dept');
+  const us=data||[];
+  const rl=r=>({empleado:'Empleado',responsable:'Responsable',rrhh:'RRHH',admin:'Administrador'})[r]||r;
+  const rows=us.map(u=>`<tr><td>${av(u.nombre,u.color,30)}</td><td><b>${esc(u.nombre||'')}</b>${u.id===ME.id?' <span class="badge b-grey">tú</span>':''}<br><small style="color:var(--suave)">${esc(u.email||'')}</small></td>
+    <td>${esc(u.dept||'')}</td><td><span class="badge ${u.role==='admin'?'b-red':u.role==='rrhh'?'b-blue':u.role==='responsable'?'b-amber':'b-grey'}">${rl(u.role)}</span></td><td>${u.vac||0}</td>
+    <td><button class="btn ghost" style="padding:4px 9px" onclick='userEdit(${JSON.stringify(u).replace(/'/g,"&#39;")})'>✏️ Editar</button></td></tr>`).join('');
+  document.getElementById('main').innerHTML=`<div class="page-title">Administración</div><div class="page-sub">Gestión de empleados y roles</div>
+    <div class="panel" style="background:var(--azul-claro);border:none;font-size:13px">ℹ️ Para <b>crear</b> nuevos accesos, los empleados se registran desde la pantalla de inicio (o los añades en Supabase → Authentication). Aquí asignas su <b>departamento, rol, vacaciones y cumpleaños</b>.</div>
+    ${userFormOpen?userForm():''}
+    <div class="panel"><table><thead><tr><th>Foto</th><th>Nombre / email</th><th>Departamento</th><th>Rol</th><th>Vac.</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`;
+}
+let userDraft={};
+function userEdit(u){userEditId=u.id;userDraft=u;userFormOpen=true;show('admin');}
+function userForm(){const u=userDraft;const colores=['#1F4E79','#16a085','#8e44ad','#d35400','#c0392b','#2980b9','#27ae60','#e67e22','#34495e'];
+  return `<div class="panel" style="max-width:640px"><h2>✏️ Editar ${esc(u.nombre||'usuario')}</h2><form class="box" onsubmit="return userSave(event)" style="max-width:none">
+    <div class="row"><div><label>Nombre</label><input id="uN" value="${esc(u.nombre||'')}"></div><div><label>Días vacaciones</label><input id="uV" type="number" value="${u.vac||0}"></div></div>
+    <div class="row"><div><label>Departamento</label><select id="uD">${DEPTS.map(d=>`<option ${u.dept===d?'selected':''}>${d}</option>`).join('')}</select></div>
+      <div><label>Rol</label><select id="uR">${['empleado','responsable','rrhh','admin'].map(r=>`<option value="${r}" ${u.role===r?'selected':''}>${r}</option>`).join('')}</select></div></div>
+    <label>Cumpleaños</label><input id="uC" type="date" value="${u.cumple||''}">
+    <label>Color</label><div style="display:flex;gap:8px;flex-wrap:wrap">${colores.map(c=>`<label style="cursor:pointer"><input type="radio" name="uCol" value="${c}" ${(u.color||colores[0])===c?'checked':''} style="display:none" onchange="this.parentElement.parentElement.querySelectorAll('.sw').forEach(s=>s.style.outline='');this.nextElementSibling.style.outline='3px solid #333'"><span class="sw" style="display:inline-block;width:26px;height:26px;border-radius:50%;background:${c};outline:${(u.color||colores[0])===c?'3px solid #333':''}"></span></label>`).join('')}</div>
+    <div><button class="btn" type="submit">Guardar</button> <button class="btn ghost" type="button" onclick="userFormOpen=false;show('admin')">Cancelar</button></div></form></div>`;}
+async function userSave(e){e.preventDefault();
+  const col=document.querySelector('input[name="uCol"]:checked');
+  const row={nombre:val('uN'),dept:document.getElementById('uD').value,role:document.getElementById('uR').value,vac:+val('uV')||0,cumple:val('uC')||null,color:col?col.value:'#1F4E79'};
+  const{error}=await sb.from('profiles').update(row).eq('id',userEditId);
+  if(error){alert('Error: '+error.message);return false;}
+  userFormOpen=false;show('admin');return false;}
 
 /* utilidades */
 function val(id){const el=document.getElementById(id);return el?el.value.trim():'';}
