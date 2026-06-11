@@ -266,6 +266,25 @@
   .com-card .cc-adj{margin-top:16px;padding-top:14px;border-top:1px dashed var(--gris2)}
   .att{display:inline-flex;align-items:center;gap:6px;background:var(--gris);border:1px solid var(--gris2);border-radius:8px;padding:7px 11px;font-size:12.5px;margin:4px 8px 0 0;color:var(--texto);text-decoration:none}
   .att:hover{background:var(--azul-claro);border-color:var(--azul)}
+  /* ---- Comunicados: bandeja + filtros ---- */
+  .cinbox{display:grid;grid-template-columns:320px 1fr;gap:18px;align-items:start}
+  .cinbox-list{background:#fff;border:1px solid var(--gris2);border-radius:14px;box-shadow:var(--sombra);overflow:hidden;max-height:660px;overflow-y:auto}
+  .cinbox-item{display:flex;gap:11px;padding:14px 15px;border-bottom:1px solid var(--gris);cursor:pointer;transition:background .12s}
+  .cinbox-item:hover{background:var(--gris)}
+  .cinbox-item.on{background:var(--azul-claro)}
+  .cinbox-item .ci-dot{width:9px;height:9px;border-radius:50%;flex:0 0 auto;margin-top:5px}
+  .ci-main{overflow:hidden;flex:1}
+  .ci-title{font-size:13.8px;color:#1a1a1a;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:500}
+  .cinbox-item.unread .ci-title{font-weight:800}
+  .ci-meta{font-size:11.5px;color:var(--suave);margin:2px 0 3px}
+  .ci-snip{font-size:12px;color:var(--suave);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .ci-new{color:var(--rojo);font-size:9px;margin-left:6px;vertical-align:middle}
+  .cinbox-detail .com-card{max-width:none;margin:0}
+  .comu-filters{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:18px}
+  .comu-chip{border:1px solid var(--gris2);background:#fff;color:var(--texto);padding:7px 14px;border-radius:20px;font-size:12.5px;font-weight:600;cursor:pointer;font-family:inherit}
+  .comu-chip.on{background:var(--azul);color:#fff;border-color:var(--azul)}
+  .comu-q{margin-left:auto;min-width:200px;padding:8px 13px;border:1px solid var(--gris2);border-radius:20px;font-family:inherit;font-size:13px}
+  @media(max-width:860px){.cinbox{grid-template-columns:1fr}.comu-q{margin-left:0;width:100%}}
   .chk{display:inline-flex;align-items:center;gap:7px;font-size:13.5px;font-weight:500;color:var(--texto)}
   .chk-all{display:flex;margin:6px 0 10px;font-weight:600}
   .chk-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:8px 14px;padding:12px;background:var(--gris);border-radius:9px}
@@ -891,68 +910,115 @@ async function pageInicio(){
 }
 function roleNice(r){return ({empleado:'Empleado',responsable:'Responsable',rrhh:'RRHH',admin:'Administrador'})[r]||r;}
 
-/* ---------------- COMUNICADOS (datos reales) ---------------- */
+/* ---------------- COMUNICADOS (datos reales · bandeja + filtros) ---------------- */
+const COM_COLOR={info:'#3b82f6',imp:'#d99100',urg:'#e23b3b'};
+let comFilter='todos', comQuery='', comSel=null;
+let CC={coms:[],lect:[],pr:[],adj:[],canCreate:false};
 async function pageComunicados(){
-  const canCreate = CAN_COM.includes(PROFILE.role);
+  CC.canCreate = CAN_COM.includes(PROFILE.role);
   const { data:coms, error } = await sb.from('comunicados').select('*').order('created_at',{ascending:false});
   if(error){ document.getElementById('main').innerHTML='<div class="page-title">Comunicados</div><div class="panel">Error al cargar: '+error.message+'</div>'; return; }
   const { data:lect } = await sb.from('comunicado_lecturas').select('comunicado_id,user_id');
-  const lecturas = lect||[];
   const { data:profs } = await sb.from('profiles').select('id,nombre,dept,color,foto,cargo');
-  const PR = profs||[];
   const { data:adjs } = await sb.from('comunicado_adjuntos').select('*');
-  const ADJ = adjs||[];
-  const visibles = (coms||[]).filter(c=>c.dirigido==='*'||c.dirigido===PROFILE.dept);
-  const cardHTML = c=>{
-    const nv=NIVEL[c.nivel]||NIVEL.info;
-    const lts=lecturas.filter(l=>l.comunicado_id===c.id);
-    const ids=lts.map(l=>l.user_id);
-    const yo=ids.includes(ME.id);
-    const fecha=new Date(c.created_at).toLocaleDateString('es-ES',{day:'numeric',month:'short',year:'numeric'});
-    const read = yo?'<span class="read-ok">✓ Has confirmado la lectura</span>':`<button class="btn-read" onclick="confirmRead(${c.id})">✔ Confirmar lectura</button>`;
-    const dest = c.dirigido==='*'?'Toda la empresa':c.dirigido;
-    const autor = PR.find(u=>u.id===c.autor_id);
-    const aCol = autor?autor.color:null, aFoto = autor?autor.foto:null, aCargo = autor&&autor.cargo?autor.cargo:'';
-    const canDel = PROFILE.role==='admin' || c.autor_id===ME.id;
-    const delBtn = canDel?`<button class="btn-del" onclick="deleteCom(${c.id})" title="Eliminar comunicado">🗑 Eliminar</button>`:'';
-    const mis = ADJ.filter(a=>a.comunicado_id===c.id);
-    const ico=t=>!t?'📎':(/pdf/.test(t)?'📄':(/image/.test(t)?'🖼️':(/word|document/.test(t)?'📝':(/sheet|excel/.test(t)?'📊':'📎'))));
-    const adjHTML = mis.length?`<div class="cc-adj">${mis.map(a=>`<a class="att" href="${a.url}" target="_blank" rel="noopener" download="${esc(a.nombre)}">${ico(a.tipo)} ${esc(a.nombre)}</a>`).join('')}</div>`:'';
-    let detalle='';
-    if(canCreate){
-      const aud=PR.filter(u=>c.dirigido==='*'||c.dirigido===u.dept);
-      const conf=aud.filter(u=>ids.includes(u.id)).map(u=>u.nombre);
-      const pend=aud.filter(u=>!ids.includes(u.id)).map(u=>u.nombre);
-      detalle=`<details class="lectura"><summary>👁 ${conf.length}/${aud.length} han confirmado la lectura${pend.length?' · '+pend.length+' pendiente(s)':''}</summary>
-        <div class="lec-grid">
-          <div><b style="color:var(--acento)">✓ Confirmado (${conf.length})</b>${conf.map(n=>`<div>${esc(n)}</div>`).join('')||'<div style="color:var(--suave)">—</div>'}</div>
-          <div><b style="color:var(--amarillo)">⏳ Pendiente (${pend.length})</b>${pend.map(n=>`<div>${esc(n)}</div>`).join('')||'<div style="color:var(--suave)">—</div>'}</div></div></details>`;
-    }
-    return `<div class="com-card">
-      <div class="cc-top">
-        <div class="bl"><img src="${LOGO}" alt="Amazinn Places"><span class="lbl">COMUNICADO INTERNO</span></div>
-        <span class="badge ${nv[1]}">${nv[0]}</span>
+  CC.coms=(coms||[]).filter(c=>c.dirigido==='*'||c.dirigido===PROFILE.dept);
+  CC.lect=lect||[]; CC.pr=profs||[]; CC.adj=adjs||[];
+  renderComu();
+}
+function comLeido(c){ return CC.lect.some(l=>l.comunicado_id===c.id && l.user_id===ME.id); }
+function comMatches(c){
+  const q=comQuery.trim().toLowerCase();
+  if(comFilter==='noleidos' && comLeido(c)) return false;
+  if(['urg','imp','info'].includes(comFilter) && c.nivel!==comFilter) return false;
+  if(q && !((c.titulo||'').toLowerCase().includes(q)||(c.cuerpo||'').toLowerCase().includes(q))) return false;
+  return true;
+}
+function comCardHTML(c){
+  const nv=NIVEL[c.nivel]||NIVEL.info;
+  const ids=CC.lect.filter(l=>l.comunicado_id===c.id).map(l=>l.user_id);
+  const yo=ids.includes(ME.id);
+  const fecha=new Date(c.created_at).toLocaleDateString('es-ES',{day:'numeric',month:'short',year:'numeric'});
+  const read = yo?'<span class="read-ok">✓ Has confirmado la lectura</span>':`<button class="btn-read" onclick="confirmRead(${c.id})">✔ Confirmar lectura</button>`;
+  const dest = c.dirigido==='*'?'Toda la empresa':c.dirigido;
+  const autor = CC.pr.find(u=>u.id===c.autor_id);
+  const aCol = autor?autor.color:null, aFoto = autor?autor.foto:null, aCargo = autor&&autor.cargo?autor.cargo:'';
+  const canDel = PROFILE.role==='admin' || c.autor_id===ME.id;
+  const delBtn = canDel?`<button class="btn-del" onclick="deleteCom(${c.id})" title="Eliminar comunicado">🗑 Eliminar</button>`:'';
+  const mis = CC.adj.filter(a=>a.comunicado_id===c.id);
+  const ico=t=>!t?'📎':(/pdf/.test(t)?'📄':(/image/.test(t)?'🖼️':(/word|document/.test(t)?'📝':(/sheet|excel/.test(t)?'📊':'📎'))));
+  const adjHTML = mis.length?`<div class="cc-adj">${mis.map(a=>`<a class="att" href="${a.url}" target="_blank" rel="noopener" download="${esc(a.nombre)}">${ico(a.tipo)} ${esc(a.nombre)}</a>`).join('')}</div>`:'';
+  let detalle='';
+  if(CC.canCreate){
+    const aud=CC.pr.filter(u=>c.dirigido==='*'||c.dirigido===u.dept);
+    const conf=aud.filter(u=>ids.includes(u.id)).map(u=>u.nombre);
+    const pend=aud.filter(u=>!ids.includes(u.id)).map(u=>u.nombre);
+    detalle=`<details class="lectura"><summary>👁 ${conf.length}/${aud.length} han confirmado la lectura${pend.length?' · '+pend.length+' pendiente(s)':''}</summary>
+      <div class="lec-grid">
+        <div><b style="color:var(--acento)">✓ Confirmado (${conf.length})</b>${conf.map(n=>`<div>${esc(n)}</div>`).join('')||'<div style="color:var(--suave)">—</div>'}</div>
+        <div><b style="color:var(--amarillo)">⏳ Pendiente (${pend.length})</b>${pend.map(n=>`<div>${esc(n)}</div>`).join('')||'<div style="color:var(--suave)">—</div>'}</div></div></details>`;
+  }
+  return `<div class="com-card">
+    <div class="cc-top">
+      <div class="bl"><img src="${LOGO}" alt="Amazinn Places"><span class="lbl">COMUNICADO INTERNO</span></div>
+      <span class="badge ${nv[1]}">${nv[0]}</span>
+    </div>
+    <div class="cc-body">
+      <div class="cc-to">📍 Dirigido a: ${esc(dest)}</div>
+      <h2 class="cc-title">${esc(c.titulo)}</h2>
+      <div class="cc-text">${esc(c.cuerpo)}</div>
+      ${adjHTML}
+    </div>
+    <div class="cc-foot">
+      ${av(c.autor_nombre||'',aCol,40,aFoto)}
+      <div class="who"><b>${esc(c.autor_nombre||'')}</b><small>${esc(aCargo?aCargo+' · ':'')}${fecha}</small></div>
+      <div class="cc-read">${read}${delBtn}</div>
+    </div>
+    ${detalle}
+  </div>`;
+}
+function comInboxItemsHTML(){
+  const f=CC.coms.filter(comMatches);
+  if(!f.length) return '<div style="padding:26px 16px;text-align:center;color:var(--suave);font-size:13px">Sin comunicados que coincidan.</div>';
+  if(comSel===null || !f.find(c=>c.id===comSel)) comSel=f[0].id;
+  return f.map(c=>{
+    const unread=!comLeido(c);
+    const cuerpo=(c.cuerpo||'').replace(/\n+/g,' ').trim();
+    const snip=cuerpo.length>58?cuerpo.slice(0,58)+'…':cuerpo;
+    const fch=new Date(c.created_at).toLocaleDateString('es-ES',{day:'numeric',month:'short'});
+    return `<div class="cinbox-item ${c.id===comSel?'on':''} ${unread?'unread':''}" onclick="comSelect(${c.id})">
+      <span class="ci-dot" style="background:${COM_COLOR[c.nivel]||'#888'}"></span>
+      <div class="ci-main">
+        <div class="ci-title">${esc(c.titulo)}${unread?'<span class="ci-new">●</span>':''}</div>
+        <div class="ci-meta">${esc(c.autor_nombre||'')} · ${fch}</div>
+        <div class="ci-snip">${esc(snip)}</div>
+      </div></div>`;
+  }).join('');
+}
+function renderComu(){
+  const total=CC.coms.length, sinLeer=CC.coms.filter(c=>!comLeido(c)).length;
+  const chip=(id,lbl)=>`<button class="comu-chip ${comFilter===id?'on':''}" onclick="comSetFilter('${id}')">${lbl}</button>`;
+  let body;
+  if(!CC.coms.length){ body='<div class="panel">No hay comunicados todavía.</div>'; }
+  else{
+    const f=CC.coms.filter(comMatches);
+    let detail;
+    if(!f.length){ detail='<div class="panel" style="margin:0">No hay comunicados que coincidan con el filtro.</div>'; }
+    else{ if(comSel===null||!f.find(c=>c.id===comSel)) comSel=f[0].id; detail=comCardHTML(f.find(c=>c.id===comSel)); }
+    body=`<div class="comu-filters">
+        ${chip('todos','Todos')}${chip('noleidos','Sin leer')}${chip('urg','🔴 Urgentes')}${chip('imp','🟠 Importantes')}${chip('info','🔵 Informativos')}
+        <input class="comu-q" placeholder="🔍 Buscar en comunicados…" value="${comQuery.replace(/"/g,'&quot;')}" oninput="comSetQuery(this.value)">
       </div>
-      <div class="cc-body">
-        <div class="cc-to">📍 Dirigido a: ${esc(dest)}</div>
-        <h2 class="cc-title">${esc(c.titulo)}</h2>
-        <div class="cc-text">${esc(c.cuerpo)}</div>
-        ${adjHTML}
-      </div>
-      <div class="cc-foot">
-        ${av(c.autor_nombre||'',aCol,40,aFoto)}
-        <div class="who"><b>${esc(c.autor_nombre||'')}</b><small>${esc(aCargo?aCargo+' · ':'')}${fecha}</small></div>
-        <div class="cc-read">${read}${delBtn}</div>
-      </div>
-      ${detalle}
-    </div>`;
-  };
+      <div class="cinbox"><div class="cinbox-list" id="comInboxList">${comInboxItemsHTML()}</div><div class="cinbox-detail">${detail}</div></div>`;
+  }
   document.getElementById('main').innerHTML = `
     <div class="page-title">Comunicados</div>
-    <div class="page-sub">Novedades oficiales de la empresa${canCreate?' · puedes publicar':''}</div>
-    ${canCreate?`<div style="margin-bottom:18px"><button class="btn" onclick="toggleComForm()">➕ Nuevo comunicado</button></div><div id="comFormBox"></div>`:''}
-    ${visibles.length?visibles.map(cardHTML).join(''):'<div class="panel">No hay comunicados todavía.</div>'}`;
+    <div class="page-sub">Novedades oficiales de la empresa · ${total} en total${sinLeer?` · <b style="color:var(--rojo)">${sinLeer} sin leer</b>`:' · todo al día ✓'}</div>
+    ${CC.canCreate?`<div style="margin-bottom:18px"><button class="btn" onclick="toggleComForm()">➕ Nuevo comunicado</button></div><div id="comFormBox"></div>`:''}
+    ${body}`;
 }
+function comSetFilter(f){comFilter=f; renderComu();}
+function comSetQuery(v){comQuery=v; const el=document.getElementById('comInboxList'); if(el) el.innerHTML=comInboxItemsHTML();}
+function comSelect(id){comSel=id; renderComu();}
 let comFormOpen=false;
 function toggleComForm(){
   comFormOpen=!comFormOpen;
