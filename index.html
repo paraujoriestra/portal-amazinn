@@ -1947,7 +1947,13 @@ async function pollChat(){
 let MSG_CONTACTS=[], MSG_ALL=[];
 function buildContactList(term){
   term=(term||'').trim().toLowerCase();
-  const rows=MSG_CONTACTS.map(c=>{
+  // Ordenar por conversación más reciente (los que tienen mensajes, arriba)
+  const ordenados=MSG_CONTACTS.map(c=>{
+    const conv=MSG_ALL.filter(m=>(m.de_id===ME.id&&m.para_id===c.id)||(m.de_id===c.id&&m.para_id===ME.id));
+    const last=[...conv].reverse()[0];
+    return {c, t: last?new Date(last.created_at).getTime():0};
+  }).sort((a,b)=> b.t - a.t || (a.c.nombre||'').localeCompare(b.c.nombre||'')).map(x=>x.c);
+  const rows=ordenados.map(c=>{
     const conv=MSG_ALL.filter(m=>(m.de_id===ME.id&&m.para_id===c.id)||(m.de_id===c.id&&m.para_id===ME.id));
     const last=[...conv].reverse()[0];
     const noLeidos=conv.filter(m=>m.de_id===c.id&&m.para_id===ME.id&&!m.leido).length;
