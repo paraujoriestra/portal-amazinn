@@ -1764,7 +1764,7 @@ function closeRowMenu(){ const m=document.getElementById('rowMenuPop'); if(m) m.
 function proRowMenu(e,tabla,id){
   e.stopPropagation();
   let m=document.getElementById('rowMenuPop'); if(!m){ m=document.createElement('div'); m.id='rowMenuPop'; m.className='rowmenu-pop'; document.body.appendChild(m); }
-  const editFn = tabla==='proveedores'?`editProv(${id})`:`editProp(${id})`;
+  const editFn = tabla==='proveedores'?`editProv(${id})`:(tabla==='suministros'?`editSup(${id})`:`editProp(${id})`);
   m.innerHTML=`<button onclick="closeRowMenu();${editFn}">✏️ Editar</button><button onclick="closeRowMenu();delRow('${tabla}',${id},'${tabla}')">🗑️ Eliminar</button>`;
   const r=e.currentTarget.getBoundingClientRect();
   m.style.display='flex';
@@ -1857,15 +1857,19 @@ async function saveProp(e){e.preventDefault();
 }
 
 /* ---------------- SUMINISTROS ---------------- */
-let supFormOpen=false;
-function setSupTab(t){supTab=t;supFormOpen=false;show('suministros');}
+let supFormOpen=false, supEditId=null, supDraft={}, SUP_DATA=[];
+function setSupTab(t){supTab=t;supFormOpen=false;supEditId=null;supDraft={};show('suministros');}
+function supNew(){ if(supFormOpen){supFormOpen=false;} else {supEditId=null;supDraft={};supFormOpen=true;} show('suministros'); }
+function editSup(id){ supEditId=id; supDraft=SUP_DATA.find(x=>x.id===id)||{}; supFormOpen=true; show('suministros'); }
 async function pageSuministros(){
   const canEdit=CAN_MANAGE.includes(PROFILE.role);
   const tabs=[['electricidad','⚡ Electricidad'],['agua','💧 Agua y Aseo'],['internet','🌐 Internet']];
   const{data,error}=await sb.from('suministros').select('*').eq('tipo',supTab).order('propiedad');
   if(error){document.getElementById('main').innerHTML='<div class="panel">Error: '+error.message+'</div>';return;}
+  SUP_DATA=data||[];
   const conMedidor=supTab==='electricidad';
   const refLbl=supTab==='electricidad'?'Nº NIS':(supTab==='agua'?'Nº IDAAN':'Nº de suscriptor');
+  const d=supDraft;
   const rows=(data||[]).map(r=>`<tr data-s="${dataS([r.referencia,r.medidor,r.titular,r.compania,r.propiedad,r.nota])}">
     <td><b>${esc(r.referencia||'')}</b></td>
     ${conMedidor?`<td>${esc(r.medidor||'')}</td>`:''}
@@ -1873,26 +1877,26 @@ async function pageSuministros(){
     <td>${esc(r.compania||'')}</td>
     <td>${esc(r.propiedad||'')}</td>
     <td style="color:var(--suave)">${esc(r.nota||'')}</td>
-    ${canEdit?`<td><button class="btn ghost" style="padding:4px 9px" onclick="delRow('suministros',${r.id},'suministros')">🗑️</button></td>`:''}</tr>`).join('');
+    ${canEdit?`<td><button class="kebab" onclick="proRowMenu(event,'suministros',${r.id})" title="Opciones">⋮</button></td>`:''}</tr>`).join('');
   document.getElementById('main').innerHTML=`
     <div class="page-title">Suministros por activo</div><div class="page-sub">Referencias de los contratos de cada propiedad</div>
     <div class="tabs">${tabs.map(t=>`<button class="${supTab===t[0]?'on':''}" onclick="setSupTab('${t[0]}')">${t[1]}</button>`).join('')}</div>
-    ${canEdit?`<div style="margin-bottom:14px;display:flex;gap:8px;flex-wrap:wrap;align-items:center"><button class="btn ghost" onclick="supFormOpen=!supFormOpen;show('suministros')">${supFormOpen?'✕ Cerrar':'➕ Añadir registro'}</button>${importBtn('suministros',supTab)}</div>`:''}
-    ${canEdit&&supFormOpen?`<div class="panel" style="max-width:600px"><form class="box" onsubmit="return createSup(event)" style="max-width:none">
-      <div class="row"><div><label>${refLbl}</label><input id="sR"></div>${conMedidor?'<div><label>Nº de medidor</label><input id="sMed"></div>':'<div></div>'}</div>
-      <div class="row"><div><label>A nombre de</label><input id="sT"></div><div><label>Compañía</label><input id="sC"></div></div>
-      <label>Propiedad</label><input id="sP">
-      <label>Nota</label><textarea id="sNota" rows="2"></textarea>
-      <div><button class="btn" type="submit">Guardar</button></div></form></div>`:''}
+    ${canEdit?`<div style="margin-bottom:14px;display:flex;gap:8px;flex-wrap:wrap;align-items:center"><button class="btn" onclick="supNew()">${supFormOpen?'✕ Cerrar':'➕ Añadir registro'}</button>${importBtn('suministros',supTab)}</div>`:''}
+    ${canEdit&&supFormOpen?`<div class="panel" style="max-width:600px"><h2>${supEditId?'✏️ Editar registro':'➕ Nuevo registro'} · ${tabs.find(t=>t[0]===supTab)[1]}</h2><form class="box" onsubmit="return saveSup(event)" style="max-width:none">
+      <div class="row"><div><label>${refLbl}</label><input id="sR" value="${esc(d.referencia||'')}"></div>${conMedidor?`<div><label>Nº de medidor</label><input id="sMed" value="${esc(d.medidor||'')}"></div>`:'<div></div>'}</div>
+      <div class="row"><div><label>A nombre de</label><input id="sT" value="${esc(d.titular||'')}"></div><div><label>Compañía</label><input id="sC" value="${esc(d.compania||'')}"></div></div>
+      <label>Propiedad</label><input id="sP" value="${esc(d.propiedad||'')}">
+      <label>Nota</label><textarea id="sNota" rows="2">${esc(d.nota||'')}</textarea>
+      <div><button class="btn" type="submit">Guardar</button> <button class="btn ghost" type="button" onclick="supFormOpen=false;supEditId=null;show('suministros')">Cancelar</button></div></form></div>`:''}
     ${tblSearch('supBody')}
     <div class="panel"><div style="overflow-x:auto"><table class="tbl-compact"><thead><tr><th>${refLbl}</th>${conMedidor?'<th>Nº medidor</th>':''}<th>A nombre de</th><th>Compañía</th><th>Propiedad</th><th>Nota</th>${canEdit?'<th></th>':''}</tr></thead>
       <tbody id="supBody">${rows||'<tr><td colspan="7" style="color:var(--suave)">Sin registros en esta categoría.</td></tr>'}</tbody></table></div></div>`;
 }
-async function createSup(e){e.preventDefault();
+async function saveSup(e){e.preventDefault();
   const row={tipo:supTab,referencia:val('sR'),medidor:supTab==='electricidad'?val('sMed'):null,titular:val('sT'),compania:val('sC'),propiedad:val('sP'),nota:val('sNota')};
-  const{error}=await sb.from('suministros').insert(row);
+  const{error}=supEditId?await sb.from('suministros').update(row).eq('id',supEditId):await sb.from('suministros').insert(row);
   if(error){alert('Error: '+error.message);return false;}
-  supFormOpen=false;show('suministros');return false;
+  supFormOpen=false;supEditId=null;supDraft={};show('suministros');return false;
 }
 
 /* ---------------- SUGERENCIAS ---------------- */
