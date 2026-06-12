@@ -2799,10 +2799,12 @@ function asgRefreshResumen(){ const b=document.getElementById('asgResumenBox'); 
 function asgUpdU(i,c,v){ if(ASG.unidades[i]){ ASG.unidades[i][c]=v; asgRefreshResumen(); } }
 function asgUpdC(i,c,v){ if(ASG.comunes[i]){ ASG.comunes[i][c]=v; asgRefreshResumen(); } }
 function asgUpdFecha(v){ ASG.fecha=v; }
-function asgAddUnidad(){ ASG.unidades.push({unidad:'',prioridad:'',tipo:'salida_entrada',pax:'',extra:'',t1:'',t2:''}); show('asignaciones'); }
-function asgDelUnidad(i){ ASG.unidades.splice(i,1); show('asignaciones'); }
-function asgAddComun(){ ASG.comunes.push({area:'',t1:'',t2:''}); show('asignaciones'); }
-function asgDelComun(i){ ASG.comunes.splice(i,1); show('asignaciones'); }
+function asgRenderUTbody(focusLast){ const b=document.getElementById('asgUTbody'); if(b){ b.innerHTML=asgUnidadRows(); if(focusLast){ const inp=b.querySelector('tr:last-child input'); if(inp) inp.focus(); } } asgRefreshResumen(); }
+function asgRenderCTbody(focusLast){ const b=document.getElementById('asgCTbody'); if(b){ b.innerHTML=asgComunRows(); if(focusLast){ const inp=b.querySelector('tr:last-child input'); if(inp) inp.focus(); } } asgRefreshResumen(); }
+function asgAddUnidad(){ ASG.unidades.push({unidad:'',prioridad:'',tipo:'salida_entrada',pax:'',extra:'',t1:'',t2:''}); asgRenderUTbody(true); }
+function asgDelUnidad(i){ ASG.unidades.splice(i,1); asgRenderUTbody(false); }
+function asgAddComun(){ ASG.comunes.push({area:'',t1:'',t2:''}); asgRenderCTbody(true); }
+function asgDelComun(i){ ASG.comunes.splice(i,1); asgRenderCTbody(false); }
 function asgNueva(){ ASG={pubId:null,equipo:'',fecha:'',unidades:[{unidad:'',prioridad:'',tipo:'salida_entrada',pax:'',extra:'',t1:'',t2:''}],comunes:[]}; asgTab='asignaciones'; show('asignaciones'); }
 function setAsgTab(t){ asgTab=t; show('asignaciones'); }
 function asgFind(id){ return ASG_PUBS.find(p=>p.id===id); }
@@ -2824,10 +2826,11 @@ async function asgSyncCatalogs(){
   if(ar.length)  await sb.from('limpieza_areas_cat').upsert(ar.map(n=>({nombre:n})),{onConflict:'nombre',ignoreDuplicates:true});
 }
 async function asgPublicar(){
+  if(!ASG.equipo){ alert('Selecciona el equipo antes de publicar.'); return; }
   if(!ASG.fecha){ alert('Selecciona la fecha del día antes de publicar.'); return; }
   let pubId=ASG.pubId;
-  if(pubId==null){ const {data,error}=await sb.from('limpieza_pub').insert({fecha:ASG.fecha,created_by:ME.id}).select().single(); if(error){alert('Error: '+error.message);return;} pubId=data.id; }
-  else { const {error}=await sb.from('limpieza_pub').update({fecha:ASG.fecha}).eq('id',pubId); if(error){alert('Error: '+error.message);return;} }
+  if(pubId==null){ const {data,error}=await sb.from('limpieza_pub').insert({fecha:ASG.fecha,equipo:ASG.equipo,created_by:ME.id}).select().single(); if(error){alert('Error: '+error.message);return;} pubId=data.id; }
+  else { const {error}=await sb.from('limpieza_pub').update({fecha:ASG.fecha,equipo:ASG.equipo}).eq('id',pubId); if(error){alert('Error: '+error.message);return;} }
   await sb.from('limpieza_pub_unidades').delete().eq('pub_id',pubId);
   await sb.from('limpieza_pub_comunes').delete().eq('pub_id',pubId);
   const us=ASG.unidades.filter(u=>(u.unidad||u.t1||u.t2)).map((u,ix)=>({pub_id:pubId,unidad:u.unidad,prioridad:u.prioridad,tipo:u.tipo,pax:u.pax,extra:u.extra,t1:u.t1,t2:u.t2,orden:ix}));
@@ -2838,7 +2841,7 @@ async function asgPublicar(){
   ASG.pubId=pubId; asgTab='publicadas'; show('asignaciones');
 }
 function asgEditar(id){ const p=asgFind(id); if(!p) return;
-  ASG={pubId:p.id, fecha:p.fecha, unidades:(p.unidades||[]).map(u=>({unidad:u.unidad||'',prioridad:u.prioridad||'',tipo:u.tipo||'salida_entrada',pax:u.pax||'',extra:u.extra||'',t1:u.t1||'',t2:u.t2||''})), comunes:(p.comunes||[]).map(c=>({area:c.area||'',t1:c.t1||'',t2:c.t2||''}))};
+  ASG={pubId:p.id, equipo:p.equipo||'', fecha:p.fecha, unidades:(p.unidades||[]).map(u=>({unidad:u.unidad||'',prioridad:u.prioridad||'',tipo:u.tipo||'salida_entrada',pax:u.pax||'',extra:u.extra||'',t1:u.t1||'',t2:u.t2||''})), comunes:(p.comunes||[]).map(c=>({area:c.area||'',t1:c.t1||'',t2:c.t2||''}))};
   asgTab='asignaciones'; show('asignaciones'); }
 async function asgEliminar(id){ if(!confirm('¿Eliminar esta asignación publicada del historial?')) return;
   const {error}=await sb.from('limpieza_pub').delete().eq('id',id); if(error){alert('Error: '+error.message);return;}
@@ -2850,7 +2853,7 @@ function asgPrintHTML(d){
   const filasC=(d.comunes||[]).map(c=>`<tr><td><b>${esc(c.area)}</b></td><td>${esc(c.t1)}</td><td>${esc(c.t2)}</td></tr>`).join('');
   const r=asgComputeResumen(d);
   const resumen=r.length?`<h3 class="apz-h3">Personal llamado a trabajar (${r.length})</h3><div class="apz-res">${r.map((p,i)=>`<div>${i+1}. <b>${esc(p.nombre)}</b> <span style="color:#888">(${[p.u?p.u+' und':'',p.c?p.c+' z.común':''].filter(Boolean).join(' · ')})</span></div>`).join('')}</div>`:'';
-  return `<div class="apz-head"><img src="${LOGO}" alt="Amazinn Places" style="height:34px"><div><div class="apz-title">ENTRADAS Y SALIDAS</div><div class="apz-date">${esc(fechaLarga(d.fecha))}</div></div></div>
+  return `<div class="apz-head"><img src="${LOGO}" alt="Amazinn Places" style="height:34px"><div><div class="apz-title">ENTRADAS Y SALIDAS</div><div class="apz-date">${esc(fechaLarga(d.fecha))}${d.equipo?' · Equipo: '+esc(d.equipo):''}</div></div></div>
     <h3 class="apz-h3">Unidades</h3>
     <table class="apz-table"><colgroup><col style="width:15%"><col style="width:12%"><col style="width:13%"><col style="width:8%"><col style="width:16%"><col style="width:18%"><col style="width:18%"></colgroup><thead><tr><th>Unidad</th><th>Prioridad</th><th>Tipo</th><th>Nº pax</th><th>Extra</th><th>Trabajador 1</th><th>Trabajador 2</th></tr></thead><tbody>${filasU||'<tr><td colspan="7" style="color:#999">—</td></tr>'}</tbody></table>
     ${(d.comunes&&d.comunes.length)?`<h3 class="apz-h3">Zonas comunes</h3><table class="apz-table"><colgroup><col style="width:40%"><col style="width:30%"><col style="width:30%"></colgroup><thead><tr><th>Área común</th><th>Trabajador 1</th><th>Trabajador 2</th></tr></thead><tbody>${filasC}</tbody></table>`:''}
@@ -2914,11 +2917,11 @@ function asgEnsureStyle(){ if(document.getElementById('asgStyle')) return; const
   document.head.appendChild(s); }
 
 function asgDatalists(){ return `<datalist id="asgUniDL">${ASG_UNI.map(x=>`<option value="${esc(x)}">`).join('')}</datalist>
-  <datalist id="asgTrabDL">${ASG_TRAB.map(x=>`<option value="${esc(x)}">`).join('')}</datalist>
+  <datalist id="asgTrabDL">${asgTeamWorkers().map(x=>`<option value="${esc(x)}">`).join('')}</datalist>
   <datalist id="asgAreaDL">${ASG_AREA.map(x=>`<option value="${esc(x)}">`).join('')}</datalist>`; }
-function asgRenderEditor(){
+function asgUnidadRows(){
   const edit=asgCan();
-  const filasU=ASG.unidades.map((u,i)=> edit ? `<tr>
+  const rows=ASG.unidades.map((u,i)=> edit ? `<tr>
     <td><input list="asgUniDL" value="${esc(u.unidad)}" placeholder="Buscar unidad…" oninput="asgUpdU(${i},'unidad',this.value)" class="asg-cell asg-cell-w"></td>
     <td><input value="${esc(u.prioridad)}" placeholder="—" oninput="asgUpdU(${i},'prioridad',this.value)" class="asg-cell"></td>
     <td><select onchange="asgUpdU(${i},'tipo',this.value)" class="asg-cell">${ASG_TIPO.map(o=>`<option value="${o[0]}" ${u.tipo===o[0]?'selected':''}>${o[1]}</option>`).join('')}</select></td>
@@ -2928,28 +2931,44 @@ function asgRenderEditor(){
     <td><input list="asgTrabDL" value="${esc(u.t2)}" placeholder="(opcional)" oninput="asgUpdU(${i},'t2',this.value)" class="asg-cell"></td>
     <td class="asg-act"><button onclick="asgDelUnidad(${i})" title="Quitar fila">🗑</button></td></tr>`
     : `<tr><td><b>${esc(u.unidad)}</b></td><td>${esc(u.prioridad)}</td><td>${asgTipoLabel(u.tipo)}</td><td>${esc(u.pax)}</td><td>${u.extra?`<span class="asg-nota">📝 ${esc(u.extra)}</span>`:''}</td><td>${esc(u.t1)}</td><td>${esc(u.t2)}</td></tr>`).join('');
-  const filasC=ASG.comunes.map((c,i)=> edit ? `<tr>
+  return rows||`<tr><td colspan="${edit?8:7}" style="color:var(--suave)">Sin unidades. Añade una fila.</td></tr>`;
+}
+function asgComunRows(){
+  const edit=asgCan();
+  const rows=ASG.comunes.map((c,i)=> edit ? `<tr>
     <td><input list="asgAreaDL" value="${esc(c.area)}" placeholder="Buscar área común…" oninput="asgUpdC(${i},'area',this.value)" class="asg-cell asg-cell-w"></td>
     <td><input list="asgTrabDL" value="${esc(c.t1)}" placeholder="Trabajador…" oninput="asgUpdC(${i},'t1',this.value)" class="asg-cell"></td>
     <td><input list="asgTrabDL" value="${esc(c.t2)}" placeholder="(opcional)" oninput="asgUpdC(${i},'t2',this.value)" class="asg-cell"></td>
     <td class="asg-act"><button onclick="asgDelComun(${i})" title="Quitar fila">🗑</button></td></tr>`
     : `<tr><td><b>${esc(c.area)}</b></td><td>${esc(c.t1)}</td><td>${esc(c.t2)}</td></tr>`).join('');
+  return rows||`<tr><td colspan="${edit?4:3}" style="color:var(--suave)">Sin zonas comunes. Añade una fila.</td></tr>`;
+}
+function asgRenderEditor(){
+  const edit=asgCan();
+  if(edit && !ASG.equipo){
+    return `<div class="page-sub">Primero elige a qué equipo corresponde la asignación de este día.</div>
+      <div class="panel" style="max-width:560px"><h2 style="margin-top:0">👥 ¿A qué equipo se asigna?</h2>
+      <div style="display:flex;gap:10px;flex-wrap:wrap">${EQUIPOS.map(e=>`<button class="btn ghost" style="font-size:15px;padding:12px 18px" onclick="asgSetEquipo(${JSON.stringify(e)})">${esc(e)}</button>`).join('')}</div>
+      <p style="font-size:12.5px;color:var(--suave);margin-top:12px">Los desplegables de trabajador mostrarán solo el personal de ese equipo. Los equipos se gestionan en “Listado trabajadores”.</p></div>`;
+  }
   return `${asgDatalists()}
     <div class="page-sub">${edit?'Crea el plan de limpieza del día: unidades, zonas comunes y personal. Publícalo y descárgalo (en “Publicadas”) para el grupo de WhatsApp.':'Consulta las asignaciones de limpieza del día'}</div>
     <div class="panel" style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin-bottom:14px">
-      <label style="font-weight:600;font-size:13px">📅 Día:</label>
+      <span class="asg-pill" style="background:#e7eef7;color:#1b3a5b">👥 ${esc(ASG.equipo)}</span>
+      ${edit?`<button class="btn ghost" style="padding:4px 10px;font-size:12px" onclick="asgSetEquipo('')">cambiar</button>`:''}
+      <label style="font-weight:600;font-size:13px;margin-left:6px">📅 Día:</label>
       ${edit?`<input type="date" value="${esc(ASG.fecha)}" onchange="asgUpdFecha(this.value)" style="padding:8px 11px;border:1px solid var(--gris2);border-radius:8px;font-family:inherit">`:`<b>${esc(fechaLarga(ASG.fecha))}</b>`}
       ${ASG.pubId!=null?`<span class="asg-pill">Editando publicación</span>`:''}
       ${edit?`<button class="btn" style="margin-left:auto" onclick="asgPublicar()">${ASG.pubId!=null?'💾 Actualizar publicación':'✓ Publicar'}</button>`:''}
     </div>
     <div class="panel"><h2 style="margin-top:0">🏠 Unidades</h2>
       <div class="asg-scroll"><table class="asg-table"><thead><tr><th style="min-width:150px">Unidad</th><th>Prioridad</th><th style="min-width:155px">Tipo</th><th>Nº pax</th><th>Extra / nota</th><th>Trabajador 1</th><th>Trabajador 2</th>${edit?'<th></th>':''}</tr></thead>
-        <tbody>${filasU||`<tr><td colspan="${edit?8:7}" style="color:var(--suave)">Sin unidades. Añade una fila.</td></tr>`}</tbody></table></div>
+        <tbody id="asgUTbody">${asgUnidadRows()}</tbody></table></div>
       ${edit?`<button class="btn ghost" style="margin-top:10px" onclick="asgAddUnidad()">➕ Añadir unidad</button>`:''}
     </div>
     <div class="panel"><h2 style="margin-top:0">🧽 Zonas comunes</h2>
       <div class="asg-scroll"><table class="asg-table"><thead><tr><th style="min-width:200px">Área común</th><th>Trabajador 1</th><th>Trabajador 2</th>${edit?'<th></th>':''}</tr></thead>
-        <tbody>${filasC||`<tr><td colspan="${edit?4:3}" style="color:var(--suave)">Sin zonas comunes. Añade una fila.</td></tr>`}</tbody></table></div>
+        <tbody id="asgCTbody">${asgComunRows()}</tbody></table></div>
       ${edit?`<button class="btn ghost" style="margin-top:10px" onclick="asgAddComun()">➕ Añadir zona común</button>`:''}
     </div>
     <div class="panel"><h2 style="margin-top:0">📋 Resumen — personal llamado a trabajar</h2>
@@ -2959,21 +2978,22 @@ function asgRenderEditor(){
 }
 function asgRenderListado(){
   const edit=asgCan();
-  const filas=ASG_TRAB_FULL.map((t,i)=>`<tr><td style="width:34px;color:var(--suave)">${i+1}</td><td><b>${esc(t.nombre)}</b></td>${edit?`<td class="asg-act"><button onclick="asgDelTrab(${t.id})" title="Borrar trabajador">🗑</button></td>`:''}</tr>`).join('');
-  return `<div class="page-sub">Personal de limpieza disponible. Estos nombres alimentan los desplegables de Trabajador 1 y 2 en las asignaciones.</div>
+  const filas=ASG_TRAB_FULL.map((t,i)=>`<tr><td style="width:34px;color:var(--suave)">${i+1}</td><td><b>${esc(t.nombre)}</b></td><td>${t.equipo?`<span class="asg-pill" style="background:#e7eef7;color:#1b3a5b">${esc(t.equipo)}</span>`:'<span style="color:var(--suave)">—</span>'}</td>${edit?`<td class="asg-act"><button onclick="asgDelTrab(${t.id})" title="Borrar trabajador">🗑</button></td>`:''}</tr>`).join('');
+  return `<div class="page-sub">Personal de limpieza disponible y su equipo. Estos nombres alimentan los desplegables de Trabajador 1 y 2 (filtrados por el equipo de la asignación).</div>
     ${edit?`<div class="panel" style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
-      <input id="asgTrabN" placeholder="Nombre y apellido del trabajador…" onkeydown="if(event.key==='Enter')asgAddTrab()" style="flex:1;min-width:240px;padding:9px 12px;border:1px solid var(--gris2);border-radius:8px;font-family:inherit;font-size:14px">
+      <input id="asgTrabN" placeholder="Nombre y apellido del trabajador…" onkeydown="if(event.key==='Enter')asgAddTrab()" style="flex:1;min-width:220px;padding:9px 12px;border:1px solid var(--gris2);border-radius:8px;font-family:inherit;font-size:14px">
+      <select id="asgTrabEq" style="padding:9px 12px;border:1px solid var(--gris2);border-radius:8px;font-family:inherit;font-size:14px"><option value="">Equipo…</option>${EQUIPOS.map(e=>`<option value="${esc(e)}">${esc(e)}</option>`).join('')}</select>
       <button class="btn" onclick="asgAddTrab()">➕ Añadir trabajador</button></div>`:''}
     <div class="panel"><h2 style="margin-top:0">👥 Trabajadores (${ASG_TRAB_FULL.length})</h2>
-      <table class="asg-table"><thead><tr><th>#</th><th>Nombre y apellido</th>${edit?'<th></th>':''}</tr></thead>
-      <tbody>${filas||`<tr><td colspan="${edit?3:2}" style="color:var(--suave)">Sin trabajadores. Añade el primero.</td></tr>`}</tbody></table></div>`;
+      <table class="asg-table"><thead><tr><th>#</th><th>Nombre y apellido</th><th>Equipo</th>${edit?'<th></th>':''}</tr></thead>
+      <tbody>${filas||`<tr><td colspan="${edit?4:3}" style="color:var(--suave)">Sin trabajadores. Añade el primero.</td></tr>`}</tbody></table></div>`;
 }
 function asgRenderPublicadas(){
   const edit=asgCan();
   const sub=`<div class="page-sub">Historial de asignaciones publicadas, por fecha. Aquí puedes descargar el PDF, editar o eliminar cada una.</div>`;
   if(!ASG_PUBS.length) return sub+`<div class="panel" style="color:var(--suave)">Todavía no hay asignaciones publicadas.${edit?' Crea una en la pestaña “Asignaciones” y pulsa Publicar.':''}</div>`;
   const items=ASG_PUBS.map(e=>{ const r=asgComputeResumen(e);
-    return `<div class="pubcard"><div class="pi"><b>📅 ${esc(fechaLarga(e.fecha))}</b><span>${(e.unidades||[]).length} unidad(es) · ${(e.comunes||[]).length} zona(s) común · ${r.length} personal</span></div>
+    return `<div class="pubcard"><div class="pi"><b>📅 ${esc(fechaLarga(e.fecha))}${e.equipo?` <span class="asg-pill" style="background:#e7eef7;color:#1b3a5b;font-size:10.5px">${esc(e.equipo)}</span>`:''}</b><span>${(e.unidades||[]).length} unidad(es) · ${(e.comunes||[]).length} zona(s) común · ${r.length} personal</span></div>
       <div class="pa"><button class="btn ghost" onclick="asgPDF(${e.id})">📥 PDF</button>
         ${edit?`<details class="asg-kebab"><summary>⋮</summary><div class="asg-kebab-menu"><button onclick="asgEditar(${e.id})">✏️ Editar</button><button onclick="asgEliminar(${e.id})">🗑 Eliminar</button></div></details>`:''}</div></div>`; }).join('');
   return sub+`${edit?`<button class="btn ghost" style="margin-bottom:14px" onclick="asgNueva()">➕ Nueva asignación</button>`:''}${items}`;
