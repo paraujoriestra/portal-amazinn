@@ -777,7 +777,9 @@ async function enterApp(user){
   if(window._msgPoll) clearInterval(window._msgPoll);
   window._msgPoll = setInterval(refreshBadges, 20000);
   chatMsgs=[{from:'bot',msg:`¡Hola, ${(PROFILE.nombre||'').split(' ')[0]||''}! 🤖 Soy <b>Wally</b>, el asistente de Amazinn Places. Pregúntame cómo encontrar algo.`}];
-  show('inicio');
+  const h=(location.hash||'').replace(/^#/,'');
+  const start=(h==='inicio'||h==='perfil'||NAV.some(n=>n.id===h))?h:'inicio';
+  show(start);
 }
 function inis(n){return (n||'?').trim().split(/\s+/).slice(0,2).map(w=>w[0]).join('').toUpperCase();}
 function loginMsg(icon,titulo,texto){
@@ -816,6 +818,7 @@ const NAV=[
   {id:'perfil',ic:'👤',t:'Mi perfil'},
   {id:'organigrama',ic:'🏢',t:'Organigrama'},
   {id:'proveedores',ic:'🚚',t:'Proveedores'},
+  {id:'propietarios',ic:'🏠',t:'Propietarios'},
   {id:'suministros',ic:'🔌',t:'Suministros'},
   {grp:'Mantenimiento'},
   {id:'incidencias',ic:'🛠️',t:'Incidencias'},
@@ -885,6 +888,7 @@ const ICONS={
   catalogos:'<path d="M3 7h18M3 12h18M3 17h18"/><circle cx="6" cy="7" r="0.6"/>',
   organigrama:'<rect x="9" y="2" width="6" height="5" rx="1"/><rect x="2" y="16" width="6" height="5" rx="1"/><rect x="16" y="16" width="6" height="5" rx="1"/><path d="M12 7v4M5 16v-3h14v3"/>',
   proveedores:'<path d="M2 6h12v9H2zM14 9h4l3 3v3h-7z"/><circle cx="6.5" cy="18" r="1.6"/><circle cx="17.5" cy="18" r="1.6"/>',
+  propietarios:'<path d="M3 11l9-7 9 7"/><path d="M5 10v10h14V10"/><path d="M10 20v-6h4v6"/>',
   suministros:'<path d="M9 2v6M15 2v6M7 8h10v3a5 5 0 0 1-10 0z"/><path d="M12 16v5"/>',
   mensajes:'<path d="M21 15a2 2 0 0 1-2 2H8l-4 4V5a2 2 0 0 1 2-2h13a2 2 0 0 1 2 2z"/>',
   bitacora:'<rect x="5" y="4" width="14" height="17" rx="1"/><path d="M9 4V3h6v1M8 10h8M8 14h8M8 18h5"/>',
@@ -990,6 +994,7 @@ function highlightNav(){document.querySelectorAll('#nav a').forEach(a=>a.classLi
 function ensureGroupOpen(id){const g=groupOf(id);if(g&&navOpen&&!(navOpen.size===1&&navOpen.has(g))){navOpen.clear();navOpen.add(g);buildNav();}}
 function show(id){
   curPage=id;
+  try{ if(('#'+id)!==location.hash) history.replaceState(null,'','#'+id); }catch(e){}
   document.body.classList.remove('nav-open');
   ensureGroupOpen(id); highlightNav();
   const m=document.getElementById('main');
@@ -999,6 +1004,7 @@ function show(id){
   else if(id==='horarios'){ m.innerHTML='<div class="page-title">Horarios</div><div class="page-sub">Cargando…</div>'; pageHorarios(); }
   else if(id==='organigrama'){ m.innerHTML='<div class="page-title">Organigrama</div><div class="page-sub">Cargando…</div>'; pageOrganigrama(); }
   else if(id==='proveedores'){ m.innerHTML='<div class="page-title">Proveedores</div><div class="page-sub">Cargando…</div>'; pageProveedores(); }
+  else if(id==='propietarios'){ m.innerHTML='<div class="page-title">Propietarios</div><div class="page-sub">Cargando…</div>'; pagePropietarios(); }
   else if(id==='suministros'){ m.innerHTML='<div class="page-title">Suministros</div><div class="page-sub">Cargando…</div>'; pageSuministros(); }
   else if(id==='sugerencias'){ m.innerHTML='<div class="page-title">Sugerencias</div><div class="page-sub">Cargando…</div>'; pageSugerencias(); }
   else if(id==='fichaje'){ m.innerHTML='<div class="page-title">Fichaje</div><div class="page-sub">Cargando…</div>'; pageFichaje(); }
@@ -1560,15 +1566,36 @@ async function orgDropAside(e){ e.preventDefault(); e.stopPropagation(); e.curre
   const{error}=await sb.from('profiles').update({fuera_org:true,jefe_id:null}).eq('id',id); if(error){alert('No se pudo guardar: '+error.message);return;} orgDragId=null; pageOrganigrama(); }
 
 /* ---------------- IMPORTAR EXCEL (Dirección/Admin/Propietario) ---------------- */
-const IMPORT_COLS={ proveedores:['nombre','ruc','email','tel','cat','nota'], suministros:['tipo','referencia','titular','compania','propiedad'] };
+const IMPORT_COLS={ proveedores:['Nombre proveedor','Tipología','Concepto','RUC','Email','Teléfono','Banco','Tipo de cuenta','Nº de cuenta'], propietarios:['Nombre propietario','Propiedad','Concepto','Sociedad','RUC','Email','Teléfono','Banco','Tipo de cuenta','Nº de cuenta'], suministros:['tipo','referencia','titular','compania','propiedad'] };
 function importBtn(tabla){ if(!isDireccion()) return ''; return `<label class="btn ghost" style="cursor:pointer">📥 Importar Excel<input type="file" accept=".xlsx,.xls,.csv" style="display:none" onchange="importExcel('${tabla}',this)"></label><a href="#" style="font-size:12px;color:var(--acento)" onclick="plantillaExcel('${tabla}');return false">descargar plantilla</a>`; }
 function normKey(k){ return (k==null?'':''+k).trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,''); }
 function rowGet(map,...names){ for(const n of names){ const v=map[normKey(n)]; if(v!==undefined&&v!=='') return (''+v).trim(); } return ''; }
 function mapRow(tabla,r){
   const map={}; Object.keys(r).forEach(k=>map[normKey(k)]=r[k]);
   if(tabla==='proveedores'){
-    const nombre=rowGet(map,'nombre','proveedor','empresa'); if(!nombre) return null;
-    return { nombre, ruc:rowGet(map,'ruc'), email:rowGet(map,'email','correo'), tel:rowGet(map,'tel','telefono'), cat:rowGet(map,'cat','categoria'), nota:rowGet(map,'nota','notas','observaciones') };
+    const nombre=rowGet(map,'nombre proveedor','nombre','proveedor','empresa'); if(!nombre) return null;
+    return { nombre,
+      tipologia:rowGet(map,'tipologia','tipo','categoria'),
+      concepto:rowGet(map,'concepto'),
+      ruc:rowGet(map,'ruc'),
+      email:rowGet(map,'email','correo'),
+      tel:rowGet(map,'telefono','tel'),
+      banco:rowGet(map,'banco'),
+      tipo_cuenta:rowGet(map,'tipo de cuenta','tipo cuenta'),
+      num_cuenta:rowGet(map,'nº de cuenta','no de cuenta','numero de cuenta','n de cuenta','num cuenta','cuenta') };
+  }
+  if(tabla==='propietarios'){
+    const nombre=rowGet(map,'nombre propietario','nombre','propietario'); if(!nombre) return null;
+    return { nombre,
+      propiedad:rowGet(map,'propiedad','apartamento','casa','unidad'),
+      concepto:rowGet(map,'concepto'),
+      sociedad:rowGet(map,'sociedad','empresa'),
+      ruc:rowGet(map,'ruc'),
+      email:rowGet(map,'email','correo'),
+      tel:rowGet(map,'telefono','tel'),
+      banco:rowGet(map,'banco'),
+      tipo_cuenta:rowGet(map,'tipo de cuenta','tipo cuenta'),
+      num_cuenta:rowGet(map,'nº de cuenta','no de cuenta','numero de cuenta','n de cuenta','num cuenta','cuenta') };
   }
   const tipo=rowGet(map,'tipo'); const ref=rowGet(map,'referencia','ref','nis','idaan','suscriptor');
   if(!tipo&&!ref) return null;
@@ -1605,27 +1632,72 @@ async function pageProveedores(){
   const{data,error}=await sb.from('proveedores').select('*').order('nombre');
   if(error){document.getElementById('main').innerHTML='<div class="panel">Error: '+error.message+'</div>';return;}
   const rows=(data||[]).map(p=>`<tr>
-    <td><b>${esc(p.nombre)}</b></td><td>${esc(p.ruc||'')}</td>
+    ${canEdit?`<td><button class="btn ghost" style="padding:4px 9px" onclick="delRow('proveedores',${p.id},'proveedores')" title="Eliminar">🗑️</button></td>`:''}
+    <td><b>${esc(p.nombre)}</b></td>
+    <td>${p.tipologia?`<span class="badge b-blue">${esc(p.tipologia)}</span>`:''}</td>
+    <td>${esc(p.concepto||'')}</td>
+    <td>${esc(p.ruc||'')}</td>
     <td>${p.email?`<a href="mailto:${esc(p.email)}">${esc(p.email)}</a>`:''}</td>
-    <td>${esc(p.tel||'')}</td><td>${p.cat?`<span class="badge b-blue">${esc(p.cat)}</span>`:''}</td>
-    <td style="color:var(--suave)">${esc(p.nota||'')}</td>
-    ${canEdit?`<td><button class="btn ghost" style="padding:4px 9px" onclick="delRow('proveedores',${p.id},'proveedores')">🗑️</button></td>`:''}</tr>`).join('');
+    <td>${esc(p.tel||'')}</td>
+    <td>${esc(p.banco||'')}</td>
+    <td>${esc(p.tipo_cuenta||'')}</td>
+    <td>${esc(p.num_cuenta||'')}</td></tr>`).join('');
   document.getElementById('main').innerHTML=`
     <div class="page-title">Proveedores</div><div class="page-sub">Directorio de proveedores${canEdit?' · puedes añadir':''}</div>
     ${canEdit?`<div style="margin-bottom:14px;display:flex;gap:8px;flex-wrap:wrap;align-items:center"><button class="btn" onclick="provFormOpen=!provFormOpen;show('proveedores')">${provFormOpen?'✕ Cerrar':'➕ Nuevo proveedor'}</button>${importBtn('proveedores')}</div>`:''}
-    ${canEdit&&provFormOpen?`<div class="panel" style="max-width:680px"><form class="box" onsubmit="return createProv(event)" style="max-width:none">
-      <div class="row"><div><label>Nombre</label><input id="pN" required></div><div><label>RUC</label><input id="pR"></div></div>
-      <div class="row"><div><label>Email</label><input id="pE" type="email"></div><div><label>Teléfono</label><input id="pT"></div></div>
-      <label>Categoría</label><input id="pC" placeholder="Electricidad, Limpieza…"><label>Nota</label><textarea id="pNo" rows="2"></textarea>
+    ${canEdit&&provFormOpen?`<div class="panel" style="max-width:720px"><form class="box" onsubmit="return createProv(event)" style="max-width:none">
+      <div class="row"><div><label>Nombre proveedor</label><input id="pN" required></div><div><label>Tipología</label><input id="pTip" placeholder="Electricidad, Limpieza…"></div></div>
+      <label>Concepto</label><input id="pCon" placeholder="Servicio/producto que provee">
+      <div class="row"><div><label>RUC</label><input id="pR"></div><div><label>Email</label><input id="pE" type="email"></div></div>
+      <div class="row"><div><label>Teléfono</label><input id="pT"></div><div><label>Banco</label><input id="pB"></div></div>
+      <div class="row"><div><label>Tipo de cuenta</label><input id="pTC" placeholder="Ahorro / Corriente"></div><div><label>Nº de cuenta</label><input id="pNC"></div></div>
       <div><button class="btn" type="submit">Guardar</button></div></form></div>`:''}
-    <div class="panel"><table><thead><tr><th>Proveedor</th><th>RUC</th><th>Email</th><th>Teléfono</th><th>Categoría</th><th>Nota</th>${canEdit?'<th></th>':''}</tr></thead><tbody>${rows||'<tr><td colspan="7" style="color:var(--suave)">Aún no hay proveedores.</td></tr>'}</tbody></table></div>`;
+    <div class="panel"><div style="overflow-x:auto"><table><thead><tr>${canEdit?'<th></th>':''}<th>Nombre proveedor</th><th>Tipología</th><th>Concepto</th><th>RUC</th><th>Email</th><th>Teléfono</th><th>Banco</th><th>Tipo de cuenta</th><th>Nº de cuenta</th></tr></thead><tbody>${rows||'<tr><td colspan="10" style="color:var(--suave)">Aún no hay proveedores.</td></tr>'}</tbody></table></div></div>`;
 }
 async function createProv(e){e.preventDefault();
-  const row={nombre:val('pN'),ruc:val('pR'),email:val('pE'),tel:val('pT'),cat:val('pC'),nota:val('pNo')};
+  const row={nombre:val('pN'),tipologia:val('pTip'),concepto:val('pCon'),ruc:val('pR'),email:val('pE'),tel:val('pT'),banco:val('pB'),tipo_cuenta:val('pTC'),num_cuenta:val('pNC')};
   if(!row.nombre)return false;
   const{error}=await sb.from('proveedores').insert(row);
   if(error){alert('Error: '+error.message);return false;}
   provFormOpen=false;show('proveedores');return false;
+}
+
+/* ---------------- PROPIETARIOS ---------------- */
+let propFormOpen=false;
+async function pagePropietarios(){
+  const canEdit=CAN_MANAGE.includes(PROFILE.role);
+  const{data,error}=await sb.from('propietarios').select('*').order('nombre');
+  if(error){document.getElementById('main').innerHTML='<div class="panel">Error (¿ejecutaste supabase_propietarios.sql?): '+esc(error.message)+'</div>';return;}
+  const rows=(data||[]).map(p=>`<tr>
+    ${canEdit?`<td><button class="btn ghost" style="padding:4px 9px" onclick="delRow('propietarios',${p.id},'propietarios')" title="Eliminar">🗑️</button></td>`:''}
+    <td><b>${esc(p.nombre)}</b></td>
+    <td>${p.propiedad?`<span class="badge b-blue">${esc(p.propiedad)}</span>`:''}</td>
+    <td>${esc(p.concepto||'')}</td>
+    <td>${esc(p.sociedad||'')}</td>
+    <td>${esc(p.ruc||'')}</td>
+    <td>${p.email?`<a href="mailto:${esc(p.email)}">${esc(p.email)}</a>`:''}</td>
+    <td>${esc(p.tel||'')}</td>
+    <td>${esc(p.banco||'')}</td>
+    <td>${esc(p.tipo_cuenta||'')}</td>
+    <td>${esc(p.num_cuenta||'')}</td></tr>`).join('');
+  document.getElementById('main').innerHTML=`
+    <div class="page-title">Propietarios</div><div class="page-sub">Directorio de propietarios${canEdit?' · puedes añadir':''}</div>
+    ${canEdit?`<div style="margin-bottom:14px;display:flex;gap:8px;flex-wrap:wrap;align-items:center"><button class="btn" onclick="propFormOpen=!propFormOpen;show('propietarios')">${propFormOpen?'✕ Cerrar':'➕ Nuevo propietario'}</button>${importBtn('propietarios')}</div>`:''}
+    ${canEdit&&propFormOpen?`<div class="panel" style="max-width:720px"><form class="box" onsubmit="return createProp(event)" style="max-width:none">
+      <div class="row"><div><label>Nombre propietario</label><input id="oN" required></div><div><label>Propiedad</label><input id="oProp"></div></div>
+      <div class="row"><div><label>Concepto</label><input id="oCon"></div><div><label>Sociedad</label><input id="oSoc"></div></div>
+      <div class="row"><div><label>RUC</label><input id="oR"></div><div><label>Email</label><input id="oE" type="email"></div></div>
+      <div class="row"><div><label>Teléfono</label><input id="oT"></div><div><label>Banco</label><input id="oB"></div></div>
+      <div class="row"><div><label>Tipo de cuenta</label><input id="oTC" placeholder="Ahorro / Corriente"></div><div><label>Nº de cuenta</label><input id="oNC"></div></div>
+      <div><button class="btn" type="submit">Guardar</button></div></form></div>`:''}
+    <div class="panel"><div style="overflow-x:auto"><table><thead><tr>${canEdit?'<th></th>':''}<th>Nombre propietario</th><th>Propiedad</th><th>Concepto</th><th>Sociedad</th><th>RUC</th><th>Email</th><th>Teléfono</th><th>Banco</th><th>Tipo de cuenta</th><th>Nº de cuenta</th></tr></thead><tbody>${rows||'<tr><td colspan="11" style="color:var(--suave)">Aún no hay propietarios.</td></tr>'}</tbody></table></div></div>`;
+}
+async function createProp(e){e.preventDefault();
+  const row={nombre:val('oN'),propiedad:val('oProp'),concepto:val('oCon'),sociedad:val('oSoc'),ruc:val('oR'),email:val('oE'),tel:val('oT'),banco:val('oB'),tipo_cuenta:val('oTC'),num_cuenta:val('oNC')};
+  if(!row.nombre)return false;
+  const{error}=await sb.from('propietarios').insert(row);
+  if(error){alert('Error: '+error.message);return false;}
+  propFormOpen=false;show('propietarios');return false;
 }
 
 /* ---------------- SUMINISTROS ---------------- */
