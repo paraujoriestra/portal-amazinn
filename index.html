@@ -663,7 +663,44 @@
       width:84vw;max-width:300px;z-index:45;transform:translateX(-100%);
       transition:transform .25s ease;box-shadow:0 0 40px rgba(0,0,0,.25);overflow-y:auto}
     body.nav-open nav.side{transform:translateX(0)}
-    main{flex:none;width:100%;max-width:100%;box-sizing:border-box;padding:16px 14px}
+    main{flex:none;width:100%;max-width:100%;box-sizing:border-box;padding:16px 14px;margin-left:0}
+  }
+
+  /* Acordeón: grupo cerrado oculto (cuando el menú está expandido) */
+  .grp-items.closed{display:none}
+  /* Submenú de cada sección con un tono distinto para diferenciarlo */
+  nav.side .grp-items{background:#ece2d0}
+  body.dark nav.side .grp-items{background:#26241f}
+  /* Chincheta (solo escritorio) */
+  .nav-pin{display:none}
+
+  /* ===== MENÚ RAIL CON HOVER + CHINCHETA (escritorio) ===== */
+  @media(min-width:761px){
+    nav.side{position:fixed;left:0;top:60px;bottom:0;width:66px;
+      overflow-x:hidden;overflow-y:auto;z-index:30;white-space:nowrap;
+      transition:width .18s ease;box-shadow:none}
+    nav.side:hover{width:252px;box-shadow:8px 0 26px rgba(0,0,0,.13)}
+    main{margin-left:66px;transition:margin-left .18s ease}
+    .nav-pin{display:flex;justify-content:flex-end;padding:8px 12px 6px;position:sticky;top:0;background:inherit;z-index:3}
+    .nav-pin button{background:none;border:none;cursor:pointer;font-size:16px;opacity:.55;line-height:1;transform:rotate(40deg);transition:.15s}
+    .nav-pin button:hover{opacity:1}
+    body.nav-pinned .nav-pin button{opacity:1;transform:rotate(0)}
+
+    /* --- Plegado: solo cuando NO está fijado y NO hay hover --- */
+    body:not(.nav-pinned) nav.side:not(:hover) .nav-pin{justify-content:center;padding:8px 0 6px}
+    body:not(.nav-pinned) nav.side:not(:hover) .grp-items{background:transparent}
+    body:not(.nav-pinned) nav.side:not(:hover) .grp-items.closed{display:block}
+    body:not(.nav-pinned) nav.side:not(:hover) .grp-tog .grp-name,
+    body:not(.nav-pinned) nav.side:not(:hover) .grp-tog .car{display:none}
+    body:not(.nav-pinned) nav.side:not(:hover) .grp-tog{justify-content:center;padding:7px 0;margin-top:4px;border-top:1px solid var(--gris2);background:transparent}
+    body:not(.nav-pinned) nav.side:not(:hover) a{justify-content:center;padding:11px 0;gap:0;position:relative;border-left-color:transparent}
+    body:not(.nav-pinned) nav.side:not(:hover) a .label{display:none}
+    body:not(.nav-pinned) nav.side:not(:hover) a.active{background:var(--azul-claro);border-left-color:transparent}
+    body:not(.nav-pinned) nav.side:not(:hover) a .nav-badge{position:absolute;top:5px;right:16px;min-width:9px;width:9px;height:9px;padding:0;font-size:0;border-radius:50%}
+
+    /* --- Fijado: siempre abierto --- */
+    body.nav-pinned nav.side{width:252px;box-shadow:none}
+    body.nav-pinned main{margin-left:252px}
   }
 </style>
 </head>
@@ -924,6 +961,8 @@ const NAV=[
 ];
 const CAN_MANAGE=['responsable','direccion','admin','propietario'];
 let supTab='electricidad', navOpen=null;
+let navPinned=(()=>{try{return localStorage.getItem('navPinned')==='1';}catch(e){return false;}})();
+function toggleNavPin(){ navPinned=!navPinned; try{localStorage.setItem('navPinned',navPinned?'1':'0');}catch(e){} document.body.classList.toggle('nav-pinned',navPinned); }
 const SHIFTS=[{v:"",l:"—",c:"#dfe3ea"},{v:"M",l:"Mañana 09–17",c:"#cfe0f2"},{v:"T",l:"Tarde 14–22",c:"#f7e6b0"},{v:"P",l:"Partido",c:"#cdeee3"},{v:"N",l:"Noche 22–06",c:"#cfe0f2"},{v:"L",l:"Libre",c:"#dfe3ea"},{v:"V",l:"Vacaciones",c:"#f6cfcd"}];
 const SH=Object.fromEntries(SHIFTS.map(s=>[s.v,s]));
 // Horarios v2: catálogo de turnos
@@ -1077,21 +1116,35 @@ function haceTiempo(iso){ if(!iso) return 'nunca conectado'; const s=Math.floor(
   return 'el '+new Date(iso).toLocaleDateString('es-ES'); }
 function buildNav(){
   const nav=document.getElementById('nav');
+  const sc=nav.scrollTop;
   const groups=navGroups();
   if(navOpen===null) navOpen=new Set(groups[0]?[groups[0].name]:[]);
   nav.innerHTML='';
+  document.body.classList.toggle('nav-pinned',navPinned);
+  const pin=document.createElement('div'); pin.className='nav-pin';
+  pin.innerHTML='<button onclick="toggleNavPin()" title="Fijar el menú abierto / soltarlo" aria-label="Fijar menú">📌</button>';
+  nav.appendChild(pin);
   groups.forEach(g=>{
     const open=navOpen.has(g.name);
     const head=document.createElement('div'); head.className='grp-tog'+(open?' open':'');
     head.innerHTML=`<span class="grp-name">${g.name}</span><span class="car">${open?'▾':'▸'}</span>`;
-    head.onclick=()=>{ if(navOpen.has(g.name)){navOpen.clear();} else {navOpen.clear();navOpen.add(g.name);} buildNav(); };
+    head.onclick=()=>{
+      const navEl=document.getElementById('nav');
+      const before=head.getBoundingClientRect().top;             // posición visible del grupo pulsado
+      if(navOpen.has(g.name)){navOpen.clear();} else {navOpen.clear();navOpen.add(g.name);}
+      buildNav();
+      const gi=navGroups().findIndex(x=>x.name===g.name);          // mantenerlo en el mismo sitio (sin salto)
+      const nh=navEl.querySelectorAll('.grp-tog')[gi];
+      if(nh){ const after=nh.getBoundingClientRect().top; navEl.scrollTop += (after-before); }
+    };
     nav.appendChild(head);
-    const box=document.createElement('div'); if(!open) box.style.display='none';
-    g.items.forEach(it=>{const a=document.createElement('a');a.dataset.id=it.id;a.innerHTML=`<span class="nicw">${navIcon(it.id)}</span> ${it.t}`;a.onclick=()=>show(it.id);box.appendChild(a);});
+    const box=document.createElement('div'); box.className='grp-items'+(open?'':' closed');
+    g.items.forEach(it=>{const a=document.createElement('a');a.dataset.id=it.id;a.title=it.t;a.innerHTML=`<span class="nicw">${navIcon(it.id)}</span><span class="label">${it.t}</span>`;a.onclick=()=>show(it.id);box.appendChild(a);});
     nav.appendChild(box);
   });
   highlightNav();
   renderNavBadges();
+  nav.scrollTop=sc;
 }
 function highlightNav(){document.querySelectorAll('#nav a').forEach(a=>a.classList.toggle('active',a.dataset.id===curPage));}
 function ensureGroupOpen(id){const g=groupOf(id);if(g&&navOpen&&!(navOpen.size===1&&navOpen.has(g))){navOpen.clear();navOpen.add(g);buildNav();}}
