@@ -256,7 +256,7 @@
   /* ---- Organigrama (árbol) ---- */
   .org-rootzone{border:2px dashed var(--gris2);border-radius:10px;padding:11px;text-align:center;color:var(--suave);font-size:13px;margin-bottom:16px}
   .org-rootzone.org-over{outline:2px dashed var(--acento);background:var(--gris)}
-  .org-tree{overflow-x:auto;padding:6px 0 20px}
+  .org-tree{overflow:hidden;padding:6px 0 20px}
   .org-tree ul{position:relative;padding-top:22px;display:flex;justify-content:center;gap:6px;margin:0;list-style:none}
   .org-tree > ul{padding-top:0}
   .org-tree li{list-style:none;text-align:center;position:relative;padding:22px 8px 0}
@@ -268,18 +268,23 @@
   .org-tree li:last-child::before{border-right:2px solid var(--gris2);border-radius:0 6px 0 0}
   .org-tree li:first-child::after{border-radius:6px 0 0 0}
   .org-tree ul ul::before{content:'';position:absolute;top:0;left:50%;border-left:2px solid var(--gris2);width:0;height:22px}
-  .org-node{display:inline-flex;align-items:center;gap:10px;border:1px solid var(--gris2);background:#fff;border-radius:11px;padding:9px 13px;box-shadow:var(--sombra);position:relative;white-space:nowrap}
+  .org-node{display:flex;flex-direction:column;align-items:center;gap:4px;border:1px solid var(--gris2);background:#fff;border-radius:11px;padding:9px;box-shadow:var(--sombra);position:relative;width:130px;box-sizing:border-box}
   .org-node.drag{cursor:grab}
   .org-node.drag:active{cursor:grabbing}
-  .org-node .on-info{text-align:left}
-  .org-node .on-info b{font-size:13.5px}
-  .org-node .on-info small{color:var(--suave);font-size:11px;display:block}
+  .org-node .on-info{text-align:center;width:100%;min-width:0}
+  .org-node .on-info b{font-size:13px;display:block;white-space:nowrap;overflow:hidden;line-height:1.25}
+  .org-node .on-info small{color:var(--suave);font-size:11px;display:block;white-space:nowrap;overflow:hidden;line-height:1.25}
+  .onode-tag{display:inline-block;max-width:100%;overflow:hidden;white-space:nowrap;margin-top:3px;font-size:10px;font-weight:700;padding:2px 8px;border-radius:20px}
   .org-node.org-over{outline:2px dashed var(--acento);outline-offset:3px}
+  .oleg-wrap{display:flex;flex-wrap:wrap;gap:14px;margin-bottom:14px}
+  .oleg{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--suave)}
+  .oleg i{width:12px;height:12px;border-radius:3px;display:inline-block}
+  .org-scale{display:inline-block;transform-origin:top left}
   .org-top{display:flex;gap:18px;align-items:flex-start}
   .org-main{flex:1;min-width:0}
   .org-aside{width:215px;flex:0 0 auto;border:1px dashed var(--gris2);border-radius:12px;padding:13px;background:var(--gris)}
   .org-aside.org-over{outline:2px dashed var(--acento);background:#fff}
-  .org-aside .org-node{display:flex;margin-bottom:10px;white-space:normal}
+  .org-aside .org-node{margin:0 auto 10px}
   .oa-title{font-size:11px;font-weight:700;color:var(--suave);text-transform:uppercase;letter-spacing:.6px;margin-bottom:11px}
   .oa-empty{color:var(--suave);font-size:13px}
   .oa-hint{font-size:11px;color:var(--suave);margin-top:8px;line-height:1.4}
@@ -1380,6 +1385,9 @@ function pagePerfil(){
 }
 async function cambiarMiFoto(input){const f=input.files[0];if(!f)return;const foto=await fileToAvatar(f);const{error}=await sb.from('profiles').update({foto}).eq('id',ME.id);if(error){alert('Error: '+error.message);return;}PROFILE.foto=foto;const avEl=document.getElementById('av');avEl.textContent='';avEl.style.background=`#eee url('${foto}') center/cover no-repeat`;show('perfil');toast('✓ Foto actualizada');}
 let ORG_PEOPLE=[], orgDragId=null;
+const ORG_AREAS={'Dirección':'#6b7280','Comercial':'#1F4E79','Operaciones':'#d35400','Recursos Humanos':'#8e44ad','Finanzas':'#16a085','Marketing':'#c0392b'};
+const ORG_PALETTE=['#2980b9','#27ae60','#e67e22','#8e44ad','#16a085','#c0392b','#d35400','#34495e','#1F4E79'];
+function areaColor(a){ if(!a) return '#6b7280'; if(ORG_AREAS[a]) return ORG_AREAS[a]; let h=0; for(let i=0;i<a.length;i++)h=(h*31+a.charCodeAt(i))>>>0; return ORG_PALETTE[h%ORG_PALETTE.length]; }
 async function pageOrganigrama(){
   const{data}=await sb.from('profiles').select('id,nombre,dept,area,posicion,role,color,foto,jefe_id,fuera_org').eq('estado','aprobado');
   ORG_PEOPLE=data||[];
@@ -1398,9 +1406,11 @@ function renderOrg(){
   const ids=new Set(enOrg.map(p=>p.id));
   const children={};
   enOrg.forEach(p=>{const k=(p.jefe_id&&ids.has(p.jefe_id))?p.jefe_id:'__root__';(children[k]=children[k]||[]).push(p);});
-  const sub=p=>esc(p.posicion||roleNice(p.role))+(p.dept?' · '+esc(p.dept):(p.area?' · '+esc(p.area):''));
-  const card=(p,extra)=>`<div class="org-node${canEdit?' drag':''}" data-id="${p.id}" ${canEdit?`draggable="true" ondragstart="orgDragStart(event,'${p.id}')"`:''} ${extra||''}>
-      ${av(p.nombre,p.color,38,p.foto)}<div class="on-info"><b>${esc(p.nombre||'—')}</b><small>${sub(p)}</small></div></div>`;
+  const sub=p=>esc(p.posicion||roleNice(p.role));
+  const tagTxt=p=>{const a=p.area||'',d=p.dept||'';return d?(a?a+' · '+d:d):a;};
+  const card=(p,extra)=>{const col=areaColor(p.area);const t=tagTxt(p);
+    return `<div class="org-node${canEdit?' drag':''}" data-id="${p.id}" style="border-top:3px solid ${col}" ${canEdit?`draggable="true" ondragstart="orgDragStart(event,'${p.id}')"`:''} ${extra||''}>
+      ${av(p.nombre,p.color,34,p.foto)}<div class="on-info"><b>${esc(p.nombre||'—')}</b><small>${sub(p)}</small>${t?`<span class="onode-tag" style="background:${col}1a;color:${col}">${esc(t)}</span>`:''}</div></div>`;};
   function node(p){
     const kids=(children[p.id]||[]);
     const drop=canEdit?`ondragover="orgOver(event)" ondragleave="orgLeave(event)" ondrop="orgDrop(event,'${p.id}')"`:'';
@@ -1413,13 +1423,30 @@ function renderOrg(){
       ${aparte.map(p=>card(p)).join('')||'<div class="oa-empty">—</div>'}
       ${canEdit?'<div class="oa-hint">Arrastra aquí a quien quede fuera del organigrama (sin líneas).</div>':''}
     </div>`;
+  const areasUsadas=[...new Set(ppl.map(p=>p.area).filter(Boolean))];
+  const legend=areasUsadas.length?`<div class="oleg-wrap">${areasUsadas.map(a=>`<span class="oleg"><i style="background:${areaColor(a)}"></i>${esc(a)}</span>`).join('')}</div>`:'';
   document.getElementById('main').innerHTML=`<div class="page-title">Organigrama</div>
-    <div class="page-sub">${canEdit?'Arrastra a cada persona sobre su responsable para reorganizar. Solo tú puedes editarlo.':'Estructura del equipo de Amazinn Places ('+ppl.length+' personas)'}</div>
+    <div class="page-sub">${canEdit?'Arrastra a cada persona sobre su responsable para reorganizar. El color y la etiqueta indican su área y departamento.':'Estructura del equipo · el color y la etiqueta indican el área y el departamento'}</div>
+    ${legend}
     <div class="org-top">
-      <div class="org-main">${rootZone}<div class="org-tree">${roots.length?`<ul>${roots.map(node).join('')}</ul>`:'<div class="panel">Aún no hay personas en el organigrama.</div>'}</div></div>
+      <div class="org-main">${rootZone}<div class="org-tree">${roots.length?`<div class="org-scale"><ul>${roots.map(node).join('')}</ul></div>`:'<div class="panel">Aún no hay personas en el organigrama.</div>'}</div></div>
       ${aside}
     </div>`;
+  requestAnimationFrame(orgFit); setTimeout(orgFit,80);
 }
+function orgShrink(el,base,min){ if(!el)return; el.style.fontSize=base+'px'; let fs=base; let guard=40; while(el.scrollWidth>el.clientWidth+0.5 && fs>min && guard-->0){ fs-=0.5; el.style.fontSize=fs+'px'; } }
+function orgFitText(){ document.querySelectorAll('.org-node').forEach(nd=>{ orgShrink(nd.querySelector('b'),13,8); orgShrink(nd.querySelector('small'),11,7.5); orgShrink(nd.querySelector('.onode-tag'),10,7); }); }
+function orgFit(){
+  orgFitText();
+  const wrap=document.querySelector('.org-tree'); if(!wrap) return;
+  const inner=wrap.querySelector('.org-scale'); if(!inner) return;
+  inner.style.transform='none'; wrap.style.height='auto';
+  const natW=inner.offsetWidth, natH=inner.offsetHeight, avail=wrap.clientWidth;
+  const scale=Math.min(1,(avail-2)/natW);
+  inner.style.transform = scale<1 ? 'scale('+scale+')' : 'none';
+  wrap.style.height = Math.ceil(natH*scale+4)+'px';
+}
+window.addEventListener('resize',()=>{ if(curPage==='organigrama') orgFit(); });
 function orgDragStart(e,id){ orgDragId=id; e.dataTransfer.effectAllowed='move'; e.dataTransfer.setData('text/plain',id); }
 function orgOver(e){ e.preventDefault(); e.dataTransfer.dropEffect='move'; e.currentTarget.classList.add('org-over'); }
 function orgLeave(e){ e.currentTarget.classList.remove('org-over'); }
