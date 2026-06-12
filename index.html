@@ -268,7 +268,7 @@
   .org-tree li:last-child::before{border-right:2px solid var(--gris2);border-radius:0 6px 0 0}
   .org-tree li:first-child::after{border-radius:6px 0 0 0}
   .org-tree ul ul::before{content:'';position:absolute;top:0;left:50%;border-left:2px solid var(--gris2);width:0;height:22px}
-  .org-node{display:flex;flex-direction:column;align-items:center;gap:4px;border:1px solid var(--gris2);background:#fff;border-radius:11px;padding:9px;box-shadow:var(--sombra);position:relative;width:130px;box-sizing:border-box}
+  .org-node{display:inline-flex;flex-direction:column;align-items:center;gap:4px;border:1px solid var(--gris2);background:#fff;border-radius:11px;padding:9px;box-shadow:var(--sombra);position:relative;width:130px;box-sizing:border-box;vertical-align:top}
   .org-node.drag{cursor:grab}
   .org-node.drag:active{cursor:grabbing}
   .org-node .on-info{text-align:center;width:100%;min-width:0}
@@ -284,7 +284,7 @@
   .org-main{flex:1;min-width:0}
   .org-aside{width:215px;flex:0 0 auto;border:1px dashed var(--gris2);border-radius:12px;padding:13px;background:var(--gris)}
   .org-aside.org-over{outline:2px dashed var(--acento);background:#fff}
-  .org-aside .org-node{margin:0 auto 10px}
+  .org-aside .org-node{display:flex;margin:0 auto 10px}
   .oa-title{font-size:11px;font-weight:700;color:var(--suave);text-transform:uppercase;letter-spacing:.6px;margin-bottom:11px}
   .oa-empty{color:var(--suave);font-size:13px}
   .oa-hint{font-size:11px;color:var(--suave);margin-top:8px;line-height:1.4}
