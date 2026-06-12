@@ -252,6 +252,10 @@
   .cat-x{background:transparent;border:none;cursor:pointer;font-size:13px;opacity:.6}
   .cat-x:hover{opacity:1}
   .cat-lock{font-size:13px;opacity:.6}
+  .rol-tabla{width:100%;border-collapse:collapse;font-size:13px;min-width:640px}
+  .rol-tabla th{text-align:left;padding:9px 11px;background:var(--gris);border-bottom:2px solid var(--gris2);font-size:12px;color:var(--suave);white-space:nowrap}
+  .rol-tabla td{padding:9px 11px;border-bottom:1px solid var(--gris);vertical-align:top}
+  .rol-tabla tbody tr:hover{background:var(--gris)}
   .cat-add{display:flex;gap:7px}
   .cat-add input{flex:1;padding:8px 11px;border:1px solid var(--gris2);border-radius:8px;font-family:inherit;font-size:13px}
   .cat-add select{padding:8px;border:1px solid var(--gris2);border-radius:8px;font-family:inherit;font-size:13px}
@@ -1814,7 +1818,14 @@ function pageCatalogos(){
   const deptList=CAT.deptos.map(d=>`<div class="cat-row"><span>${esc(d.nombre)} <small style="color:var(--suave)">· ${esc(d.area||'sin área')}</small></span><button class="cat-x" onclick="delDepto('${d.nombre.replace(/'/g,"\\'")}')">🗑</button></div>`).join('')||'<div class="cat-empty">—</div>';
   const posList=CAT.posiciones.map(p=>`<div class="cat-row"><span>${esc(p)}</span><button class="cat-x" onclick="delPos('${p.replace(/'/g,"\\'")}')">🗑</button></div>`).join('')||'<div class="cat-empty">—</div>';
   const equipoList=CAT.equipos.map(e=>`<div class="cat-row"><span>${esc(e)}</span><button class="cat-x" onclick="delEquipo('${e.replace(/'/g,"\\'")}')">🗑</button></div>`).join('')||'<div class="cat-empty">Sin equipos todavía</div>';
-  const rolesInfo=[['Empleado','acceso básico, solo lo suyo'],['Responsable','manda en su departamento'],['Dirección','manda en su área completa'],['Administrador','manda en todo'],['Propietario','tú · acceso absoluto']];
+  const S='<span style="color:#1f9d55;font-weight:700">✓</span>', N='<span style="color:var(--gris2)">—</span>';
+  const rolesTabla=[
+    ['Empleado','Solo lo suyo','Ve los suyos',N,N,N,N],
+    ['Responsable','Su departamento','Crea los de su departamento',S,S,N,N],
+    ['Dirección','Su área completa','Crea los de su área',S,S,S,N],
+    ['Administrador','Toda la empresa','Crea cualquiera',S,S,S,S],
+    ['Propietario','Absoluto y exclusivo','Crea cualquiera',S,S,S,S+' <small style="color:var(--suave)">(+ borrar usuarios y catálogos)</small>'],
+  ];
   document.getElementById('main').innerHTML=`<div class="page-title">Catálogos</div>
     <div class="page-sub">Estructura de la empresa. Solo tú (Propietario) puedes editarla.</div>
     <div class="cat-grid">
@@ -1832,8 +1843,11 @@ function pageCatalogos(){
       <div class="panel"><h2>👥 Equipos</h2><div class="cat-list">${equipoList}</div>
         <div class="cat-add"><input id="nEquipo" placeholder="Nuevo equipo (ej: Hotel Mío)"><button class="btn" onclick="addEquipo()">➕</button></div></div>
     </div>
-    <div class="panel" style="margin-top:16px"><h2>🔑 Roles (fijos)</h2>
-      ${rolesInfo.map(r=>`<div style="display:flex;gap:12px;padding:6px 0;font-size:13.5px"><b style="min-width:120px">${r[0]}</b><span style="color:var(--suave)">${r[1]}</span></div>`).join('')}</div>`;
+    <div class="panel" style="margin-top:16px"><h2>🔑 Roles y alcances (referencia)</h2>
+      <div style="overflow-x:auto"><table class="rol-tabla"><thead><tr>
+        <th>Rol</th><th>Alcance</th><th>Horarios</th><th>Aprobaciones</th><th>Comunicados</th><th>KPIs / Dirección</th><th>Admin / Catálogos</th></tr></thead>
+        <tbody>${rolesTabla.map(r=>`<tr><td><b>${r[0]}</b></td><td>${r[1]}</td><td>${r[2]}</td><td>${r[3]}</td><td>${r[4]}</td><td>${r[5]}</td><td>${r[6]}</td></tr>`).join('')}</tbody></table></div>
+      <div style="font-size:12px;color:var(--suave);margin-top:10px">El alcance de Horarios está reforzado en la base de datos. En otras secciones aplica a nivel de menús y acciones.</div></div>`;
 }
 async function catReload(){ await loadCatalogos(); show('catalogos'); }
 async function addArea(){ const n=(val('nArea')||'').trim(); if(!n)return; const{error}=await sb.from('areas').insert({nombre:n}); if(error){alert(error.message);return;} toast('✓ Añadido'); catReload(); }
