@@ -1366,7 +1366,7 @@ function pagePerfil(){
   document.getElementById('main').innerHTML=`<div class="page-title">Mi perfil</div><div class="page-sub">Tus datos en Amazinn Places</div>
     <div class="panel" style="max-width:620px;display:flex;gap:22px;align-items:center;flex-wrap:wrap">
       <div style="text-align:center">${av(p.nombre,p.color,110,p.foto)}
-        <div style="margin-top:10px"><label class="btn ghost" style="padding:6px 12px;cursor:pointer">📷 Cambiar foto<input type="file" accept="image/*" style="display:none" onchange="miFotoPick(this)"></label></div></div>
+        ${isAdmin()?`<div style="margin-top:10px"><label class="btn ghost" style="padding:6px 12px;cursor:pointer">📷 Cambiar foto<input type="file" accept="image/*" style="display:none" onchange="miFotoPick(this)"></label></div>`:''}</div>
       <div style="flex:1;min-width:220px">
         <div style="font-size:22px;font-weight:800;font-family:'Playfair Display',Georgia,serif">${esc(p.nombre||'')}</div>
         <div style="color:var(--acento);font-weight:700;margin:2px 0 12px">${esc(p.posicion||p.dept||'')}</div>
@@ -1381,7 +1381,7 @@ function pagePerfil(){
         </div>
       </div>
     </div>
-    <div style="font-size:12.5px;color:var(--suave);max-width:620px">Puedes cambiar tu foto. El resto de datos (rol, departamento, vacaciones) los gestiona el administrador.</div>`;
+    <div style="font-size:12.5px;color:var(--suave);max-width:620px">${isAdmin()?'Puedes cambiar tu foto. El resto de datos':'Tus datos (foto, rol, departamento, vacaciones)'} los gestiona el administrador.</div>`;
 }
 async function cambiarMiFoto(input){const f=input.files[0];if(!f)return;const foto=await fileToAvatar(f);const{error}=await sb.from('profiles').update({foto}).eq('id',ME.id);if(error){alert('Error: '+error.message);return;}PROFILE.foto=foto;const avEl=document.getElementById('av');avEl.textContent='';avEl.style.background=`#eee url('${foto}') center/cover no-repeat`;show('perfil');toast('✓ Foto actualizada');}
 let ORG_PEOPLE=[], orgDragId=null;
