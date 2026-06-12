@@ -117,17 +117,40 @@
   .hamb{display:none;background:none;border:none;font-size:22px;margin-right:14px;cursor:pointer;color:var(--texto);line-height:1}
   .nav-backdrop{display:none}
   @media(max-width:760px){
-    header.top{padding:0 14px}
-    .hamb{display:block}
-    main{padding:18px 16px}
-    nav.side{position:fixed;left:0;top:60px;bottom:0;z-index:45;transform:translateX(-100%);transition:transform .25s ease;width:250px}
+    header.top{padding:0 12px}
+    header.top .logo{font-size:17px}
+    .hamb{display:block;margin-right:10px}
+    main{padding:16px 14px;max-width:100%}
+    nav.side{position:fixed;left:0;top:60px;bottom:0;z-index:45;transform:translateX(-100%);transition:transform .25s ease;width:84vw;max-width:300px;box-shadow:0 0 40px rgba(0,0,0,.25)}
     body.nav-open nav.side{transform:translateX(0)}
     body.nav-open .nav-backdrop{display:block;position:fixed;inset:60px 0 0 0;background:rgba(0,0,0,.4);z-index:44}
-    .cards{grid-template-columns:1fr 1fr}
+    nav.side a{padding:13px 22px;font-size:15px}            /* targets más cómodos al tacto */
+    .cards{grid-template-columns:1fr 1fr;gap:12px}
+    .panel{padding:15px;margin-bottom:14px}
+    .panel h2{font-size:16px}
+    .card{padding:15px}
+    .page-title{font-size:20px}
+    .page-sub{font-size:13px;margin-bottom:16px}
     .user-chip .meta{display:none}
-    .page-title{font-size:21px}
+    .accent-pick{display:none}                              /* el selector de color ocupa mucho */
+    .hdr-ctrl{width:34px;height:34px;margin-right:8px;font-size:15px}
+    .bell{margin-right:14px}
+    .logout{margin-left:8px;padding:6px 10px;font-size:12px}
+    form.box{max-width:none}
+    form.box .row{flex-direction:column;gap:14px}           /* inputs apilados, no apretados */
+    .grid-wrap,.asg-scroll,[style*="overflow-x:auto"]{-webkit-overflow-scrolling:touch}
+    .tabs{flex-wrap:wrap}
   }
-  @media(max-width:460px){.cards{grid-template-columns:1fr}}
+  @media(max-width:480px){
+    .cards{grid-template-columns:1fr}
+    .page-title{font-size:19px}
+    .panel{padding:13px}
+    table{font-size:13px}
+    th{padding:8px 9px}
+    td{padding:8px 9px}
+    .btn{padding:9px 12px}
+    .notif-panel{right:8px;width:94vw}
+  }
   /* ===== MODO OSCURO ===== */
   body.dark{--gris:#16150f;--gris2:#34302a;--texto:#ece6d9;--suave:#a59d8d;--azul:#efe7d8;--azul-claro:#2b2823}
   body.dark .card,body.dark .panel,body.dark header.top,body.dark .com-card,body.dark .tpl-card,body.dark .bit-card,body.dark .asset-card,body.dark .qr-card,body.dark .grid-wrap,body.dark .notif-panel,body.dark .chat-win,body.dark .fich-card,body.dark .pend-item,body.dark .cal td,body.dark .acc-banner,body.dark .login-card,body.dark form.box input,body.dark form.box select,body.dark form.box textarea,body.dark .search input,body.dark .msg-sel select,body.dark .codes-tbl input{background:#211f1a;color:var(--texto);border-color:#34302a}
