@@ -280,6 +280,11 @@
   .oleg{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--suave)}
   .oleg i{width:12px;height:12px;border-radius:3px;display:inline-block}
   .org-scale{display:inline-block;transform-origin:top left}
+  .hor-step{padding:14px 0;border-bottom:1px solid var(--gris)}
+  .hor-step:last-of-type{border-bottom:none}
+  .hor-step>b{font-size:14px;color:var(--azul)}
+  .thk-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px}
+  .thk{display:inline-flex;align-items:center;gap:8px;font-size:13.5px;background:var(--gris);border:1px solid var(--gris2);border-radius:8px;padding:7px 11px;cursor:pointer}
   .org-top{display:flex;gap:18px;align-items:flex-start}
   .org-main{flex:1;min-width:0}
   .org-aside{width:215px;flex:0 0 auto;border:1px dashed var(--gris2);border-radius:12px;padding:13px;background:var(--gris)}
@@ -816,6 +821,13 @@ const CAN_MANAGE=['responsable','direccion','admin','propietario'];
 let supTab='electricidad', navOpen=null;
 const SHIFTS=[{v:"",l:"—",c:"#dfe3ea"},{v:"M",l:"Mañana 09–17",c:"#cfe0f2"},{v:"T",l:"Tarde 14–22",c:"#f7e6b0"},{v:"P",l:"Partido",c:"#cdeee3"},{v:"N",l:"Noche 22–06",c:"#cfe0f2"},{v:"L",l:"Libre",c:"#dfe3ea"},{v:"V",l:"Vacaciones",c:"#f6cfcd"}];
 const SH=Object.fromEntries(SHIFTS.map(s=>[s.v,s]));
+// Horarios v2: catálogo de turnos
+let TURNOS_TIPO=[];
+let horW={area:'',dept:'',equipo:'',desde:'',hasta:'',turnos:null,gen:false};
+async function loadTurnosTipo(){ const{data}=await sb.from('turnos_tipo').select('*').order('orden').order('id'); TURNOS_TIPO=data||[]; if(horW.turnos===null) horW.turnos=TURNOS_TIPO.map(t=>t.id); }
+function turnoTipo(id){ return TURNOS_TIPO.find(t=>String(t.id)===String(id)); }
+function abreviaTurno(t){ const n=(t&&t.nombre)||''; return n.slice(0,3); }
+function tchip(id){ if(!id) return `<span class="cell-b" style="background:#f2f2f2;color:#bbb">—</span>`; const t=turnoTipo(id); if(!t) return `<span class="cell-b">·</span>`; const h=t.hora_ini?` ${t.hora_ini}–${t.hora_fin}`:''; return `<span class="cell-b" title="${esc(t.nombre)}${esc(h)}" style="background:${t.color};color:#333">${esc(abreviaTurno(t))}</span>`; }
 function nextDays(n){const out=[],d=new Date();d.setHours(0,0,0,0);for(let i=0;i<n;i++){const x=new Date(d);x.setDate(d.getDate()+i);out.push(x);}return out;}
 function isoD(x){return `${x.getFullYear()}-${String(x.getMonth()+1).padStart(2,'0')}-${String(x.getDate()).padStart(2,'0')}`;}
 function lblD(x){const ds=['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'],ms=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];return `${ds[x.getDay()]} ${x.getDate()} ${ms[x.getMonth()]}`;}
@@ -1243,63 +1255,102 @@ function horDeptSelector(selDept){
 }
 function chip(v){const s=SH[v||""];return `<span class="cell-b" title="${s.l}" style="background:${s.c};color:#333">${v||'—'}</span>`;}
 async function teamOf(dept){const{data}=await sb.from('profiles').select('id,nombre').eq('dept',dept).order('nombre');return data||[];}
-async function turnosMap(dept){const{data}=await sb.from('turnos').select('*').eq('dept',dept);const m={};(data||[]).forEach(t=>m[t.empleado_id+'|'+t.fecha]=t.turno||'');return m;}
+async function turnosMap(dept){const{data}=await sb.from('turnos').select('*').eq('dept',dept);const m={};(data||[]).forEach(t=>m[t.empleado_id+'|'+t.fecha]=t.tipo_id||'');return m;}
 
 async function pageHorarios(){
+  await loadTurnosTipo();
   const dept=PROFILE.dept||'';
   const canEdit=(PROFILE.role==='responsable'||isAdmin());
-  const tabs=canEdit?[['editor','🗓️ Crear / editar'],['equipo','👥 Horario del equipo'],['otros','🏢 Otros equipos']]
+  const tabs=canEdit?[['editor','🗓️ Crear horario'],['equipo','👥 Horario del equipo'],['otros','🏢 Otros equipos']]
                     :[['mi','📅 Mi horario'],['equipo','👥 Horario del equipo'],['otros','🏢 Otros equipos']];
   if(!tabs.some(t=>t[0]===horTab)) horTab=tabs[0][0];
   const days=nextDays(15);
   let body='';
   if(horTab==='mi') body=await horMine(days);
-  else if(horTab==='editor'){
-    if(isAdmin()){
-      const all=horAllDepts();
-      let editDept = (all.includes(horEditDept)?horEditDept : (all.includes(dept)?dept : (all[0]||dept)));
-      horEditDept=editDept;
-      body=horDeptSelector(editDept)+await horEditor(editDept,days);
-    } else body=await horEditor(dept,days);
-  }
+  else if(horTab==='editor') body=await horCrear();
   else if(horTab==='equipo') body=await horTeam(dept,days);
   else body=await horOthers(days);
-  const legend=`<div class="legend">${SHIFTS.filter(s=>s.v).map(s=>`<span><i style="background:${s.c}"></i>${s.l}</span>`).join('')}</div>`;
+  const legend=`<div class="legend">${TURNOS_TIPO.map(t=>`<span><i style="background:${t.color}"></i>${esc(t.nombre)}${t.hora_ini?` (${esc(t.hora_ini)}–${esc(t.hora_fin)})`:''}</span>`).join('')}</div>`;
   document.getElementById('main').innerHTML=`
     <div class="page-title">Horarios${dept?' · '+dept:''}</div>
-    <div class="page-sub">${canEdit?'Publica el horario de tu equipo; el equipo ve sus turnos al instante':'Consulta tu horario y el de los equipos · próximos 15 días'}</div>
+    <div class="page-sub">${canEdit?'Crea horarios por alcance y fechas; el equipo ve sus turnos al instante':'Consulta tu horario y el de los equipos'}</div>
     <div class="tabs">${tabs.map(t=>`<button class="${horTab===t[0]?'on':''}" onclick="setHorTab('${t[0]}')">${t[1]}</button>`).join('')}</div>
     ${body}${horTab!=='mi'?legend:''}`;
 }
-async function horEditor(dept,days){
-  if(!dept) return `<div class="panel">Tu usuario no tiene departamento asignado. Asígnatelo en Administración (o con SQL) para poder planificar.</div>`;
-  const team=await teamOf(dept);
-  if(!team.length) return `<div class="panel">No hay empleados en <b>${esc(dept)}</b>. Crea empleados con ese departamento (registro o administración) para planificar sus turnos.</div>`;
-  const map=await turnosMap(dept);
-  const head=`<tr><th class="emp">Empleado</th>${days.map(d=>`<th class="${isWk(d)?'wknd':''}">${lblD(d)}</th>`).join('')}</tr>`;
-  const rows=team.map(e=>`<tr><td class="emp">${esc(e.nombre)}</td>${days.map(d=>{const iso=isoD(d);const val=map[e.id+'|'+iso]||'';
-    return `<td class="${isWk(d)?'wknd':''}"><select class="tcell" data-emp="${e.id}" data-name="${esc(e.nombre)}" data-fecha="${iso}">${SHIFTS.map(s=>`<option value="${s.v}" ${val===s.v?'selected':''}>${s.v||'—'} · ${s.l}</option>`).join('')}</select></td>`;}).join('')}</tr>`).join('');
-  return `<div style="margin-bottom:14px"><button class="btn" onclick="saveTurnos('${esc(dept)}')">💾 Guardar y publicar</button>
-      <span style="font-size:12.5px;color:var(--suave);margin-left:10px">Al guardar, el equipo ve el horario actualizado.</span></div>
-    <div class="grid-wrap"><table class="sched"><thead>${head}</thead><tbody>${rows}</tbody></table></div>`;
+/* ----- Crear horario (asistente: alcance → fechas → turnos → cuadrícula) ----- */
+function horToggleTurno(id,on){ id=Number(id); if(on){ if(!horW.turnos.includes(id)) horW.turnos.push(id);} else horW.turnos=horW.turnos.filter(x=>x!==id); }
+function horGenerar(){ if(!horW.desde||!horW.hasta){alert('Elige las fechas (desde y hasta).');return;} if(horW.hasta<horW.desde){alert('La fecha final no puede ser anterior a la inicial.');return;} if(!horW.turnos.length){alert('Selecciona al menos un tipo de turno.');return;} horW.gen=true; show('horarios'); }
+function horDays(a,b){ const out=[]; let d=new Date(a+'T00:00:00'), end=new Date(b+'T00:00:00'); if(isNaN(d)||isNaN(end)||end<d) return out; let g=0; while(d<=end && g++<92){ out.push(new Date(d)); d.setDate(d.getDate()+1); } return out; }
+function horAddTurnoForm(){ const box=document.getElementById('horNewTurno'); if(!box) return; box.innerHTML=box.innerHTML?'':`<div style="background:var(--gris);border-radius:9px;padding:12px;margin-top:10px;display:grid;gap:8px;max-width:420px">
+    <input id="ntN" placeholder="Nombre del turno (ej: Madrugada)"><div class="row"><input id="ntI" placeholder="Hora inicio (09:00)"><input id="ntF" placeholder="Hora fin (17:00)"></div>
+    <div style="display:flex;align-items:center;gap:8px"><label style="font-size:13px">Color:</label><input id="ntC" type="color" value="#cfe0f2"><button class="btn" style="padding:6px 12px;margin-left:auto" onclick="horSaveTurno()">Añadir turno</button></div></div>`; }
+async function horSaveTurno(){ const n=(val('ntN')||'').trim(); if(!n){alert('Pon un nombre.');return;} const row={nombre:n,hora_ini:(val('ntI')||''),hora_fin:(val('ntF')||''),color:document.getElementById('ntC').value,orden:TURNOS_TIPO.length+1};
+  const{data,error}=await sb.from('turnos_tipo').insert(row).select('id').single(); if(error){alert('Error: '+error.message);return;} await loadTurnosTipo(); if(data&&data.id) horW.turnos.push(data.id); show('horarios'); }
+async function horCrear(){
+  const isAdm=isAdmin();
+  if(!isAdm){ horW.area=PROFILE.area||''; horW.dept=PROFILE.dept||''; }
+  const dis=isAdm?'':'disabled';
+  const areaSel=`<select ${dis} onchange="horW.area=this.value;horW.dept='';horW.gen=false;show('horarios')"><option value="">Todas</option>${CAT.areas.map(a=>`<option ${horW.area===a?'selected':''}>${esc(a)}</option>`).join('')}</select>`;
+  const depOpts=CAT.deptos.filter(d=>!horW.area||d.area===horW.area);
+  const deptSel=`<select ${dis} onchange="horW.dept=this.value;horW.gen=false;show('horarios')"><option value="">Todos${horW.area?' los de '+esc(horW.area):''}</option>${depOpts.map(d=>`<option ${horW.dept===d.nombre?'selected':''}>${esc(d.nombre)}</option>`).join('')}</select>`;
+  const eqSel=`<select onchange="horW.equipo=this.value;horW.gen=false;show('horarios')"><option value="">Cualquiera</option>${CAT.equipos.map(e=>`<option ${horW.equipo===e?'selected':''}>${esc(e)}</option>`).join('')}</select>`;
+  const checks=TURNOS_TIPO.map(t=>`<label class="thk"><input type="checkbox" ${horW.turnos.includes(t.id)?'checked':''} onchange="horToggleTurno(${t.id},this.checked)"><span class="cell-b" style="background:${t.color}">${esc(abreviaTurno(t))}</span> ${esc(t.nombre)}${t.hora_ini?` <small style="color:var(--suave)">${esc(t.hora_ini)}–${esc(t.hora_fin)}</small>`:''}</label>`).join('');
+  const form=`<div class="panel" style="max-width:820px">
+    <div class="hor-step"><b>1 · Alcance</b><div class="row" style="margin-top:8px">
+      <div><label>Área</label>${areaSel}</div><div><label>Departamento</label>${deptSel}</div><div><label>Equipo (opcional)</label>${eqSel}</div></div>
+      ${isAdm?'':'<small style="color:var(--suave)">Como responsable, planificas tu propio departamento.</small>'}</div>
+    <div class="hor-step"><b>2 · Fechas</b><div class="row" style="margin-top:8px">
+      <div><label>Desde</label><input type="date" value="${horW.desde}" onchange="horW.desde=this.value"></div>
+      <div><label>Hasta</label><input type="date" value="${horW.hasta}" onchange="horW.hasta=this.value"></div><div></div></div></div>
+    <div class="hor-step"><b>3 · Turnos disponibles</b><div class="thk-grid" style="margin-top:8px">${checks}</div>
+      <button class="btn ghost" style="padding:5px 11px;margin-top:8px" onclick="horAddTurnoForm()">➕ Nuevo tipo de turno</button><div id="horNewTurno"></div></div>
+    <div style="margin-top:16px"><button class="btn" onclick="horGenerar()">Generar cuadrícula →</button></div>
+  </div>`;
+  let grid='';
+  if(horW.gen) grid=await horGrid();
+  return form+grid;
 }
-async function saveTurnos(dept){
-  const rows=[...document.querySelectorAll('.tcell')].map(s=>({dept,empleado_id:s.dataset.emp,empleado_nombre:s.dataset.name,fecha:s.dataset.fecha,turno:s.value,updated_at:new Date().toISOString()}));
+async function horGrid(){
+  let q=sb.from('profiles').select('id,nombre,dept,area,equipo').eq('estado','aprobado');
+  if(horW.area) q=q.eq('area',horW.area);
+  if(horW.dept) q=q.eq('dept',horW.dept);
+  if(horW.equipo) q=q.eq('equipo',horW.equipo);
+  const{data:ppl}=await q.order('nombre');
+  const people=ppl||[];
+  if(!people.length) return '<div class="panel">No hay personas aprobadas en ese alcance.</div>';
+  const days=horDays(horW.desde,horW.hasta);
+  if(!days.length) return '<div class="panel">Rango de fechas no válido.</div>';
+  const ids=people.map(p=>p.id);
+  const{data:ex}=await sb.from('turnos').select('empleado_id,fecha,tipo_id').in('empleado_id',ids).gte('fecha',isoD(days[0])).lte('fecha',isoD(days[days.length-1]));
+  const map={};(ex||[]).forEach(t=>map[t.empleado_id+'|'+t.fecha]=t.tipo_id);
+  const chosen=TURNOS_TIPO.filter(t=>horW.turnos.includes(t.id));
+  const head=`<tr><th class="emp">Empleado</th>${days.map(d=>`<th class="${isWk(d)?'wknd':''}">${lblD(d)}</th>`).join('')}</tr>`;
+  const rows=people.map(p=>`<tr><td class="emp">${esc(p.nombre)}<br><small style="color:var(--suave)">${esc(p.dept||p.area||'')}</small></td>${days.map(d=>{const iso=isoD(d);const cur=map[p.id+'|'+iso]||'';
+    return `<td class="${isWk(d)?'wknd':''}"><select class="tcell2" data-emp="${p.id}" data-name="${esc(p.nombre)}" data-dept="${esc(p.dept||'')}" data-fecha="${iso}"><option value="">—</option>${chosen.map(t=>`<option value="${t.id}" ${String(cur)===String(t.id)?'selected':''}>${esc(t.nombre)}</option>`).join('')}</select></td>`;}).join('')}</tr>`).join('');
+  return `<div class="panel"><div style="margin-bottom:12px;display:flex;gap:8px;flex-wrap:wrap"><button class="btn" onclick="horGuardar()">💾 Guardar y publicar</button><button class="btn ghost" onclick="horW.gen=false;show('horarios')">↩ Cambiar alcance/fechas</button>
+      <span style="font-size:12.5px;color:var(--suave);align-self:center">${people.length} persona(s) · ${days.length} día(s)</span></div>
+    <div class="grid-wrap"><table class="sched"><thead>${head}</thead><tbody>${rows}</tbody></table></div></div>`;
+}
+async function horGuardar(){
+  const cells=[...document.querySelectorAll('.tcell2')];
+  if(!cells.length){alert('No hay cuadrícula que guardar.');return;}
+  const rows=cells.map(s=>({dept:s.dataset.dept||horW.dept||PROFILE.dept||'—',empleado_id:s.dataset.emp,empleado_nombre:s.dataset.name,fecha:s.dataset.fecha,tipo_id:s.value?Number(s.value):null,updated_at:new Date().toISOString()}));
   const{error}=await sb.from('turnos').upsert(rows,{onConflict:'empleado_id,fecha'});
   if(error){alert('No se pudo guardar: '+error.message);return;}
-  await notifyTeam(dept, '📅', `${PROFILE.nombre} ha actualizado el horario de ${dept}. Revisa tus turnos.`, 'horarios');
-  show('horarios');
+  const dests=[...new Set(rows.map(r=>r.dept))];
+  for(const d of dests){ await notifyTeam(d,'📅',`${PROFILE.nombre} ha publicado el horario. Revisa tus turnos.`,'horarios'); }
+  toast('✓ Horario publicado'); show('horarios');
 }
 async function horMine(days){
   const{data}=await sb.from('turnos').select('*').eq('empleado_id',ME.id).gte('fecha',isoD(days[0])).lte('fecha',isoD(days[days.length-1]));
   const map={};(data||[]).forEach(t=>map[t.fecha]=t);
-  const HOR={M:'09:00–17:00',T:'14:00–22:00',P:'10:00–14:00 / 17:00–21:00',N:'22:00–06:00'};
-  const rows=days.map(d=>{const iso=isoD(d);const t=map[iso];const v=t?t.turno:'';const s=SH[v||''];
-    const horario=HOR[v]||'—';const lugar=(t&&t.lugar)?t.lugar:(v&&v!=='L'&&v!=='V'?'—':'—');
-    return `<tr><td><b>${lblD(d)}</b></td><td>${horario}</td><td>${lugar}</td><td><span class="badge" style="background:${s.c};color:#333">${s.l}</span></td></tr>`;}).join('');
-  const any=(data||[]).length;
-  return `<div class="panel">${any?'':'<div style="color:var(--suave);font-size:13.5px;margin-bottom:10px">Tu responsable aún no ha publicado tus turnos.</div>'}
-    <table><thead><tr><th>Día</th><th>Horario</th><th>Ubicación</th><th>Turno</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+  const rows=days.map(d=>{const iso=isoD(d);const t=map[iso];const tp=t?turnoTipo(t.tipo_id):null;
+    const horario=(tp&&tp.hora_ini)?`${tp.hora_ini}–${tp.hora_fin}`:'—';
+    const badge=tp?`<span class="badge" style="background:${tp.color};color:#333">${esc(tp.nombre)}</span>`:'<span style="color:var(--suave)">—</span>';
+    return `<tr><td><b>${lblD(d)}</b></td><td>${horario}</td><td>${badge}</td></tr>`;}).join('');
+  const any=(data||[]).filter(t=>t.tipo_id).length;
+  return `<div class="panel">${any?'':'<div style="color:var(--suave);font-size:13.5px;margin-bottom:10px">Aún no han publicado tus turnos para estos días.</div>'}
+    <table><thead><tr><th>Día</th><th>Horario</th><th>Turno</th></tr></thead><tbody>${rows}</tbody></table></div>`;
 }
 async function horTeam(dept,days){
   if(!dept) return `<div class="panel">Sin departamento asignado.</div>`;
@@ -1307,7 +1358,7 @@ async function horTeam(dept,days){
   if(!team.length) return `<div class="panel">No hay empleados en ${esc(dept)}.</div>`;
   const map=await turnosMap(dept);
   const head=`<tr><th class="emp">Empleado</th>${days.map(d=>`<th class="${isWk(d)?'wknd':''}">${lblD(d)}</th>`).join('')}</tr>`;
-  const rows=team.map(e=>`<tr><td class="emp">${e.id===ME.id?'<b style="color:var(--azul)">'+esc(e.nombre)+' (tú)</b>':esc(e.nombre)}</td>${days.map(d=>`<td class="${isWk(d)?'wknd':''}">${chip(map[e.id+'|'+isoD(d)]||'')}</td>`).join('')}</tr>`).join('');
+  const rows=team.map(e=>`<tr><td class="emp">${e.id===ME.id?'<b style="color:var(--azul)">'+esc(e.nombre)+' (tú)</b>':esc(e.nombre)}</td>${days.map(d=>`<td class="${isWk(d)?'wknd':''}">${tchip(map[e.id+'|'+isoD(d)]||'')}</td>`).join('')}</tr>`).join('');
   return `<div class="grid-wrap"><table class="sched"><thead>${head}</thead><tbody>${rows}</tbody></table></div>`;
 }
 async function horOthers(days){
@@ -2293,7 +2344,20 @@ async function pageKudos(){
   document.getElementById('main').innerHTML=`<div class="page-title">Reconocimientos</div><div class="page-sub">Reconoce el buen trabajo de un compañero 🏅</div>
     <div class="panel" style="max-width:620px"><h2>Dar un reconocimiento</h2><form class="box" onsubmit="return createKudo(event)" style="max-width:none">
       <label>Para</label><select id="kPara">${opts}</select><label>Mensaje</label><textarea id="kT" rows="3" required></textarea><div><button class="btn" type="submit">Enviar reconocimiento</button></div></form></div>
-    <div class="panel"><h2>🏅 Muro de reconocimientos (${K.length})</h2>${K.map(k=>`<div style="padding:12px 0;border-bottom:1px solid var(--gris);font-size:14px"><b>${esc(k.de_nombre)}</b> → <b style="color:var(--acento)">${esc(k.para_nombre)}</b> <small style="color:var(--suave)">· ${new Date(k.created_at).toLocaleDateString('es-ES')}</small><div style="margin-top:4px">${esc(k.texto)}</div></div>`).join('')||'<div style="color:var(--suave)">Aún no hay reconocimientos. ¡Sé el primero!</div>'}</div>`;
+    <div class="panel"><h2>🏅 Muro de reconocimientos (${K.length})</h2>${K.map(k=>{const mio=k.de_id===ME.id||isAdmin();
+      const acc=mio?`<span style="margin-left:auto;display:flex;gap:6px"><button class="btn ghost" style="padding:3px 9px" onclick="editKudo(${k.id})">✏️</button><button class="btn ghost" style="padding:3px 9px;color:#c0392b" onclick="delKudo(${k.id})">🗑️</button></span>`:'';
+      return `<div style="padding:12px 0;border-bottom:1px solid var(--gris);font-size:14px"><div style="display:flex;align-items:center"><div><b>${esc(k.de_nombre)}</b> → <b style="color:var(--acento)">${esc(k.para_nombre)}</b> <small style="color:var(--suave)">· ${new Date(k.created_at).toLocaleDateString('es-ES')}</small></div>${acc}</div><div style="margin-top:4px" id="ktext_${k.id}">${esc(k.texto)}</div></div>`;}).join('')||'<div style="color:var(--suave)">Aún no hay reconocimientos. ¡Sé el primero!</div>'}</div>`;
+}
+async function editKudo(id){
+  const el=document.getElementById('ktext_'+id); const actual=el?el.textContent:'';
+  const nuevo=prompt('Editar reconocimiento:',actual); if(nuevo===null)return; const t=nuevo.trim(); if(!t)return;
+  const{error}=await sb.from('kudos').update({texto:t}).eq('id',id);
+  if(error){alert('No se pudo editar: '+error.message);return;} show('kudos'); toast('✓ Editado');
+}
+async function delKudo(id){
+  if(!confirm('¿Eliminar este reconocimiento?'))return;
+  const{error}=await sb.from('kudos').delete().eq('id',id);
+  if(error){alert('No se pudo eliminar: '+error.message);return;} show('kudos'); toast('Eliminado');
 }
 async function createKudo(e){e.preventDefault();const para=document.getElementById('kPara').value;const t=document.getElementById('kT').value.trim();if(!t)return false;const{error}=await sb.from('kudos').insert({de_id:ME.id,de_nombre:PROFILE.nombre,para_nombre:para,texto:t});if(error){alert('Error: '+error.message);return false;}show('kudos');toast('✓ Reconocimiento enviado');return false;}
 
