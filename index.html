@@ -820,7 +820,7 @@ function nextDays(n){const out=[],d=new Date();d.setHours(0,0,0,0);for(let i=0;i
 function isoD(x){return `${x.getFullYear()}-${String(x.getMonth()+1).padStart(2,'0')}-${String(x.getDate()).padStart(2,'0')}`;}
 function lblD(x){const ds=['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'],ms=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];return `${ds[x.getDay()]} ${x.getDate()} ${ms[x.getMonth()]}`;}
 function isWk(x){return x.getDay()===0||x.getDay()===6;}
-let horTab='mi', horOtherDept=null;
+let horTab='mi', horOtherDept=null, horEditDept=null;
 function navGroups(){
   const groups=[]; let cur=null;
   NAV.forEach(it=>{
@@ -1231,6 +1231,16 @@ async function deleteCom(id){
 /* ---------------- HORARIOS (datos reales) ---------------- */
 function setHorTab(t){horTab=t;show('horarios');}
 function setHorOther(d){horOtherDept=d;show('horarios');}
+function setHorEditDept(d){horEditDept=d;show('horarios');}
+function horAllDepts(){ return (CAT.deptos&&CAT.deptos.length)?CAT.deptos.map(d=>d.nombre):DEPTS.slice(); }
+function horDeptSelector(selDept){
+  const byArea={}; (CAT.deptos||[]).forEach(d=>{const a=d.area||'Sin área';(byArea[a]=byArea[a]||[]).push(d.nombre);});
+  let opts;
+  if(Object.keys(byArea).length) opts=Object.keys(byArea).map(a=>`<optgroup label="${esc(a)}">${byArea[a].map(n=>`<option ${n===selDept?'selected':''}>${esc(n)}</option>`).join('')}</optgroup>`).join('');
+  else opts=horAllDepts().map(n=>`<option ${n===selDept?'selected':''}>${esc(n)}</option>`).join('');
+  return `<div style="margin-bottom:14px"><label style="font-size:13px;font-weight:600;color:var(--suave);margin-right:8px">📋 Departamento a planificar (cualquier área):</label>
+    <select onchange="setHorEditDept(this.value)" style="padding:9px 12px;border:1px solid var(--gris2);border-radius:9px;font-size:14px">${opts}</select></div>`;
+}
 function chip(v){const s=SH[v||""];return `<span class="cell-b" title="${s.l}" style="background:${s.c};color:#333">${v||'—'}</span>`;}
 async function teamOf(dept){const{data}=await sb.from('profiles').select('id,nombre').eq('dept',dept).order('nombre');return data||[];}
 async function turnosMap(dept){const{data}=await sb.from('turnos').select('*').eq('dept',dept);const m={};(data||[]).forEach(t=>m[t.empleado_id+'|'+t.fecha]=t.turno||'');return m;}
@@ -1244,7 +1254,14 @@ async function pageHorarios(){
   const days=nextDays(15);
   let body='';
   if(horTab==='mi') body=await horMine(days);
-  else if(horTab==='editor') body=await horEditor(dept,days);
+  else if(horTab==='editor'){
+    if(isAdmin()){
+      const all=horAllDepts();
+      let editDept = (all.includes(horEditDept)?horEditDept : (all.includes(dept)?dept : (all[0]||dept)));
+      horEditDept=editDept;
+      body=horDeptSelector(editDept)+await horEditor(editDept,days);
+    } else body=await horEditor(dept,days);
+  }
   else if(horTab==='equipo') body=await horTeam(dept,days);
   else body=await horOthers(days);
   const legend=`<div class="legend">${SHIFTS.filter(s=>s.v).map(s=>`<span><i style="background:${s.c}"></i>${s.l}</span>`).join('')}</div>`;
