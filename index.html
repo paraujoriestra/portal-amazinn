@@ -1652,7 +1652,7 @@ async function pageRegistros(){
     ${(()=>{const ca=u.area||CAT.areas[0]||'';const deps=CAT.deptos.filter(d=>d.area===ca);return `
     <div class="row" style="margin-top:12px">
       <div><label>Área</label><select id="rgA_${u.id}" onchange="filtraDeptosReg('${u.id}')">${CAT.areas.map(a=>`<option ${ca===a?'selected':''}>${esc(a)}</option>`).join('')}</select></div>
-      <div><label>Departamento</label><select id="rgD_${u.id}">${deps.map(d=>`<option ${u.dept===d.nombre?'selected':''}>${esc(d.nombre)}</option>`).join('')||'<option value="">—</option>'}</select></div>
+      <div><label>Departamento</label><select id="rgD_${u.id}"><option value="__none__" ${!u.dept?'selected':''}>— Ninguno (toda el área) —</option>${deps.map(d=>`<option ${u.dept===d.nombre?'selected':''}>${esc(d.nombre)}</option>`).join('')}</select></div>
     </div>`;})()}
     <div class="row">
       <div><label>Posición</label><select id="rgC_${u.id}"><option value="__none__">— Sin posición —</option>${CAT.posiciones.map(p=>`<option>${esc(p)}</option>`).join('')}</select></div>
@@ -1673,10 +1673,11 @@ function filtraDeptosReg(id){
   const a=document.getElementById('rgA_'+id).value;
   const sel=document.getElementById('rgD_'+id);
   const deps=CAT.deptos.filter(d=>d.area===a);
-  sel.innerHTML=deps.map(d=>`<option>${esc(d.nombre)}</option>`).join('')||'<option value="">—</option>';
+  sel.innerHTML='<option value="__none__">— Ninguno (toda el área) —</option>'+deps.map(d=>`<option>${esc(d.nombre)}</option>`).join('');
 }
 async function aprobarReg(id){
-  const role=document.getElementById('rgR_'+id).value, dept=document.getElementById('rgD_'+id).value;
+  const role=document.getElementById('rgR_'+id).value;
+  const dRaw=document.getElementById('rgD_'+id).value; const dept=(dRaw==='__none__'||dRaw==='')?'':dRaw;
   const area=(document.getElementById('rgA_'+id)||{}).value || deptArea(dept);
   const psSel=document.getElementById('rgC_'+id), eqSel=document.getElementById('rgE_'+id);
   const posicion=psSel&&psSel.value!=='__none__'?psSel.value:'';
@@ -1748,7 +1749,7 @@ function userForm(){const u=userDraft;const colores=['#1F4E79','#16a085','#8e44a
     <div class="row"><div><label>Área</label>
         <select id="uArea" onchange="if(this.value==='__new__')crearCatInline('area');else onAreaChange(this.value)">${CAT.areas.map(a=>`<option ${curArea===a?'selected':''}>${esc(a)}</option>`).join('')}<option value="__new__">➕ Crear nueva…</option></select></div>
       <div><label>Departamento</label>
-        <select id="uD" onchange="if(this.value==='__new__')crearCatInline('departamento');else userDraft.dept=this.value">${depsArea.map(d=>`<option ${u.dept===d.nombre?'selected':''}>${esc(d.nombre)}</option>`).join('')||'<option value="">— sin departamentos en esta área —</option>'}<option value="__new__">➕ Crear nuevo…</option></select></div></div>`;})()}
+        <select id="uD" onchange="if(this.value==='__new__')crearCatInline('departamento');else userDraft.dept=this.value==='__none__'?'':this.value"><option value="__none__" ${!u.dept?'selected':''}>— Ninguno (toda el área) —</option>${depsArea.map(d=>`<option ${u.dept===d.nombre?'selected':''}>${esc(d.nombre)}</option>`).join('')}<option value="__new__">➕ Crear nuevo…</option></select></div></div>`;})()}
     <div class="row"><div><label>Posición</label>
         <select id="uPos" onchange="if(this.value==='__new__')crearCatInline('posicion')"><option value="__none__" ${!u.posicion?'selected':''}>— Sin posición —</option>${CAT.posiciones.map(p=>`<option ${u.posicion===p?'selected':''}>${esc(p)}</option>`).join('')}<option value="__new__">➕ Crear nueva…</option></select></div>
       <div><label>Equipo</label>
@@ -1768,7 +1769,7 @@ function captureUserForm(){
   if(g('uN')!==null) userDraft.nombre=g('uN');
   if(g('uV')!==null) userDraft.vac=+g('uV')||0;
   const ar=g('uArea'); if(ar&&ar!=='__new__') userDraft.area=ar;
-  const d=g('uD'); if(d&&d!=='__new__'&&d!=='') userDraft.dept=d;
+  const d=g('uD'); if(d!==null&&d!=='__new__') userDraft.dept = d==='__none__'?'':d;
   const ps=g('uPos'); if(ps!==null&&ps!=='__new__') userDraft.posicion=ps==='__none__'?'':ps;
   const eq=g('uEquipo'); if(eq!==null&&eq!=='__new__') userDraft.equipo=eq==='__none__'?null:eq;
   const rn=g('uR'); if(rn&&rn!=='__new__') userDraft.role=rn;
@@ -1781,7 +1782,7 @@ function onAreaChange(area){
   captureUserForm();
   userDraft.area=area;
   const inArea=CAT.deptos.filter(d=>d.area===area).map(d=>d.nombre);
-  if(!inArea.includes(userDraft.dept)) userDraft.dept=inArea[0]||'';
+  if(userDraft.dept && !inArea.includes(userDraft.dept)) userDraft.dept='';  // si tenía depto de otra área, pasa a Ninguno
   show('admin');
 }
 async function crearCatInline(tipo){
@@ -1804,13 +1805,14 @@ async function crearCatInline(tipo){
 async function userSave(e){e.preventDefault();
   const col=document.querySelector('input[name="uCol"]:checked');
   const g=id=>{const el=document.getElementById(id);return el?el.value:null;};
-  const dept=(()=>{const d=g('uD');return d&&d!=='__new__'?d:userDraft.dept;})();
+  const dept=(()=>{const d=g('uD');if(d===null||d==='__new__')return userDraft.dept||'';return d==='__none__'?'':d;})();
+  const area=(()=>{const a=g('uArea');return (a&&a!=='__new__')?a:(userDraft.area||deptArea(dept)||'');})();
   const posicion=(()=>{const p=g('uPos');if(p===null||p==='__new__')return userDraft.posicion||'';return p==='__none__'?'':p;})();
   const equipo=(()=>{const e2=g('uEquipo');if(e2===null||e2==='__new__')return userDraft.equipo||null;return e2==='__none__'?null:e2;})();
   let role;
   if(userDraft.role==='propietario'){ role='propietario'; }
   else { const rn=g('uR'); role=(rn&&rn!=='__new__')?rn:userDraft.role; }
-  const row={nombre:val('uN'),dept,area:deptArea(dept),role,posicion,vac:+val('uV')||0,cumple:val('uC')||null,equipo,telefono:val('uTel'),identificacion:val('uIdent'),color:col?col.value:'#1F4E79'};
+  const row={nombre:val('uN'),dept,area,role,posicion,vac:+val('uV')||0,cumple:val('uC')||null,equipo,telefono:val('uTel'),identificacion:val('uIdent'),color:col?col.value:'#1F4E79'};
   const f=document.getElementById('uFoto').files[0];
   if(f){ row.foto=await fileToAvatar(f); }            // respaldo si no se usó el recorte
   else { row.foto = (userDraft.foto!==undefined ? userDraft.foto : null); }  // recorte aplicado, foto existente, o "Quitar foto"
