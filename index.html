@@ -304,7 +304,7 @@
   .btn-del{background:transparent;color:#c0392b;border:1px solid #e3b7b1;padding:8px 14px;border-radius:9px;font-weight:600;font-size:12.5px;cursor:pointer;margin-left:8px}
   .btn-del:hover{background:#c0392b;color:#fff;border-color:#c0392b}
   .nav-badge{margin-left:auto;background:#e23b3b;color:#fff;font-size:11px;font-weight:700;min-width:18px;height:18px;border-radius:9px;display:inline-flex;align-items:center;justify-content:center;padding:0 5px;line-height:1}
-  #nav a{display:flex;align-items:center}
+  #nav a{display:flex;align-items:center;cursor:pointer}
   .mc-dot{margin-left:auto;background:#e23b3b;color:#fff;font-size:10.5px;font-weight:700;min-width:17px;height:17px;border-radius:9px;display:inline-flex;align-items:center;justify-content:center;padding:0 5px}
   .btn-read:hover{filter:brightness(.95)}
   .read-ok{color:var(--acento);font-weight:700;font-size:13px}
@@ -930,7 +930,7 @@ function buildNav(){
     const open=navOpen.has(g.name);
     const head=document.createElement('div'); head.className='grp-tog'+(open?' open':'');
     head.innerHTML=`<span>${g.name}</span><span class="car">${open?'▾':'▸'}</span>`;
-    head.onclick=()=>{navOpen.has(g.name)?navOpen.delete(g.name):navOpen.add(g.name);buildNav();};
+    head.onclick=()=>{ if(navOpen.has(g.name)){navOpen.clear();} else {navOpen.clear();navOpen.add(g.name);} buildNav(); };
     nav.appendChild(head);
     const box=document.createElement('div'); if(!open) box.style.display='none';
     g.items.forEach(it=>{const a=document.createElement('a');a.dataset.id=it.id;a.innerHTML=`<span class="nicw">${navIcon(it.id)}</span> ${it.t}`;a.onclick=()=>show(it.id);box.appendChild(a);});
@@ -941,7 +941,7 @@ function buildNav(){
   updateRegBadge();
 }
 function highlightNav(){document.querySelectorAll('#nav a').forEach(a=>a.classList.toggle('active',a.dataset.id===curPage));}
-function ensureGroupOpen(id){const g=groupOf(id);if(g&&navOpen&&!navOpen.has(g)){navOpen.add(g);buildNav();}}
+function ensureGroupOpen(id){const g=groupOf(id);if(g&&navOpen&&!(navOpen.size===1&&navOpen.has(g))){navOpen.clear();navOpen.add(g);buildNav();}}
 function show(id){
   curPage=id;
   document.body.classList.remove('nav-open');
@@ -1161,6 +1161,9 @@ function toggleComForm(){
           <div><label>Nivel</label><select id="cNiv"><option value="info">Informativo</option><option value="imp">Importante</option><option value="urg">Urgente</option></select></div>
         </div>
         <label>Contenido</label><textarea id="cCpo" rows="5" required></textarea>
+        <label>📅 Asociar a una fecha del calendario (opcional)</label>
+        <input id="cFecha" type="date">
+        <div style="font-size:12px;color:var(--suave);margin:-4px 0 12px">Si pones una fecha, el comunicado aparecerá en el Calendario como evento y se podrá abrir desde ahí.</div>
         <label>Documentos adjuntos (opcional)</label>
         <input id="cAdj" type="file" multiple>
         <div style="font-size:12px;color:var(--suave);margin:-4px 0 12px">Puedes adjuntar PDF, imágenes u otros archivos. Máx. 25 MB por archivo.</div>
@@ -1172,6 +1175,7 @@ async function createCom(e){
   e.preventDefault();
   const row={ titulo:document.getElementById('cTit').value.trim(), cuerpo:document.getElementById('cCpo').value.trim(),
     nivel:document.getElementById('cNiv').value, dirigido:document.getElementById('cDir').value,
+    fecha_evento:(document.getElementById('cFecha').value||null),
     autor_id:ME.id, autor_nombre:PROFILE.nombre };
   const btn = e.target.querySelector('button[type=submit]');
   if(btn){ btn.disabled=true; btn.textContent='⏳ Publicando...'; }
@@ -1580,6 +1584,11 @@ async function pageCalendario(){
   const canEdit=CAN_MANAGE.includes(PROFILE.role);
   const{data}=await sb.from('eventos').select('*').order('ini');
   const evs=data||[];
+  // Comunicados con fecha → aparecen como eventos enlazados
+  const{data:coms}=await sb.from('comunicados').select('id,titulo,fecha_evento,dirigido').not('fecha_evento','is',null);
+  (coms||[]).filter(c=>c.dirigido==='*'||c.dirigido===PROFILE.dept).forEach(c=>{
+    evs.push({ id:'c'+c.id, comId:c.id, titulo:c.titulo, ini:c.fecha_evento, fin:c.fecha_evento, tipo:'comunicado' });
+  });
   const now=new Date(),Y=now.getFullYear(),M=now.getMonth();
   const ms=['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
   const first=new Date(Y,M,1);const start=(first.getDay()+6)%7;const dim=new Date(Y,M+1,0).getDate();
@@ -1588,12 +1597,14 @@ async function pageCalendario(){
   const todayD=now.getDate();
   let body='';for(let w=0;w<cells.length/7;w++){body+='<tr>';for(let i=0;i<7;i++){const d=cells[w*7+i];if(!d){body+='<td class="empty"></td>';continue;}
     const iso=dayISO(d);const dayEv=evs.filter(e=>iso>=e.ini&&iso<=e.fin);
-    body+=`<td class="${d===todayD?'today':''}"><span class="num">${d}</span>${dayEv.map(e=>`<span class="ev" style="background:${(TIPO_EV[e.tipo]||TIPO_EV.evento)[1]}" title="${esc(e.titulo)}">${esc(e.titulo)}</span>`).join('')}</td>`;}
+    body+=`<td class="${d===todayD?'today':''}"><span class="num">${d}</span>${dayEv.map(e=>{const isCom=e.tipo==='comunicado';return `<span class="ev" style="background:${(TIPO_EV[e.tipo]||TIPO_EV.evento)[1]}${isCom?';cursor:pointer':''}" title="${esc(e.titulo)}"${isCom?` onclick="openComFromCal(${e.comId})"`:''}>${isCom?'📢 ':''}${esc(e.titulo)}</span>`;}).join('')}</td>`;}
     body+='</tr>';}
   const grid=`<table class="cal"><thead><tr>${['L','M','X','J','V','S','D'].map(x=>`<th>${x}</th>`).join('')}</tr></thead><tbody>${body}</tbody></table>`;
-  const lista=[...evs].sort((a,b)=>a.ini<b.ini?-1:1).map(e=>{const t=TIPO_EV[e.tipo]||TIPO_EV.evento;const r=e.ini===e.fin?e.ini:e.ini+' → '+e.fin;
-    return `<div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--gris);font-size:13.5px"><span style="font-weight:700;color:var(--azul);min-width:170px">${r}</span><span style="width:10px;height:10px;border-radius:50%;background:${t[1]}"></span>${esc(e.titulo)}
-      ${canEdit?`<span style="margin-left:auto;display:flex;gap:6px"><button class="btn ghost" style="padding:3px 9px" onclick="evEdit(${e.id},'${esc(e.titulo).replace(/'/g,"\\'")}','${e.ini}','${e.fin}','${e.tipo}')">✏️</button><button class="btn ghost" style="padding:3px 9px" onclick="evDel(${e.id})">🗑️</button></span>`:`<span class="badge b-grey" style="margin-left:auto">${t[0]}</span>`}</div>`;}).join('');
+  const lista=[...evs].sort((a,b)=>a.ini<b.ini?-1:1).map(e=>{const t=TIPO_EV[e.tipo]||TIPO_EV.evento;const r=e.ini===e.fin?e.ini:e.ini+' → '+e.fin;const isCom=e.tipo==='comunicado';
+    const acc=isCom
+      ? `<span style="margin-left:auto"><button class="btn ghost" style="padding:3px 9px" onclick="openComFromCal(${e.comId})">📢 Ver comunicado</button></span>`
+      : (canEdit?`<span style="margin-left:auto;display:flex;gap:6px"><button class="btn ghost" style="padding:3px 9px" onclick="evEdit(${e.id},'${esc(e.titulo).replace(/'/g,"\\'")}','${e.ini}','${e.fin}','${e.tipo}')">✏️</button><button class="btn ghost" style="padding:3px 9px" onclick="evDel(${e.id})">🗑️</button></span>`:`<span class="badge b-grey" style="margin-left:auto">${t[0]}</span>`);
+    return `<div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--gris);font-size:13.5px"><span style="font-weight:700;color:var(--azul);min-width:170px">${r}</span><span style="width:10px;height:10px;border-radius:50%;background:${t[1]}"></span>${isCom?'📢 ':''}${esc(e.titulo)}${acc}</div>`;}).join('');
   document.getElementById('main').innerHTML=`<div class="page-title">Calendario · ${ms[M]} ${Y}</div><div class="page-sub">Eventos importantes: avisos, formaciones y fechas marcadas</div>
     ${canEdit?`<div style="margin-bottom:16px"><button class="btn" onclick="evNew()">➕ Nuevo evento</button></div>${evFormOpen?evForm():''}`:''}
     <div class="panel">${grid}<div style="display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--suave);margin-top:12px">${Object.values(TIPO_EV).map(t=>`<span><i style="display:inline-block;width:12px;height:12px;border-radius:3px;background:${t[1]}"></i> ${t[0]}</span>`).join('')}</div></div>
@@ -1613,6 +1624,7 @@ async function evSave(e){e.preventDefault();let ini=val('evI'),fin=val('evF')||v
   const{error}=evEditId?await sb.from('eventos').update(row).eq('id',evEditId):await sb.from('eventos').insert(row);
   if(error){alert('Error: '+error.message);return false;}evFormOpen=false;show('calendario');return false;}
 async function evDel(id){if(!confirm('¿Eliminar evento?'))return;await sb.from('eventos').delete().eq('id',id);show('calendario');}
+function openComFromCal(id){ comSel=id; comFilter='todos'; comQuery=''; show('comunicados'); }
 
 /* ---------------- CUMPLEAÑOS ---------------- */
 async function pageCumple(){
