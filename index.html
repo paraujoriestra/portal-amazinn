@@ -893,7 +893,8 @@ const SH=Object.fromEntries(SHIFTS.map(s=>[s.v,s]));
 // Horarios v2: catálogo de turnos
 let TURNOS_TIPO=[];
 let horW={area:'',dept:'',equipos:[],desde:'',hasta:'',turnos:null,gen:false};
-function horToggleEquipo(name,on){ horW.equipos=horW.equipos||[]; if(on){ if(!horW.equipos.includes(name)) horW.equipos.push(name);} else horW.equipos=horW.equipos.filter(x=>x!==name); horW.gen=false; show('horarios'); }
+function horToggleEquipo(name,on){ horW.equipos=horW.equipos||[]; if(on){ if(!horW.equipos.includes(name)) horW.equipos.push(name);} else horW.equipos=horW.equipos.filter(x=>x!==name);
+  const c=document.getElementById('horEqCount'); if(c) c.textContent=horW.equipos.length?horW.equipos.length+' equipo(s) seleccionados':'Vacío = todos'; horClearGrid(); }
 async function loadTurnosTipo(){ const{data}=await sb.from('turnos_tipo').select('*').order('orden').order('id'); TURNOS_TIPO=data||[]; if(horW.turnos===null) horW.turnos=TURNOS_TIPO.map(t=>t.id); }
 function turnoTipo(id){ return TURNOS_TIPO.find(t=>String(t.id)===String(id)); }
 function abreviaTurno(t){ const n=(t&&t.nombre)||''; return n.slice(0,3); }
@@ -1375,7 +1376,8 @@ async function pageHorarios(){
 function horToggleTurno(id,on){ id=Number(id); if(on){ if(!horW.turnos.includes(id)) horW.turnos.push(id);} else horW.turnos=horW.turnos.filter(x=>x!==id); }
 function horSetHora(id,which,v){ horW.horas=horW.horas||{}; horW.horas[id]=horW.horas[id]||{ini:'',fin:''}; horW.horas[id][which]=v; }
 function horHora(id){ const h=(horW.horas||{})[id]; if(h) return h; const t=turnoTipo(id); return {ini:(t&&t.hora_ini)||'',fin:(t&&t.hora_fin)||''}; }
-function horGenerar(){ if(!horW.desde||!horW.hasta){alert('Elige las fechas (desde y hasta).');return;} if(horW.hasta<horW.desde){alert('La fecha final no puede ser anterior a la inicial.');return;} if(!horW.turnos.length){alert('Selecciona al menos un tipo de turno.');return;} horW.gen=true; show('horarios'); }
+async function horGenerar(){ if(!horW.desde||!horW.hasta){alert('Elige las fechas (desde y hasta).');return;} if(horW.hasta<horW.desde){alert('La fecha final no puede ser anterior a la inicial.');return;} if(!horW.turnos.length){alert('Selecciona al menos un tipo de turno.');return;}
+  horW.gen=true; const b=document.getElementById('horGridBox'); if(!b){ show('horarios'); return; } b.innerHTML='<div class="panel" style="color:var(--suave)">Generando cuadrícula…</div>'; b.innerHTML=await horGrid(); }
 function horDays(a,b){ const out=[]; let d=new Date(a+'T00:00:00'), end=new Date(b+'T00:00:00'); if(isNaN(d)||isNaN(end)||end<d) return out; let g=0; while(d<=end && g++<92){ out.push(new Date(d)); d.setDate(d.getDate()+1); } return out; }
 function horAddTurnoForm(){ const box=document.getElementById('horNewTurno'); if(!box) return; box.innerHTML=box.innerHTML?'':`<div style="background:var(--gris);border-radius:9px;padding:12px;margin-top:10px;display:grid;gap:8px;max-width:420px">
     <input id="ntN" placeholder="Nombre del turno (ej: Madrugada)"><div class="row"><input id="ntI" placeholder="Hora inicio (09:00)"><input id="ntF" placeholder="Hora fin (17:00)"></div>
@@ -1389,15 +1391,14 @@ async function horCrear(){
   if(role==='direccion'){ horW.area=PROFILE.area||''; }
   if(role==='responsable'){ horW.area=PROFILE.area||''; horW.dept=PROFILE.dept||''; }
   horW.horas=horW.horas||{}; TURNOS_TIPO.forEach(t=>{ if(!horW.horas[t.id]) horW.horas[t.id]={ini:t.hora_ini||'',fin:t.hora_fin||''}; });
-  const areaSel=`<select ${canArea?'':'disabled'} onchange="horW.area=this.value;horW.dept='';horW.gen=false;show('horarios')"><option value="">Todas</option>${CAT.areas.map(a=>`<option ${horW.area===a?'selected':''}>${esc(a)}</option>`).join('')}</select>`;
-  const depOpts=CAT.deptos.filter(d=>!horW.area||d.area===horW.area);
-  const deptSel=`<select ${canDept?'':'disabled'} onchange="horW.dept=this.value;horW.gen=false;show('horarios')"><option value="">Todos${horW.area?' los de '+esc(horW.area):''}</option>${depOpts.map(d=>`<option ${horW.dept===d.nombre?'selected':''}>${esc(d.nombre)}</option>`).join('')}</select>`;
+  const areaSel=`<select id="horAreaSel" ${canArea?'':'disabled'} onchange="horAreaChange(this.value)"><option value="">Todas</option>${CAT.areas.map(a=>`<option ${horW.area===a?'selected':''}>${esc(a)}</option>`).join('')}</select>`;
+  const deptSel=`<select id="horDeptSel" ${canDept?'':'disabled'} onchange="horW.dept=this.value;horClearGrid()">${horDeptOptionsHTML()}</select>`;
   horW.equipos=horW.equipos||[];
   const eqSel=CAT.equipos.length
-    ? `<div class="hor-eq">${CAT.equipos.map(e=>`<label class="thk" style="padding:5px 9px;font-size:12.5px"><input type="checkbox" ${horW.equipos.includes(e)?'checked':''} onchange="horToggleEquipo('${e.replace(/'/g,"\\'")}',this.checked)"> ${esc(e)}</label>`).join('')}</div><small style="color:var(--suave)">${horW.equipos.length?horW.equipos.length+' equipo(s) seleccionados':'Vacío = todos'}</small>`
+    ? `<div class="hor-eq">${CAT.equipos.map(e=>`<label class="thk" style="padding:5px 9px;font-size:12.5px"><input type="checkbox" ${horW.equipos.includes(e)?'checked':''} onchange="horToggleEquipo('${e.replace(/'/g,"\\'")}',this.checked)"> ${esc(e)}</label>`).join('')}</div><small id="horEqCount" style="color:var(--suave)">${horW.equipos.length?horW.equipos.length+' equipo(s) seleccionados':'Vacío = todos'}</small>`
     : '<small style="color:var(--suave)">No hay equipos creados</small>';
   const checks=TURNOS_TIPO.map(t=>{const h=horHora(t.id);const on=horW.turnos.includes(t.id);return `<div class="turno-card${on?' on':''}">
-      <label class="tc-pick"><input type="checkbox" ${on?'checked':''} onchange="horToggleTurno(${t.id},this.checked)"><span class="tc-dot" style="background:${t.color}"></span><span class="tc-name">${esc(t.nombre)}</span></label>
+      <label class="tc-pick"><input type="checkbox" ${on?'checked':''} onchange="horToggleTurno(${t.id},this.checked);horClearGrid()"><span class="tc-dot" style="background:${t.color}"></span><span class="tc-name">${esc(t.nombre)}</span></label>
       <div class="tc-hours"><input class="thk-h" value="${esc(h.ini)}" placeholder="inicio" onchange="horSetHora(${t.id},'ini',this.value)"><span style="color:var(--suave)">–</span><input class="thk-h" value="${esc(h.fin)}" placeholder="fin" onchange="horSetHora(${t.id},'fin',this.value)"></div>
     </div>`;}).join('');
   const step=(n,title,sub,inner)=>`<div class="hor-step"><div class="hs-head"><span class="hs-num">${n}</span><div><div class="hs-title">${title}</div><div class="hs-sub">${sub}</div></div></div>${inner}</div>`;
@@ -1405,16 +1406,19 @@ async function horCrear(){
   const form=`<div class="hor-wizard">
     ${step('1','Alcance','¿A quién va dirigido este horario?',`<div class="row"><div><label>Área</label>${areaSel}</div><div><label>Departamento</label>${deptSel}</div></div>
       <div style="margin-top:12px"><label>Equipos (uno, varios o todos)</label>${eqSel}</div>${ayuda}`)}
-    ${step('2','Fechas','Desde qué día hasta qué día',`<div class="row"><div><label>Desde</label><input type="date" value="${horW.desde}" onchange="horW.desde=this.value"></div>
-      <div><label>Hasta</label><input type="date" value="${horW.hasta}" onchange="horW.hasta=this.value"></div></div>`)}
+    ${step('2','Fechas','Desde qué día hasta qué día',`<div class="row"><div><label>Desde</label><input type="date" value="${horW.desde}" onchange="horW.desde=this.value;horClearGrid()"></div>
+      <div><label>Hasta</label><input type="date" value="${horW.hasta}" onchange="horW.hasta=this.value;horClearGrid()"></div></div>`)}
     ${step('3','Turnos y horarios','Marca los turnos y ajusta sus horas para este horario (no cambia el catálogo)',`<div class="thk-grid">${checks}</div>
       <button class="btn ghost" style="padding:6px 12px;margin-top:10px" onclick="horAddTurnoForm()">➕ Nuevo tipo de turno</button><div id="horNewTurno"></div>`)}
     <div style="text-align:right;margin-top:2px"><button class="btn" onclick="horGenerar()">Generar cuadrícula →</button></div>
   </div>`;
-  let grid='';
-  if(horW.gen) grid=await horGrid();
-  return form+grid;
+  const grid = horW.gen ? await horGrid() : '';
+  return form+`<div id="horGridBox">${grid}</div>`;
 }
+function horDeptOptionsHTML(){ const dep=CAT.deptos.filter(d=>!horW.area||d.area===horW.area);
+  return `<option value="">Todos${horW.area?' los de '+esc(horW.area):''}</option>${dep.map(d=>`<option ${horW.dept===d.nombre?'selected':''}>${esc(d.nombre)}</option>`).join('')}`; }
+function horAreaChange(v){ horW.area=v; horW.dept=''; const ds=document.getElementById('horDeptSel'); if(ds) ds.innerHTML=horDeptOptionsHTML(); horClearGrid(); }
+function horClearGrid(){ horW.gen=false; const b=document.getElementById('horGridBox'); if(b) b.innerHTML=''; }
 async function horGrid(){
   let q=sb.from('profiles').select('id,nombre,dept,area,equipo').eq('estado','aprobado');
   if(horW.area) q=q.eq('area',horW.area);
@@ -1434,7 +1438,7 @@ async function horGrid(){
   const rows=people.map(p=>`<tr><td class="emp">${esc(p.nombre)}<br><small style="color:var(--suave)">${esc(p.dept||p.area||'')}</small></td>
     <td><select class="uloc" data-emp="${p.id}">${ubicOpts(locMap[p.id]||'')}</select></td>${days.map(d=>{const iso=isoD(d);const cur=map[p.id+'|'+iso]||'';
     return `<td class="${isWk(d)?'wknd':''}"><select class="tcell2" data-emp="${p.id}" data-name="${esc(p.nombre)}" data-dept="${esc(p.dept||'')}" data-fecha="${iso}"><option value="">—</option>${chosen.map(t=>`<option value="${t.id}" ${String(cur)===String(t.id)?'selected':''}>${esc(t.nombre)}</option>`).join('')}</select></td>`;}).join('')}</tr>`).join('');
-  return `<div class="panel"><div style="margin-bottom:12px;display:flex;gap:8px;flex-wrap:wrap"><button class="btn" onclick="horGuardar()">💾 Guardar y publicar</button><button class="btn ghost" onclick="horW.gen=false;show('horarios')">↩ Cambiar alcance/fechas</button>
+  return `<div class="panel"><div style="margin-bottom:12px;display:flex;gap:8px;flex-wrap:wrap"><button class="btn" onclick="horGuardar()">💾 Guardar y publicar</button><button class="btn ghost" onclick="horClearGrid()">↩ Cambiar alcance/fechas</button>
       <span style="font-size:12.5px;color:var(--suave);align-self:center">${people.length} persona(s) · ${days.length} día(s)</span></div>
     <div class="grid-wrap"><table class="sched"><thead>${head}</thead><tbody>${rows}</tbody></table></div></div>`;
 }
@@ -1662,7 +1666,7 @@ async function orgDropAside(e){ e.preventDefault(); e.stopPropagation(); e.curre
   const{error}=await sb.from('profiles').update({fuera_org:true,jefe_id:null}).eq('id',id); if(error){alert('No se pudo guardar: '+error.message);return;} orgDragId=null; pageOrganigrama(); }
 
 /* ---------------- IMPORTAR EXCEL (Dirección/Admin/Propietario) ---------------- */
-const IMPORT_COLS={ proveedores:['Nombre proveedor','Tipología','Concepto','RUC','Email','Teléfono','Banco','Tipo de cuenta','Nº de cuenta'], propietarios:['Nombre propietario','Propiedad','Concepto','Sociedad','RUC','Email','Teléfono','Banco','Tipo de cuenta','Nº de cuenta'], suministros:['tipo','referencia','titular','compania','propiedad'] };
+const IMPORT_COLS={ proveedores:['Nombre proveedor','Tipología','Concepto','RUC','Email','Teléfono','Banco','Tipo de cuenta','Nº de cuenta'], propietarios:['Nombre propietario','Propiedad','Concepto','Sociedad','RUC','Email','Teléfono','Banco','Tipo de cuenta','Nº de cuenta'], suministros:['tipo','referencia','medidor','titular','compania','propiedad','nota'] };
 function importBtn(tabla){ if(!isDireccion()) return ''; return `<label class="btn ghost" style="cursor:pointer">📥 Importar Excel<input type="file" accept=".xlsx,.xls,.csv" style="display:none" onchange="importExcel('${tabla}',this)"></label><a href="#" style="font-size:12px;color:var(--acento)" onclick="plantillaExcel('${tabla}');return false">descargar plantilla</a>`; }
 function normKey(k){ return (k==null?'':''+k).trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,''); }
 function rowGet(map,...names){ for(const n of names){ const v=map[normKey(n)]; if(v!==undefined&&v!=='') return (''+v).trim(); } return ''; }
@@ -1693,9 +1697,9 @@ function mapRow(tabla,r){
       tipo_cuenta:rowGet(map,'tipo de cuenta','tipo cuenta'),
       num_cuenta:rowGet(map,'nº de cuenta','no de cuenta','numero de cuenta','n de cuenta','num cuenta','cuenta') };
   }
-  const tipo=rowGet(map,'tipo'); const ref=rowGet(map,'referencia','ref','nis','idaan','suscriptor');
+  const tipo=rowGet(map,'tipo'); const ref=rowGet(map,'referencia','ref','nis','idaan','suscriptor','nº nis','nº idaan','nº de suscriptor');
   if(!tipo&&!ref) return null;
-  return { tipo:tipo||'otro', referencia:ref, titular:rowGet(map,'titular','a nombre de'), compania:rowGet(map,'compania','empresa','suministrador'), propiedad:rowGet(map,'propiedad','apartamento','casa','unidad') };
+  return { tipo:tipo||'otro', referencia:ref, medidor:rowGet(map,'medidor','nº de medidor','no de medidor','numero de medidor'), titular:rowGet(map,'titular','a nombre de'), compania:rowGet(map,'compania','empresa','suministrador'), propiedad:rowGet(map,'propiedad','apartamento','casa','unidad'), nota:rowGet(map,'nota','notas','observaciones') };
 }
 function plantillaExcel(tabla){
   if(typeof XLSX==='undefined'){ alert('No se pudo cargar el lector de Excel. Revisa tu conexión.'); return; }
@@ -1846,24 +1850,32 @@ async function pageSuministros(){
   const tabs=[['electricidad','⚡ Electricidad'],['agua','💧 Agua y Aseo'],['internet','🌐 Internet']];
   const{data,error}=await sb.from('suministros').select('*').eq('tipo',supTab).order('propiedad');
   if(error){document.getElementById('main').innerHTML='<div class="panel">Error: '+error.message+'</div>';return;}
-  const conTitular=supTab!=='agua';
+  const conMedidor=supTab==='electricidad';
   const refLbl=supTab==='electricidad'?'Nº NIS':(supTab==='agua'?'Nº IDAAN':'Nº de suscriptor');
-  const rows=(data||[]).map(r=>`<tr data-s="${dataS([r.referencia,r.titular,r.compania,r.propiedad])}"><td><b>${esc(r.referencia||'')}</b></td>${conTitular?`<td>${esc(r.titular||'')}</td>`:''}<td>${esc(r.compania||'')}</td><td>${esc(r.propiedad||'')}</td>
+  const rows=(data||[]).map(r=>`<tr data-s="${dataS([r.referencia,r.medidor,r.titular,r.compania,r.propiedad,r.nota])}">
+    <td><b>${esc(r.referencia||'')}</b></td>
+    ${conMedidor?`<td>${esc(r.medidor||'')}</td>`:''}
+    <td>${esc(r.titular||'')}</td>
+    <td>${esc(r.compania||'')}</td>
+    <td>${esc(r.propiedad||'')}</td>
+    <td style="color:var(--suave)">${esc(r.nota||'')}</td>
     ${canEdit?`<td><button class="btn ghost" style="padding:4px 9px" onclick="delRow('suministros',${r.id},'suministros')">🗑️</button></td>`:''}</tr>`).join('');
   document.getElementById('main').innerHTML=`
     <div class="page-title">Suministros por activo</div><div class="page-sub">Referencias de los contratos de cada propiedad</div>
     <div class="tabs">${tabs.map(t=>`<button class="${supTab===t[0]?'on':''}" onclick="setSupTab('${t[0]}')">${t[1]}</button>`).join('')}</div>
     ${canEdit?`<div style="margin-bottom:14px;display:flex;gap:8px;flex-wrap:wrap;align-items:center"><button class="btn ghost" onclick="supFormOpen=!supFormOpen;show('suministros')">${supFormOpen?'✕ Cerrar':'➕ Añadir registro'}</button>${importBtn('suministros')}</div>`:''}
-    ${canEdit&&supFormOpen?`<div class="panel" style="max-width:560px"><form class="box" onsubmit="return createSup(event)" style="max-width:none">
-      <label>${refLbl}</label><input id="sR">${conTitular?'<label>A nombre de</label><input id="sT">':''}
-      <label>Compañía</label><input id="sC"><label>Propiedad</label><input id="sP">
+    ${canEdit&&supFormOpen?`<div class="panel" style="max-width:600px"><form class="box" onsubmit="return createSup(event)" style="max-width:none">
+      <div class="row"><div><label>${refLbl}</label><input id="sR"></div>${conMedidor?'<div><label>Nº de medidor</label><input id="sMed"></div>':'<div></div>'}</div>
+      <div class="row"><div><label>A nombre de</label><input id="sT"></div><div><label>Compañía</label><input id="sC"></div></div>
+      <label>Propiedad</label><input id="sP">
+      <label>Nota</label><textarea id="sNota" rows="2"></textarea>
       <div><button class="btn" type="submit">Guardar</button></div></form></div>`:''}
     ${tblSearch('supBody')}
-    <div class="panel"><table><thead><tr><th>${refLbl}</th>${conTitular?'<th>A nombre de</th>':''}<th>Compañía</th><th>Propiedad</th>${canEdit?'<th></th>':''}</tr></thead>
-      <tbody id="supBody">${rows||'<tr><td colspan="5" style="color:var(--suave)">Sin registros en esta categoría.</td></tr>'}</tbody></table></div>`;
+    <div class="panel"><div style="overflow-x:auto"><table class="tbl-compact"><thead><tr><th>${refLbl}</th>${conMedidor?'<th>Nº medidor</th>':''}<th>A nombre de</th><th>Compañía</th><th>Propiedad</th><th>Nota</th>${canEdit?'<th></th>':''}</tr></thead>
+      <tbody id="supBody">${rows||'<tr><td colspan="7" style="color:var(--suave)">Sin registros en esta categoría.</td></tr>'}</tbody></table></div></div>`;
 }
 async function createSup(e){e.preventDefault();
-  const row={tipo:supTab,referencia:val('sR'),titular:supTab!=='agua'?val('sT'):null,compania:val('sC'),propiedad:val('sP')};
+  const row={tipo:supTab,referencia:val('sR'),medidor:supTab==='electricidad'?val('sMed'):null,titular:val('sT'),compania:val('sC'),propiedad:val('sP'),nota:val('sNota')};
   const{error}=await sb.from('suministros').insert(row);
   if(error){alert('Error: '+error.message);return false;}
   supFormOpen=false;show('suministros');return false;
