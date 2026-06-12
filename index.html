@@ -1649,9 +1649,9 @@ async function pageRegistros(){
       <button class="btn ghost" style="padding:6px 12px" onclick="regFoto('${u.id}')">📷 Foto</button></div>
     <div style="font-size:13.5px;line-height:2;background:var(--gris);border-radius:9px;padding:8px 14px">
       📞 <b>${esc(u.telefono||'—')}</b> &nbsp;·&nbsp; 🪪 <b>${esc(u.identificacion||'—')}</b> &nbsp;·&nbsp; 🎂 <b>${u.cumple||'—'}</b></div>
-    ${(()=>{const ca=u.area||CAT.areas[0]||'';const deps=CAT.deptos.filter(d=>d.area===ca);return `
+    ${(()=>{const ca=u.area||'';const deps=CAT.deptos.filter(d=>d.area===ca);return `
     <div class="row" style="margin-top:12px">
-      <div><label>Área</label><select id="rgA_${u.id}" onchange="filtraDeptosReg('${u.id}')">${CAT.areas.map(a=>`<option ${ca===a?'selected':''}>${esc(a)}</option>`).join('')}</select></div>
+      <div><label>Área</label><select id="rgA_${u.id}" onchange="filtraDeptosReg('${u.id}')"><option value="__none__" ${!ca?'selected':''}>— Ninguno (todas las áreas) —</option>${CAT.areas.map(a=>`<option ${ca===a?'selected':''}>${esc(a)}</option>`).join('')}</select></div>
       <div><label>Departamento</label><select id="rgD_${u.id}"><option value="__none__" ${!u.dept?'selected':''}>— Ninguno (toda el área) —</option>${deps.map(d=>`<option ${u.dept===d.nombre?'selected':''}>${esc(d.nombre)}</option>`).join('')}</select></div>
     </div>`;})()}
     <div class="row">
@@ -1670,7 +1670,7 @@ async function pageRegistros(){
     ${us.length?cards:'<div class="panel">No hay registros pendientes. ✅</div>'}`;
 }
 function filtraDeptosReg(id){
-  const a=document.getElementById('rgA_'+id).value;
+  const aRaw=document.getElementById('rgA_'+id).value; const a=aRaw==='__none__'?'':aRaw;
   const sel=document.getElementById('rgD_'+id);
   const deps=CAT.deptos.filter(d=>d.area===a);
   sel.innerHTML='<option value="__none__">— Ninguno (toda el área) —</option>'+deps.map(d=>`<option>${esc(d.nombre)}</option>`).join('');
@@ -1678,7 +1678,7 @@ function filtraDeptosReg(id){
 async function aprobarReg(id){
   const role=document.getElementById('rgR_'+id).value;
   const dRaw=document.getElementById('rgD_'+id).value; const dept=(dRaw==='__none__'||dRaw==='')?'':dRaw;
-  const area=(document.getElementById('rgA_'+id)||{}).value || deptArea(dept);
+  const aRaw=(document.getElementById('rgA_'+id)||{}).value; const area=(aRaw&&aRaw!=='__none__')?aRaw:deptArea(dept);
   const psSel=document.getElementById('rgC_'+id), eqSel=document.getElementById('rgE_'+id);
   const posicion=psSel&&psSel.value!=='__none__'?psSel.value:'';
   const equipo=eqSel&&eqSel.value!=='__none__'?eqSel.value:null;
@@ -1745,9 +1745,9 @@ async function deleteUser(id,nombre){
 function userForm(){const u=userDraft;const colores=['#1F4E79','#16a085','#8e44ad','#d35400','#c0392b','#2980b9','#27ae60','#e67e22','#34495e'];
   return `<div class="panel" style="max-width:640px"><h2>✏️ Editar ${esc(u.nombre||'usuario')}</h2><form class="box" onsubmit="return userSave(event)" style="max-width:none">
     <div class="row"><div><label>Nombre</label><input id="uN" value="${esc(u.nombre||'')}"></div><div><label>Días vacaciones</label><input id="uV" type="number" value="${u.vac||0}"></div></div>
-    ${(()=>{const curArea=u.area||deptArea(u.dept)||CAT.areas[0]||'';const depsArea=CAT.deptos.filter(d=>d.area===curArea);return `
+    ${(()=>{const curArea=u.area||deptArea(u.dept)||'';const depsArea=CAT.deptos.filter(d=>d.area===curArea);return `
     <div class="row"><div><label>Área</label>
-        <select id="uArea" onchange="if(this.value==='__new__')crearCatInline('area');else onAreaChange(this.value)">${CAT.areas.map(a=>`<option ${curArea===a?'selected':''}>${esc(a)}</option>`).join('')}<option value="__new__">➕ Crear nueva…</option></select></div>
+        <select id="uArea" onchange="if(this.value==='__new__')crearCatInline('area');else onAreaChange(this.value)"><option value="__none__" ${!curArea?'selected':''}>— Ninguno (todas las áreas) —</option>${CAT.areas.map(a=>`<option ${curArea===a?'selected':''}>${esc(a)}</option>`).join('')}<option value="__new__">➕ Crear nueva…</option></select></div>
       <div><label>Departamento</label>
         <select id="uD" onchange="if(this.value==='__new__')crearCatInline('departamento');else userDraft.dept=this.value==='__none__'?'':this.value"><option value="__none__" ${!u.dept?'selected':''}>— Ninguno (toda el área) —</option>${depsArea.map(d=>`<option ${u.dept===d.nombre?'selected':''}>${esc(d.nombre)}</option>`).join('')}<option value="__new__">➕ Crear nuevo…</option></select></div></div>`;})()}
     <div class="row"><div><label>Posición</label>
@@ -1768,7 +1768,7 @@ function captureUserForm(){
   const g=id=>{const el=document.getElementById(id);return el?el.value:null;};
   if(g('uN')!==null) userDraft.nombre=g('uN');
   if(g('uV')!==null) userDraft.vac=+g('uV')||0;
-  const ar=g('uArea'); if(ar&&ar!=='__new__') userDraft.area=ar;
+  const ar=g('uArea'); if(ar&&ar!=='__new__') userDraft.area = ar==='__none__'?'':ar;
   const d=g('uD'); if(d!==null&&d!=='__new__') userDraft.dept = d==='__none__'?'':d;
   const ps=g('uPos'); if(ps!==null&&ps!=='__new__') userDraft.posicion=ps==='__none__'?'':ps;
   const eq=g('uEquipo'); if(eq!==null&&eq!=='__new__') userDraft.equipo=eq==='__none__'?null:eq;
@@ -1780,6 +1780,7 @@ function captureUserForm(){
 }
 function onAreaChange(area){
   captureUserForm();
+  area = area==='__none__' ? '' : area;
   userDraft.area=area;
   const inArea=CAT.deptos.filter(d=>d.area===area).map(d=>d.nombre);
   if(userDraft.dept && !inArea.includes(userDraft.dept)) userDraft.dept='';  // si tenía depto de otra área, pasa a Ninguno
@@ -1806,7 +1807,7 @@ async function userSave(e){e.preventDefault();
   const col=document.querySelector('input[name="uCol"]:checked');
   const g=id=>{const el=document.getElementById(id);return el?el.value:null;};
   const dept=(()=>{const d=g('uD');if(d===null||d==='__new__')return userDraft.dept||'';return d==='__none__'?'':d;})();
-  const area=(()=>{const a=g('uArea');return (a&&a!=='__new__')?a:(userDraft.area||deptArea(dept)||'');})();
+  const area=(()=>{const a=g('uArea');if(a&&a!=='__new__')return a==='__none__'?'':a;return userDraft.area||deptArea(dept)||'';})();
   const posicion=(()=>{const p=g('uPos');if(p===null||p==='__new__')return userDraft.posicion||'';return p==='__none__'?'':p;})();
   const equipo=(()=>{const e2=g('uEquipo');if(e2===null||e2==='__new__')return userDraft.equipo||null;return e2==='__none__'?null:e2;})();
   let role;
