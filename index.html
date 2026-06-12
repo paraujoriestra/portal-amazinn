@@ -863,6 +863,9 @@ const NAV=[
   {id:'proveedores',ic:'🚚',t:'Proveedores'},
   {id:'propietarios',ic:'🏠',t:'Propietarios'},
   {id:'suministros',ic:'🔌',t:'Suministros'},
+  {grp:'Limpieza'},
+  {id:'asignaciones',ic:'🧹',t:'Asignaciones'},
+  {id:'limpTutoriales',ic:'🎥',t:'Tutoriales'},
   {grp:'Mantenimiento'},
   {id:'incidencias',ic:'🛠️',t:'Incidencias'},
   {id:'videos',ic:'🎥',t:'Videos explicativos'},
@@ -1099,6 +1102,8 @@ function show(id){
   else if(id==='incidencias'){ m.innerHTML='<div class="page-title">Incidencias</div><div class="page-sub">Cargando…</div>'; pageIncidencias(); }
   else if(id==='videos'){ m.innerHTML='<div class="page-title">Videos explicativos</div><div class="page-sub">Cargando…</div>'; pageVideos(); }
   else if(id==='onboarding'){ m.innerHTML=pageOnboarding(); }
+  else if(id==='asignaciones'){ m.innerHTML='<div class="page-title">Limpieza · Asignaciones</div><div class="page-sub">Cargando…</div>'; pageAsignaciones(); }
+  else if(id==='limpTutoriales'){ m.innerHTML=pageLimpTutoriales(); }
 }
 
 /* ---------------- INICIO ---------------- */
@@ -2776,6 +2781,229 @@ async function delVideo(id){if(!confirm('¿Eliminar este vídeo?'))return;const{
 /* ---------------- ONBOARDING (lista local) ---------------- */
 const ONB=[{t:"Firmar contrato y entregar documentación a RRHH",done:true},{t:"Crear cuenta y accesos del portal",done:true},{t:"Asignar departamento y rol",done:true},{t:"Entrega de uniforme y llaves",done:false},{t:"Formación: Prevención de Riesgos Laborales",done:false},{t:"Formación: Protección de datos (RGPD)",done:false},{t:"Leer el manual de empleado",done:false},{t:"Presentación al equipo",done:false}];
 function pageOnboarding(){const h=ONB.filter(o=>o.done).length,pct=Math.round(h/ONB.length*100);return `<div class="page-title">Onboarding</div><div class="page-sub">Lista de incorporación de un nuevo empleado</div><div class="panel" style="max-width:680px"><div style="display:flex;align-items:center;gap:12px;margin-bottom:14px"><div style="flex:1;height:12px;background:var(--gris2);overflow:hidden"><i style="display:block;height:100%;width:${pct}%;background:var(--acento)"></i></div><b>${pct}%</b></div>${ONB.map((o,i)=>`<label style="display:flex;align-items:center;gap:11px;padding:11px 0;border-bottom:1px solid var(--gris);font-size:14px;cursor:pointer"><input type="checkbox" ${o.done?'checked':''} onchange="ONB[${i}].done=this.checked;show('onboarding')"> <span style="${o.done?'text-decoration:line-through;color:var(--suave)':''}">${o.t}</span></label>`).join('')}</div>`;}
+
+/* ===================== LIMPIEZA · ASIGNACIONES ===================== */
+const ASG_TIPO=[['salida','🔴 Salida'],['salida_entrada','🟠 Salida y entrada'],['entrada','🟢 Entrada']];
+const EQUIPOS=['Oficina Central','El Valle','Playa Escondida'];
+let asgTab='asignaciones';
+let ASG={pubId:null,equipo:'',fecha:'',unidades:[],comunes:[]};
+let ASG_TRAB=[], ASG_TRAB_FULL=[], ASG_UNI=[], ASG_AREA=[], ASG_PUBS=[];
+function asgCan(){ return CAN_MANAGE.includes(PROFILE.role); }
+function asgTeamWorkers(){ return ASG_TRAB_FULL.filter(t=>!ASG.equipo||(t.equipo||'')===ASG.equipo).map(t=>t.nombre); }
+function asgSetEquipo(e){ ASG.equipo=e; show('asignaciones'); }
+function asgTipoLabel(t){ const o=ASG_TIPO.find(x=>x[0]===t); return o?o[1]:''; }
+function fechaLarga(iso){ if(!iso) return ''; const d=new Date(iso+'T00:00:00'); if(isNaN(d)) return iso; const ds=['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado']; const dd=String(d.getDate()).padStart(2,'0'), mm=String(d.getMonth()+1).padStart(2,'0'); return `${ds[d.getDay()]} ${dd}/${mm}/${d.getFullYear()}`; }
+function asgComputeResumen(d){ d=d||ASG; const m={}; const add=(t,k)=>{ if(t&&(''+t).trim()){ t=(''+t).trim(); m[t]=m[t]||{u:0,c:0}; m[t][k]++; } }; (d.unidades||[]).forEach(u=>{add(u.t1,'u');add(u.t2,'u');}); (d.comunes||[]).forEach(c=>{add(c.t1,'c');add(c.t2,'c');}); return Object.keys(m).sort().map(n=>({nombre:n,u:m[n].u,c:m[n].c})); }
+function asgResumenHTML(){ const r=asgComputeResumen(ASG); if(!r.length) return '<p style="color:var(--suave);margin:0">Aún no hay personal asignado.</p>'; return `<div class="asg-resgrid">${r.map((p,i)=>`<div class="asg-reschip"><b>${i+1}. ${esc(p.nombre)}</b><span>${p.u?p.u+' unidad(es)':''}${p.u&&p.c?' · ':''}${p.c?p.c+' z. común':''}</span></div>`).join('')}</div><div class="asg-restotal">👥 ${r.length} persona(s) llamada(s) a trabajar</div>`; }
+function asgRefreshResumen(){ const b=document.getElementById('asgResumenBox'); if(b) b.innerHTML=asgResumenHTML(); }
+function asgUpdU(i,c,v){ if(ASG.unidades[i]){ ASG.unidades[i][c]=v; asgRefreshResumen(); } }
+function asgUpdC(i,c,v){ if(ASG.comunes[i]){ ASG.comunes[i][c]=v; asgRefreshResumen(); } }
+function asgUpdFecha(v){ ASG.fecha=v; }
+function asgAddUnidad(){ ASG.unidades.push({unidad:'',prioridad:'',tipo:'salida_entrada',pax:'',extra:'',t1:'',t2:''}); show('asignaciones'); }
+function asgDelUnidad(i){ ASG.unidades.splice(i,1); show('asignaciones'); }
+function asgAddComun(){ ASG.comunes.push({area:'',t1:'',t2:''}); show('asignaciones'); }
+function asgDelComun(i){ ASG.comunes.splice(i,1); show('asignaciones'); }
+function asgNueva(){ ASG={pubId:null,equipo:'',fecha:'',unidades:[{unidad:'',prioridad:'',tipo:'salida_entrada',pax:'',extra:'',t1:'',t2:''}],comunes:[]}; asgTab='asignaciones'; show('asignaciones'); }
+function setAsgTab(t){ asgTab=t; show('asignaciones'); }
+function asgFind(id){ return ASG_PUBS.find(p=>p.id===id); }
+
+async function asgAddTrab(){ const g=document.getElementById('asgTrabN'); const eq=document.getElementById('asgTrabEq'); const n=(g?g.value:'').trim(); const equipo=eq?eq.value:'';
+  if(!n){ if(g)g.focus(); return; }
+  if(!equipo){ alert('Selecciona el equipo del trabajador.'); return; }
+  const {error}=await sb.from('limpieza_trabajadores').insert({nombre:n,equipo});
+  if(error){ alert(/duplicate|unique/i.test(error.message)?'Ese trabajador ya está en el listado.':'Error: '+error.message); return; }
+  show('asignaciones'); }
+async function asgDelTrab(id){ if(!confirm('¿Borrar este trabajador del listado? (sus asignaciones publicadas no se borran)')) return;
+  const {error}=await sb.from('limpieza_trabajadores').delete().eq('id',id);
+  if(error){ alert('Error: '+error.message); return; } show('asignaciones'); }
+
+async function asgSyncCatalogs(){
+  const uni=[...new Set(ASG.unidades.map(u=>(u.unidad||'').trim()).filter(Boolean))].filter(n=>!ASG_UNI.includes(n));
+  const ar =[...new Set(ASG.comunes.map(c=>(c.area||'').trim()).filter(Boolean))].filter(n=>!ASG_AREA.includes(n));
+  if(uni.length) await sb.from('limpieza_unidades_cat').upsert(uni.map(n=>({nombre:n})),{onConflict:'nombre',ignoreDuplicates:true});
+  if(ar.length)  await sb.from('limpieza_areas_cat').upsert(ar.map(n=>({nombre:n})),{onConflict:'nombre',ignoreDuplicates:true});
+}
+async function asgPublicar(){
+  if(!ASG.fecha){ alert('Selecciona la fecha del día antes de publicar.'); return; }
+  let pubId=ASG.pubId;
+  if(pubId==null){ const {data,error}=await sb.from('limpieza_pub').insert({fecha:ASG.fecha,created_by:ME.id}).select().single(); if(error){alert('Error: '+error.message);return;} pubId=data.id; }
+  else { const {error}=await sb.from('limpieza_pub').update({fecha:ASG.fecha}).eq('id',pubId); if(error){alert('Error: '+error.message);return;} }
+  await sb.from('limpieza_pub_unidades').delete().eq('pub_id',pubId);
+  await sb.from('limpieza_pub_comunes').delete().eq('pub_id',pubId);
+  const us=ASG.unidades.filter(u=>(u.unidad||u.t1||u.t2)).map((u,ix)=>({pub_id:pubId,unidad:u.unidad,prioridad:u.prioridad,tipo:u.tipo,pax:u.pax,extra:u.extra,t1:u.t1,t2:u.t2,orden:ix}));
+  const cs=ASG.comunes.filter(c=>(c.area||c.t1||c.t2)).map((c,ix)=>({pub_id:pubId,area:c.area,t1:c.t1,t2:c.t2,orden:ix}));
+  if(us.length){ const {error}=await sb.from('limpieza_pub_unidades').insert(us); if(error){alert('Error: '+error.message);return;} }
+  if(cs.length){ const {error}=await sb.from('limpieza_pub_comunes').insert(cs); if(error){alert('Error: '+error.message);return;} }
+  await asgSyncCatalogs();
+  ASG.pubId=pubId; asgTab='publicadas'; show('asignaciones');
+}
+function asgEditar(id){ const p=asgFind(id); if(!p) return;
+  ASG={pubId:p.id, fecha:p.fecha, unidades:(p.unidades||[]).map(u=>({unidad:u.unidad||'',prioridad:u.prioridad||'',tipo:u.tipo||'salida_entrada',pax:u.pax||'',extra:u.extra||'',t1:u.t1||'',t2:u.t2||''})), comunes:(p.comunes||[]).map(c=>({area:c.area||'',t1:c.t1||'',t2:c.t2||''}))};
+  asgTab='asignaciones'; show('asignaciones'); }
+async function asgEliminar(id){ if(!confirm('¿Eliminar esta asignación publicada del historial?')) return;
+  const {error}=await sb.from('limpieza_pub').delete().eq('id',id); if(error){alert('Error: '+error.message);return;}
+  if(ASG.pubId===id) ASG.pubId=null; show('asignaciones'); }
+function asgPDF(id){ const p=asgFind(id); if(p) asgBuildPDF(p); }
+
+function asgPrintHTML(d){
+  const filasU=(d.unidades||[]).map(u=>`<tr><td><b>${esc(u.unidad)}</b></td><td>${esc(u.prioridad)}</td><td>${u.tipo==='salida'?'<span class="apz-out">Salida</span>':u.tipo==='entrada'?'<span class="apz-in">Entrada</span>':'<span class="apz-out">Salida</span> + <span class="apz-in">Entrada</span>'}</td><td>${esc(u.pax)}</td><td>${esc(u.extra)}</td><td>${esc(u.t1)}</td><td>${esc(u.t2)}</td></tr>`).join('');
+  const filasC=(d.comunes||[]).map(c=>`<tr><td><b>${esc(c.area)}</b></td><td>${esc(c.t1)}</td><td>${esc(c.t2)}</td></tr>`).join('');
+  const r=asgComputeResumen(d);
+  const resumen=r.length?`<h3 class="apz-h3">Personal llamado a trabajar (${r.length})</h3><div class="apz-res">${r.map((p,i)=>`<div>${i+1}. <b>${esc(p.nombre)}</b> <span style="color:#888">(${[p.u?p.u+' und':'',p.c?p.c+' z.común':''].filter(Boolean).join(' · ')})</span></div>`).join('')}</div>`:'';
+  return `<div class="apz-head"><img src="${LOGO}" alt="Amazinn Places" style="height:34px"><div><div class="apz-title">ENTRADAS Y SALIDAS</div><div class="apz-date">${esc(fechaLarga(d.fecha))}</div></div></div>
+    <h3 class="apz-h3">Unidades</h3>
+    <table class="apz-table"><colgroup><col style="width:15%"><col style="width:12%"><col style="width:13%"><col style="width:8%"><col style="width:16%"><col style="width:18%"><col style="width:18%"></colgroup><thead><tr><th>Unidad</th><th>Prioridad</th><th>Tipo</th><th>Nº pax</th><th>Extra</th><th>Trabajador 1</th><th>Trabajador 2</th></tr></thead><tbody>${filasU||'<tr><td colspan="7" style="color:#999">—</td></tr>'}</tbody></table>
+    ${(d.comunes&&d.comunes.length)?`<h3 class="apz-h3">Zonas comunes</h3><table class="apz-table"><colgroup><col style="width:40%"><col style="width:30%"><col style="width:30%"></colgroup><thead><tr><th>Área común</th><th>Trabajador 1</th><th>Trabajador 2</th></tr></thead><tbody>${filasC}</tbody></table>`:''}
+    ${resumen}`;
+}
+function asgBuildPDF(d){
+  let wrap=document.getElementById('asgPrint');
+  if(!wrap){ wrap=document.createElement('div'); wrap.id='asgPrint'; document.body.appendChild(wrap); }
+  asgEnsureStyle();
+  wrap.innerHTML=`<div class="apz-inner">${asgPrintHTML(d)}</div>`;
+  const el=wrap.querySelector('.apz-inner');
+  if(typeof html2pdf==='undefined'){ window.print(); return; }
+  const safe=fechaLarga(d.fecha).replace(/[\\/]+/g,'-').replace(/[^\wáéíóúñÁÉÍÓÚÑ0-9-]+/gi,'_').replace(/_+/g,'_').replace(/^_|_$/g,'');
+  wrap.setAttribute('style','position:fixed;left:0;top:0;width:1100px;background:#fff;z-index:-1;pointer-events:none');
+  const done=()=>{ wrap.innerHTML=''; wrap.setAttribute('style','position:absolute;left:-9999px;top:0'); };
+  html2pdf().set({margin:[8,8,8,8],filename:`Entradas_y_salidas_${safe||'limpieza'}.pdf`,image:{type:'jpeg',quality:.98},html2canvas:{scale:2,backgroundColor:'#ffffff',windowWidth:1100,scrollX:0,scrollY:0,x:0,y:0},jsPDF:{unit:'mm',format:'a4',orientation:'landscape'},pagebreak:{mode:['avoid-all','css']}}).from(el).save().then(done,done);
+}
+
+function asgEnsureStyle(){ if(document.getElementById('asgStyle')) return; const s=document.createElement('style'); s.id='asgStyle'; s.textContent=`
+  .asg-tabs{display:flex;gap:8px;margin:4px 0 16px;border-bottom:2px solid var(--gris2);flex-wrap:wrap}
+  .asg-tab{background:none;border:none;border-bottom:3px solid transparent;margin-bottom:-2px;padding:9px 14px;font-size:14px;font-weight:600;color:var(--suave);cursor:pointer;font-family:inherit}
+  .asg-tab.on{color:var(--azul);border-bottom-color:var(--azul)}
+  .asg-scroll{overflow-x:auto}
+  .asg-table{width:100%;border-collapse:collapse;font-size:13px}
+  .asg-table th{text-align:left;padding:7px 10px;font-size:10.5px;text-transform:uppercase;letter-spacing:.4px;color:var(--suave);border-bottom:1px solid var(--gris);white-space:nowrap}
+  .asg-table td{padding:5px 8px;border-bottom:1px solid var(--gris);vertical-align:middle}
+  .asg-cell{padding:7px 9px;border:1px solid var(--gris2);border-radius:7px;font-family:inherit;font-size:13px;width:100%;min-width:90px;background:#fff}
+  .asg-cell:focus{outline:none;border-color:var(--azul)}
+  .asg-cell-w{min-width:140px}.asg-cell-s{min-width:70px}
+  .asg-act{white-space:nowrap;text-align:center}
+  .asg-act button{background:none;border:none;cursor:pointer;font-size:14px;padding:2px 4px;opacity:.7}
+  .asg-act button:hover{opacity:1}
+  .asg-nota{color:#8a5b16;font-weight:600}
+  .asg-resgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:10px}
+  .asg-reschip{background:#fff;border:1px solid var(--gris2);border-radius:10px;padding:9px 12px}
+  .asg-reschip b{display:block;font-size:13.5px}.asg-reschip span{font-size:11.5px;color:var(--suave)}
+  .asg-restotal{margin-top:12px;font-weight:700;font-size:14px;color:var(--azul)}
+  .asg-pill{font-size:11px;font-weight:700;padding:3px 10px;border-radius:20px;background:#e3f3e6;color:#2c6b39}
+  .pubcard{display:flex;align-items:center;gap:12px;background:#fff;border:1px solid var(--gris2);border-radius:12px;padding:13px 16px;margin-bottom:10px}
+  .pubcard .pi b{font-size:15px}.pubcard .pi span{display:block;font-size:12.5px;color:var(--suave);margin-top:2px}
+  .pubcard .pa{margin-left:auto;display:flex;align-items:center;gap:8px}
+  .asg-kebab{position:relative}
+  .asg-kebab summary{list-style:none;cursor:pointer;font-size:20px;line-height:1;padding:4px 9px;border-radius:8px;color:var(--suave)}
+  .asg-kebab summary::-webkit-details-marker{display:none}
+  .asg-kebab summary:hover,.asg-kebab[open] summary{background:var(--gris)}
+  .asg-kebab-menu{position:absolute;right:0;top:36px;background:#fff;border:1px solid var(--gris2);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.14);padding:6px;z-index:30;min-width:152px}
+  .asg-kebab-menu button{display:block;width:100%;text-align:left;background:none;border:none;padding:9px 12px;border-radius:7px;font-size:13.5px;cursor:pointer;font-family:inherit}
+  .asg-kebab-menu button:hover{background:var(--gris)}
+  #asgPrint{position:absolute;left:-9999px;top:0}
+  .apz-inner{background:#fff;padding:22px 26px;font-family:inherit;width:1100px;box-sizing:border-box;color:#1a1a1a}
+  .apz-head{display:flex;align-items:center;gap:14px;border-bottom:3px solid var(--azul);padding-bottom:10px;margin-bottom:14px}
+  .apz-title{font-size:22px;font-weight:800;letter-spacing:1px}
+  .apz-date{font-size:15px;color:#333;font-weight:700;margin-top:2px}
+  .apz-table{width:100%;border-collapse:collapse;font-size:12px;margin-bottom:16px;table-layout:fixed}
+  .apz-table th{background:#1c1b18;color:#fff;text-align:left;padding:6px 9px;font-size:11px}
+  .apz-table td{padding:5px 9px;border-bottom:1px solid #e7e0d3;word-wrap:break-word;overflow-wrap:break-word;vertical-align:top}
+  .apz-table tr{page-break-inside:avoid}.apz-table thead{display:table-header-group}
+  .apz-out{color:#a23b2c;font-weight:700}.apz-in{color:#2c6b39;font-weight:700}
+  .apz-h3{font-size:13px;text-transform:uppercase;letter-spacing:1px;color:#555;margin:10px 0 8px;font-weight:800}
+  .apz-res{columns:3;font-size:12.5px;line-height:1.8}.apz-res div{break-inside:avoid}`;
+  document.head.appendChild(s); }
+
+function asgDatalists(){ return `<datalist id="asgUniDL">${ASG_UNI.map(x=>`<option value="${esc(x)}">`).join('')}</datalist>
+  <datalist id="asgTrabDL">${ASG_TRAB.map(x=>`<option value="${esc(x)}">`).join('')}</datalist>
+  <datalist id="asgAreaDL">${ASG_AREA.map(x=>`<option value="${esc(x)}">`).join('')}</datalist>`; }
+function asgRenderEditor(){
+  const edit=asgCan();
+  const filasU=ASG.unidades.map((u,i)=> edit ? `<tr>
+    <td><input list="asgUniDL" value="${esc(u.unidad)}" placeholder="Buscar unidad…" oninput="asgUpdU(${i},'unidad',this.value)" class="asg-cell asg-cell-w"></td>
+    <td><input value="${esc(u.prioridad)}" placeholder="—" oninput="asgUpdU(${i},'prioridad',this.value)" class="asg-cell"></td>
+    <td><select onchange="asgUpdU(${i},'tipo',this.value)" class="asg-cell">${ASG_TIPO.map(o=>`<option value="${o[0]}" ${u.tipo===o[0]?'selected':''}>${o[1]}</option>`).join('')}</select></td>
+    <td><input value="${esc(u.pax)}" placeholder="—" oninput="asgUpdU(${i},'pax',this.value)" class="asg-cell asg-cell-s"></td>
+    <td><input value="${esc(u.extra)}" placeholder="Cuna, sofá cama…" oninput="asgUpdU(${i},'extra',this.value)" class="asg-cell"></td>
+    <td><input list="asgTrabDL" value="${esc(u.t1)}" placeholder="Trabajador…" oninput="asgUpdU(${i},'t1',this.value)" class="asg-cell"></td>
+    <td><input list="asgTrabDL" value="${esc(u.t2)}" placeholder="(opcional)" oninput="asgUpdU(${i},'t2',this.value)" class="asg-cell"></td>
+    <td class="asg-act"><button onclick="asgDelUnidad(${i})" title="Quitar fila">🗑</button></td></tr>`
+    : `<tr><td><b>${esc(u.unidad)}</b></td><td>${esc(u.prioridad)}</td><td>${asgTipoLabel(u.tipo)}</td><td>${esc(u.pax)}</td><td>${u.extra?`<span class="asg-nota">📝 ${esc(u.extra)}</span>`:''}</td><td>${esc(u.t1)}</td><td>${esc(u.t2)}</td></tr>`).join('');
+  const filasC=ASG.comunes.map((c,i)=> edit ? `<tr>
+    <td><input list="asgAreaDL" value="${esc(c.area)}" placeholder="Buscar área común…" oninput="asgUpdC(${i},'area',this.value)" class="asg-cell asg-cell-w"></td>
+    <td><input list="asgTrabDL" value="${esc(c.t1)}" placeholder="Trabajador…" oninput="asgUpdC(${i},'t1',this.value)" class="asg-cell"></td>
+    <td><input list="asgTrabDL" value="${esc(c.t2)}" placeholder="(opcional)" oninput="asgUpdC(${i},'t2',this.value)" class="asg-cell"></td>
+    <td class="asg-act"><button onclick="asgDelComun(${i})" title="Quitar fila">🗑</button></td></tr>`
+    : `<tr><td><b>${esc(c.area)}</b></td><td>${esc(c.t1)}</td><td>${esc(c.t2)}</td></tr>`).join('');
+  return `${asgDatalists()}
+    <div class="page-sub">${edit?'Crea el plan de limpieza del día: unidades, zonas comunes y personal. Publícalo y descárgalo (en “Publicadas”) para el grupo de WhatsApp.':'Consulta las asignaciones de limpieza del día'}</div>
+    <div class="panel" style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin-bottom:14px">
+      <label style="font-weight:600;font-size:13px">📅 Día:</label>
+      ${edit?`<input type="date" value="${esc(ASG.fecha)}" onchange="asgUpdFecha(this.value)" style="padding:8px 11px;border:1px solid var(--gris2);border-radius:8px;font-family:inherit">`:`<b>${esc(fechaLarga(ASG.fecha))}</b>`}
+      ${ASG.pubId!=null?`<span class="asg-pill">Editando publicación</span>`:''}
+      ${edit?`<button class="btn" style="margin-left:auto" onclick="asgPublicar()">${ASG.pubId!=null?'💾 Actualizar publicación':'✓ Publicar'}</button>`:''}
+    </div>
+    <div class="panel"><h2 style="margin-top:0">🏠 Unidades</h2>
+      <div class="asg-scroll"><table class="asg-table"><thead><tr><th style="min-width:150px">Unidad</th><th>Prioridad</th><th style="min-width:155px">Tipo</th><th>Nº pax</th><th>Extra / nota</th><th>Trabajador 1</th><th>Trabajador 2</th>${edit?'<th></th>':''}</tr></thead>
+        <tbody>${filasU||`<tr><td colspan="${edit?8:7}" style="color:var(--suave)">Sin unidades. Añade una fila.</td></tr>`}</tbody></table></div>
+      ${edit?`<button class="btn ghost" style="margin-top:10px" onclick="asgAddUnidad()">➕ Añadir unidad</button>`:''}
+    </div>
+    <div class="panel"><h2 style="margin-top:0">🧽 Zonas comunes</h2>
+      <div class="asg-scroll"><table class="asg-table"><thead><tr><th style="min-width:200px">Área común</th><th>Trabajador 1</th><th>Trabajador 2</th>${edit?'<th></th>':''}</tr></thead>
+        <tbody>${filasC||`<tr><td colspan="${edit?4:3}" style="color:var(--suave)">Sin zonas comunes. Añade una fila.</td></tr>`}</tbody></table></div>
+      ${edit?`<button class="btn ghost" style="margin-top:10px" onclick="asgAddComun()">➕ Añadir zona común</button>`:''}
+    </div>
+    <div class="panel"><h2 style="margin-top:0">📋 Resumen — personal llamado a trabajar</h2>
+      <p style="font-size:12.5px;color:var(--suave);margin:-4px 0 12px">Este es el listado que se envía al grupo de WhatsApp del personal de limpieza.</p>
+      <div id="asgResumenBox">${asgResumenHTML()}</div>
+    </div>`;
+}
+function asgRenderListado(){
+  const edit=asgCan();
+  const filas=ASG_TRAB_FULL.map((t,i)=>`<tr><td style="width:34px;color:var(--suave)">${i+1}</td><td><b>${esc(t.nombre)}</b></td>${edit?`<td class="asg-act"><button onclick="asgDelTrab(${t.id})" title="Borrar trabajador">🗑</button></td>`:''}</tr>`).join('');
+  return `<div class="page-sub">Personal de limpieza disponible. Estos nombres alimentan los desplegables de Trabajador 1 y 2 en las asignaciones.</div>
+    ${edit?`<div class="panel" style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+      <input id="asgTrabN" placeholder="Nombre y apellido del trabajador…" onkeydown="if(event.key==='Enter')asgAddTrab()" style="flex:1;min-width:240px;padding:9px 12px;border:1px solid var(--gris2);border-radius:8px;font-family:inherit;font-size:14px">
+      <button class="btn" onclick="asgAddTrab()">➕ Añadir trabajador</button></div>`:''}
+    <div class="panel"><h2 style="margin-top:0">👥 Trabajadores (${ASG_TRAB_FULL.length})</h2>
+      <table class="asg-table"><thead><tr><th>#</th><th>Nombre y apellido</th>${edit?'<th></th>':''}</tr></thead>
+      <tbody>${filas||`<tr><td colspan="${edit?3:2}" style="color:var(--suave)">Sin trabajadores. Añade el primero.</td></tr>`}</tbody></table></div>`;
+}
+function asgRenderPublicadas(){
+  const edit=asgCan();
+  const sub=`<div class="page-sub">Historial de asignaciones publicadas, por fecha. Aquí puedes descargar el PDF, editar o eliminar cada una.</div>`;
+  if(!ASG_PUBS.length) return sub+`<div class="panel" style="color:var(--suave)">Todavía no hay asignaciones publicadas.${edit?' Crea una en la pestaña “Asignaciones” y pulsa Publicar.':''}</div>`;
+  const items=ASG_PUBS.map(e=>{ const r=asgComputeResumen(e);
+    return `<div class="pubcard"><div class="pi"><b>📅 ${esc(fechaLarga(e.fecha))}</b><span>${(e.unidades||[]).length} unidad(es) · ${(e.comunes||[]).length} zona(s) común · ${r.length} personal</span></div>
+      <div class="pa"><button class="btn ghost" onclick="asgPDF(${e.id})">📥 PDF</button>
+        ${edit?`<details class="asg-kebab"><summary>⋮</summary><div class="asg-kebab-menu"><button onclick="asgEditar(${e.id})">✏️ Editar</button><button onclick="asgEliminar(${e.id})">🗑 Eliminar</button></div></details>`:''}</div></div>`; }).join('');
+  return sub+`${edit?`<button class="btn ghost" style="margin-bottom:14px" onclick="asgNueva()">➕ Nueva asignación</button>`:''}${items}`;
+}
+async function pageAsignaciones(){
+  asgEnsureStyle();
+  const canEdit=asgCan();
+  const t0=await sb.from('limpieza_trabajadores').select('*').order('nombre');
+  if(t0.error){ document.getElementById('main').innerHTML=`<div class="page-title">Limpieza · Asignaciones</div><div class="panel">No se pudo cargar. ¿Ejecutaste <b>supabase_limpieza.sql</b> en Supabase?<br><small style="color:var(--suave)">${esc(t0.error.message)}</small></div>`; return; }
+  ASG_TRAB_FULL=t0.data||[]; ASG_TRAB=ASG_TRAB_FULL.map(x=>x.nombre);
+  const [uc,ac]=await Promise.all([ sb.from('limpieza_unidades_cat').select('*').order('nombre'), sb.from('limpieza_areas_cat').select('*').order('nombre') ]);
+  ASG_UNI=(uc.data||[]).map(x=>x.nombre); ASG_AREA=(ac.data||[]).map(x=>x.nombre);
+  const [pubs,us,cs]=await Promise.all([ sb.from('limpieza_pub').select('*').order('fecha',{ascending:false}), sb.from('limpieza_pub_unidades').select('*').order('orden'), sb.from('limpieza_pub_comunes').select('*').order('orden') ]);
+  ASG_PUBS=(pubs.data||[]).map(p=>({...p, unidades:(us.data||[]).filter(u=>u.pub_id===p.id), comunes:(cs.data||[]).filter(c=>c.pub_id===p.id)}));
+  if(!canEdit) asgTab='publicadas';
+  const tabs=`<div class="page-title">Limpieza · Asignaciones</div><div class="asg-tabs">
+    ${canEdit?`<button class="asg-tab ${asgTab==='asignaciones'?'on':''}" onclick="setAsgTab('asignaciones')">📋 Asignaciones</button>
+    <button class="asg-tab ${asgTab==='listado'?'on':''}" onclick="setAsgTab('listado')">👥 Listado trabajadores</button>`:''}
+    <button class="asg-tab ${asgTab==='publicadas'?'on':''}" onclick="setAsgTab('publicadas')">🗂️ Publicadas</button></div>`;
+  let body;
+  if(asgTab==='listado'&&canEdit) body=asgRenderListado();
+  else if(asgTab==='publicadas') body=asgRenderPublicadas();
+  else body=asgRenderEditor();
+  document.getElementById('main').innerHTML=tabs+body;
+}
+const LIMP_TUTS=[['🛏️','Preparación de habitación','Montaje de cama y amenities'],['🚿','Limpieza de baños','Protocolo de baños y duchas'],['🍼','Montaje de cuna','Cómo montar y asegurar la cuna'],['🛋️','Sofá cama','Montaje para pax extra'],['🧴','Reposición de amenities','Qué reponer y cantidades'],['✅','Checklist de salida','Revisión final antes del check-in']];
+function pageLimpTutoriales(){
+  return `<div class="page-title">Limpieza · Tutoriales</div><div class="page-sub">Vídeos y guías para el equipo de limpieza</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:16px">${LIMP_TUTS.map(t=>`<div class="panel" style="margin:0;padding:0;overflow:hidden"><div style="height:118px;background:linear-gradient(135deg,var(--azul),var(--azul2,#1b3a5b));display:flex;align-items:center;justify-content:center;font-size:38px">${t[0]}</div><div style="padding:14px"><b>${t[1]}</b><p style="font-size:13px;color:var(--suave);margin-top:5px">${t[2]}</p><button class="btn ghost" style="padding:6px 12px;margin-top:8px" onclick="alert('Vídeo de demostración')">▶ Ver vídeo</button></div></div>`).join('')}</div>`;
+}
 
 /* utilidades */
 function val(id){const el=document.getElementById(id);return el?el.value.trim():'';}
