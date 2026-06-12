@@ -283,12 +283,21 @@
   .oleg{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--suave)}
   .oleg i{width:12px;height:12px;border-radius:3px;display:inline-block}
   .org-scale{display:inline-block;transform-origin:top left}
-  .hor-step{padding:14px 0;border-bottom:1px solid var(--gris)}
-  .hor-step:last-of-type{border-bottom:none}
-  .hor-step>b{font-size:14px;color:var(--azul)}
-  .thk-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px}
+  .hor-wizard{max-width:860px}
+  .hor-step{background:#fff;border:1px solid var(--gris2);border-radius:14px;padding:18px 20px;margin-bottom:14px;box-shadow:var(--sombra)}
+  .hs-head{display:flex;align-items:center;gap:12px;margin-bottom:14px}
+  .hs-num{width:30px;height:30px;border-radius:50%;background:var(--azul);color:#fff;display:inline-flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;flex:0 0 auto}
+  .hs-title{font-weight:700;font-size:15px;line-height:1.2}
+  .hs-sub{font-size:12px;color:var(--suave)}
+  .thk-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(255px,1fr));gap:8px}
+  .turno-card{display:flex;align-items:center;justify-content:space-between;gap:10px;background:var(--gris);border:1px solid var(--gris2);border-radius:10px;padding:9px 12px;transition:.12s}
+  .turno-card.on{background:#fff;border-color:var(--acento);box-shadow:0 1px 5px rgba(0,0,0,.07)}
+  .tc-pick{display:inline-flex;align-items:center;gap:9px;cursor:pointer;font-size:13.5px;font-weight:600;min-width:0}
+  .tc-dot{width:14px;height:14px;border-radius:4px;flex:0 0 auto}
+  .tc-name{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .tc-hours{display:flex;align-items:center;gap:5px;flex:0 0 auto}
   .thk{display:flex;align-items:center;gap:6px;font-size:13.5px;background:var(--gris);border:1px solid var(--gris2);border-radius:8px;padding:7px 11px}
-  .thk-h{width:62px;padding:5px 7px;border:1px solid var(--gris2);border-radius:6px;font-size:12.5px;font-family:inherit}
+  .thk-h{width:60px;padding:5px 7px;border:1px solid var(--gris2);border-radius:6px;font-size:12.5px;font-family:inherit;text-align:center}
   .hor-eq{display:flex;flex-wrap:wrap;gap:6px}
   .hor-eq .thk{cursor:pointer}
   .org-top{display:flex;gap:18px;align-items:flex-start}
@@ -373,9 +382,11 @@
   form.box input,form.box select,form.box textarea{width:100%;padding:10px 12px;border:1px solid var(--gris2);border-radius:9px;font-size:14px;font-family:inherit}
   form.box .row{display:flex;gap:14px}
   form.box .row>div{flex:1}
-  .btn{background:var(--azul);color:#fff;border:none;padding:11px 20px;border-radius:9px;font-weight:600;font-size:14px;justify-self:start}
-  .btn:hover{background:var(--azul2)}
+  .btn{background:#1f9d55;color:#fff;border:none;padding:11px 20px;border-radius:9px;font-weight:600;font-size:14px;justify-self:start}
+  .btn:hover{background:#178a49;color:#fff}
+  .btn:active{background:#13803f;color:#fff}
   .btn.ghost{background:#fff;color:var(--azul);border:1px solid var(--azul)}
+  .btn.ghost:hover{background:var(--azul-claro);color:var(--azul)}
   .ok-msg{background:#e3f5ef;color:#0f6e57;padding:11px 14px;border-radius:9px;font-size:14px;display:none}
 
   .org{display:flex;flex-direction:column;align-items:center;gap:0}
@@ -1304,17 +1315,20 @@ async function horCrear(){
   const eqSel=CAT.equipos.length
     ? `<div class="hor-eq">${CAT.equipos.map(e=>`<label class="thk" style="padding:5px 9px;font-size:12.5px"><input type="checkbox" ${horW.equipos.includes(e)?'checked':''} onchange="horToggleEquipo('${e.replace(/'/g,"\\'")}',this.checked)"> ${esc(e)}</label>`).join('')}</div><small style="color:var(--suave)">${horW.equipos.length?horW.equipos.length+' equipo(s) seleccionados':'Vacío = todos'}</small>`
     : '<small style="color:var(--suave)">No hay equipos creados</small>';
-  const checks=TURNOS_TIPO.map(t=>{const h=horHora(t.id);return `<div class="thk"><label style="display:inline-flex;align-items:center;gap:8px;flex:1"><input type="checkbox" ${horW.turnos.includes(t.id)?'checked':''} onchange="horToggleTurno(${t.id},this.checked)"><span class="cell-b" style="background:${t.color}">${esc(abreviaTurno(t))}</span> ${esc(t.nombre)}</label><input class="thk-h" value="${esc(h.ini)}" placeholder="inicio" onchange="horSetHora(${t.id},'ini',this.value)"><span style="color:var(--suave)">–</span><input class="thk-h" value="${esc(h.fin)}" placeholder="fin" onchange="horSetHora(${t.id},'fin',this.value)"></div>`;}).join('');
-  const form=`<div class="panel" style="max-width:820px">
-    <div class="hor-step"><b>1 · Alcance</b><div class="row" style="margin-top:8px">
-      <div><label>Área</label>${areaSel}</div><div><label>Departamento</label>${deptSel}</div><div><label>Equipos (uno, varios o todos)</label>${eqSel}</div></div>
-      ${role==='responsable'?'<small style="color:var(--suave)">Como responsable, planificas tu propio departamento.</small>':(role==='direccion'?'<small style="color:var(--suave)">Como dirección, planificas los departamentos de tu área.</small>':'')}</div>
-    <div class="hor-step"><b>2 · Fechas</b><div class="row" style="margin-top:8px">
-      <div><label>Desde</label><input type="date" value="${horW.desde}" onchange="horW.desde=this.value"></div>
-      <div><label>Hasta</label><input type="date" value="${horW.hasta}" onchange="horW.hasta=this.value"></div><div></div></div></div>
-    <div class="hor-step"><b>3 · Turnos y horarios</b><div style="font-size:12px;color:var(--suave);margin:4px 0 8px">Marca los turnos que aplican y ajusta sus horas para este horario (no cambia el catálogo).</div><div class="thk-grid" style="margin-top:4px">${checks}</div>
-      <button class="btn ghost" style="padding:5px 11px;margin-top:8px" onclick="horAddTurnoForm()">➕ Nuevo tipo de turno</button><div id="horNewTurno"></div></div>
-    <div style="margin-top:16px"><button class="btn" onclick="horGenerar()">Generar cuadrícula →</button></div>
+  const checks=TURNOS_TIPO.map(t=>{const h=horHora(t.id);const on=horW.turnos.includes(t.id);return `<div class="turno-card${on?' on':''}">
+      <label class="tc-pick"><input type="checkbox" ${on?'checked':''} onchange="horToggleTurno(${t.id},this.checked)"><span class="tc-dot" style="background:${t.color}"></span><span class="tc-name">${esc(t.nombre)}</span></label>
+      <div class="tc-hours"><input class="thk-h" value="${esc(h.ini)}" placeholder="inicio" onchange="horSetHora(${t.id},'ini',this.value)"><span style="color:var(--suave)">–</span><input class="thk-h" value="${esc(h.fin)}" placeholder="fin" onchange="horSetHora(${t.id},'fin',this.value)"></div>
+    </div>`;}).join('');
+  const step=(n,title,sub,inner)=>`<div class="hor-step"><div class="hs-head"><span class="hs-num">${n}</span><div><div class="hs-title">${title}</div><div class="hs-sub">${sub}</div></div></div>${inner}</div>`;
+  const ayuda=role==='responsable'?'<small style="color:var(--suave)">Como responsable, planificas tu propio departamento.</small>':(role==='direccion'?'<small style="color:var(--suave)">Como dirección, planificas los departamentos de tu área.</small>':'');
+  const form=`<div class="hor-wizard">
+    ${step('1','Alcance','¿A quién va dirigido este horario?',`<div class="row"><div><label>Área</label>${areaSel}</div><div><label>Departamento</label>${deptSel}</div></div>
+      <div style="margin-top:12px"><label>Equipos (uno, varios o todos)</label>${eqSel}</div>${ayuda}`)}
+    ${step('2','Fechas','Desde qué día hasta qué día',`<div class="row"><div><label>Desde</label><input type="date" value="${horW.desde}" onchange="horW.desde=this.value"></div>
+      <div><label>Hasta</label><input type="date" value="${horW.hasta}" onchange="horW.hasta=this.value"></div></div>`)}
+    ${step('3','Turnos y horarios','Marca los turnos y ajusta sus horas para este horario (no cambia el catálogo)',`<div class="thk-grid">${checks}</div>
+      <button class="btn ghost" style="padding:6px 12px;margin-top:10px" onclick="horAddTurnoForm()">➕ Nuevo tipo de turno</button><div id="horNewTurno"></div>`)}
+    <div style="text-align:right;margin-top:2px"><button class="btn" onclick="horGenerar()">Generar cuadrícula →</button></div>
   </div>`;
   let grid='';
   if(horW.gen) grid=await horGrid();
