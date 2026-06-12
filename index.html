@@ -275,6 +275,15 @@
   .org-node .on-info b{font-size:13.5px}
   .org-node .on-info small{color:var(--suave);font-size:11px;display:block}
   .org-node.org-over{outline:2px dashed var(--acento);outline-offset:3px}
+  .org-top{display:flex;gap:18px;align-items:flex-start}
+  .org-main{flex:1;min-width:0}
+  .org-aside{width:215px;flex:0 0 auto;border:1px dashed var(--gris2);border-radius:12px;padding:13px;background:var(--gris)}
+  .org-aside.org-over{outline:2px dashed var(--acento);background:#fff}
+  .org-aside .org-node{display:flex;margin-bottom:10px;white-space:normal}
+  .oa-title{font-size:11px;font-weight:700;color:var(--suave);text-transform:uppercase;letter-spacing:.6px;margin-bottom:11px}
+  .oa-empty{color:var(--suave);font-size:13px}
+  .oa-hint{font-size:11px;color:var(--suave);margin-top:8px;line-height:1.4}
+  @media(max-width:760px){.org-top{flex-direction:column}.org-aside{width:100%;box-sizing:border-box}}
   /* ---- Recortador de foto de perfil ---- */
   .crop-ov{position:fixed;inset:0;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;z-index:9999}
   .crop-box{background:#fff;border-radius:14px;padding:22px;max-width:330px;box-shadow:0 20px 60px rgba(0,0,0,.3)}
@@ -775,10 +784,12 @@ const NAV=[
   {id:'organigrama',ic:'🏢',t:'Organigrama'},
   {id:'proveedores',ic:'🚚',t:'Proveedores'},
   {id:'suministros',ic:'🔌',t:'Suministros'},
+  {grp:'Mantenimiento'},
   {id:'incidencias',ic:'🛠️',t:'Incidencias'},
+  {id:'videos',ic:'🎥',t:'Videos explicativos'},
+  {id:'bitacora',ic:'📝',t:'Bitácoras'},
   {grp:'Atención al cliente', depts:['Atención al cliente']},
   {id:'mensajes',ic:'💬',t:'Mensajes y plantillas', depts:['Atención al cliente']},
-  {id:'bitacora',ic:'📝',t:'Bitácora de turnos', depts:['Atención al cliente']},
   {grp:'Marketing'},
   {id:'marca',ic:'🎨',t:'Marca y recursos'},
   {id:'carteles',ic:'🪧',t:'Carteles'},
@@ -849,6 +860,7 @@ const ICONS={
   mensajeria:'<path d="M4 4h16v12H7l-3 3z"/>',
   kudos:'<circle cx="12" cy="9" r="5"/><path d="M9 13l-2 8 5-3 5 3-2-8"/>',
   incidencias:'<path d="M12 3 2 20h20z"/><path d="M12 10v5M12 17.5v.4"/>',
+  videos:'<rect x="2" y="5" width="14" height="14" rx="2"/><path d="M16 10l6-3v10l-6-3z"/>',
   onboarding:'<path d="M5 13l-2 6 6-2M5 13l8-8 4 4-8 8M13 5l4 4M15 7l2-3 3 2-1 3z"/>'
 };
 function navIcon(id){return `<svg class="nic" viewBox="0 0 24 24" style="width:18px;height:18px">${ICONS[id]||'<circle cx="12" cy="12" r="8"/>'}</svg>`;}
@@ -977,6 +989,7 @@ function show(id){
   else if(id==='mensajeria'){ m.innerHTML='<div class="page-title">Mensajería</div><div class="page-sub">Cargando…</div>'; pageMensajeria(); }
   else if(id==='kudos'){ m.innerHTML='<div class="page-title">Reconocimientos</div><div class="page-sub">Cargando…</div>'; pageKudos(); }
   else if(id==='incidencias'){ m.innerHTML='<div class="page-title">Incidencias</div><div class="page-sub">Cargando…</div>'; pageIncidencias(); }
+  else if(id==='videos'){ m.innerHTML='<div class="page-title">Videos explicativos</div><div class="page-sub">Cargando…</div>'; pageVideos(); }
   else if(id==='onboarding'){ m.innerHTML=pageOnboarding(); }
 }
 
@@ -1368,8 +1381,8 @@ function pagePerfil(){
 async function cambiarMiFoto(input){const f=input.files[0];if(!f)return;const foto=await fileToAvatar(f);const{error}=await sb.from('profiles').update({foto}).eq('id',ME.id);if(error){alert('Error: '+error.message);return;}PROFILE.foto=foto;const avEl=document.getElementById('av');avEl.textContent='';avEl.style.background=`#eee url('${foto}') center/cover no-repeat`;show('perfil');toast('✓ Foto actualizada');}
 let ORG_PEOPLE=[], orgDragId=null;
 async function pageOrganigrama(){
-  const{data}=await sb.from('profiles').select('id,nombre,dept,area,posicion,role,color,foto,jefe_id').eq('estado','aprobado');
-  ORG_PEOPLE=(data||[]).filter(p=>p.estado!=='rechazado');
+  const{data}=await sb.from('profiles').select('id,nombre,dept,area,posicion,role,color,foto,jefe_id,fuera_org').eq('estado','aprobado');
+  ORG_PEOPLE=data||[];
   renderOrg();
 }
 function orgById(id){return ORG_PEOPLE.find(p=>p.id===id);}
@@ -1380,28 +1393,37 @@ function orgIsDescendant(nodeId, ancestorId){
 }
 function renderOrg(){
   const ppl=ORG_PEOPLE, canEdit=isOwner();
-  const ids=new Set(ppl.map(p=>p.id));
+  const aparte=ppl.filter(p=>p.fuera_org);
+  const enOrg=ppl.filter(p=>!p.fuera_org);
+  const ids=new Set(enOrg.map(p=>p.id));
   const children={};
-  ppl.forEach(p=>{const k=(p.jefe_id&&ids.has(p.jefe_id))?p.jefe_id:'__root__';(children[k]=children[k]||[]).push(p);});
+  enOrg.forEach(p=>{const k=(p.jefe_id&&ids.has(p.jefe_id))?p.jefe_id:'__root__';(children[k]=children[k]||[]).push(p);});
   const sub=p=>esc(p.posicion||roleNice(p.role))+(p.dept?' · '+esc(p.dept):(p.area?' · '+esc(p.area):''));
+  const card=(p,extra)=>`<div class="org-node${canEdit?' drag':''}" data-id="${p.id}" ${canEdit?`draggable="true" ondragstart="orgDragStart(event,'${p.id}')"`:''} ${extra||''}>
+      ${av(p.nombre,p.color,38,p.foto)}<div class="on-info"><b>${esc(p.nombre||'—')}</b><small>${sub(p)}</small></div></div>`;
   function node(p){
     const kids=(children[p.id]||[]);
-    const dnd=canEdit?`draggable="true" ondragstart="orgDragStart(event,'${p.id}')" ondragover="orgOver(event)" ondragleave="orgLeave(event)" ondrop="orgDrop(event,'${p.id}')"`:'';
-    return `<li><div class="org-node${canEdit?' drag':''}" data-id="${p.id}" ${dnd}>
-        ${av(p.nombre,p.color,38,p.foto)}<div class="on-info"><b>${esc(p.nombre||'—')}</b><small>${sub(p)}</small></div>
-      </div>${kids.length?`<ul>${kids.map(node).join('')}</ul>`:''}</li>`;
+    const drop=canEdit?`ondragover="orgOver(event)" ondragleave="orgLeave(event)" ondrop="orgDrop(event,'${p.id}')"`:'';
+    return `<li>${card(p,drop)}${kids.length?`<ul>${kids.map(node).join('')}</ul>`:''}</li>`;
   }
   const roots=(children['__root__']||[]);
   const rootZone=canEdit?`<div class="org-rootzone" ondragover="orgOver(event)" ondragleave="orgLeave(event)" ondrop="orgDropRoot(event)">⬆ Suelta aquí para dejar a alguien en el nivel superior (sin jefe)</div>`:'';
+  const aside=`<div class="org-aside${canEdit?' drop':''}" ${canEdit?'ondragover="orgOver(event)" ondragleave="orgLeave(event)" ondrop="orgDropAside(event)"':''}>
+      <div class="oa-title">Fuera del organigrama</div>
+      ${aparte.map(p=>card(p)).join('')||'<div class="oa-empty">—</div>'}
+      ${canEdit?'<div class="oa-hint">Arrastra aquí a quien quede fuera del organigrama (sin líneas).</div>':''}
+    </div>`;
   document.getElementById('main').innerHTML=`<div class="page-title">Organigrama</div>
     <div class="page-sub">${canEdit?'Arrastra a cada persona sobre su responsable para reorganizar. Solo tú puedes editarlo.':'Estructura del equipo de Amazinn Places ('+ppl.length+' personas)'}</div>
-    ${rootZone}
-    <div class="org-tree">${roots.length?`<ul>${roots.map(node).join('')}</ul>`:'<div class="panel">Aún no hay personas aprobadas.</div>'}</div>`;
+    <div class="org-top">
+      <div class="org-main">${rootZone}<div class="org-tree">${roots.length?`<ul>${roots.map(node).join('')}</ul>`:'<div class="panel">Aún no hay personas en el organigrama.</div>'}</div></div>
+      ${aside}
+    </div>`;
 }
 function orgDragStart(e,id){ orgDragId=id; e.dataTransfer.effectAllowed='move'; e.dataTransfer.setData('text/plain',id); }
 function orgOver(e){ e.preventDefault(); e.dataTransfer.dropEffect='move'; e.currentTarget.classList.add('org-over'); }
 function orgLeave(e){ e.currentTarget.classList.remove('org-over'); }
-async function orgSetJefe(id,jefe){ const{error}=await sb.from('profiles').update({jefe_id:jefe}).eq('id',id); if(error){alert('No se pudo guardar: '+error.message);return;} orgDragId=null; pageOrganigrama(); }
+async function orgSetJefe(id,jefe){ const{error}=await sb.from('profiles').update({jefe_id:jefe,fuera_org:false}).eq('id',id); if(error){alert('No se pudo guardar: '+error.message);return;} orgDragId=null; pageOrganigrama(); }
 async function orgDrop(e,targetId){
   e.preventDefault(); e.stopPropagation(); e.currentTarget.classList.remove('org-over');
   const id=orgDragId; if(!id||id===targetId) return;
@@ -1409,6 +1431,8 @@ async function orgDrop(e,targetId){
   await orgSetJefe(id,targetId);
 }
 async function orgDropRoot(e){ e.preventDefault(); e.currentTarget.classList.remove('org-over'); const id=orgDragId; if(!id)return; await orgSetJefe(id,null); }
+async function orgDropAside(e){ e.preventDefault(); e.stopPropagation(); e.currentTarget.classList.remove('org-over'); const id=orgDragId; if(!id)return;
+  const{error}=await sb.from('profiles').update({fuera_org:true,jefe_id:null}).eq('id',id); if(error){alert('No se pudo guardar: '+error.message);return;} orgDragId=null; pageOrganigrama(); }
 
 /* ---------------- PROVEEDORES ---------------- */
 let provFormOpen=false;
@@ -1991,7 +2015,7 @@ async function pageBitacora(){
       :`<button class="btn ghost" style="padding:5px 11px" onclick="penReopen(${p.id})">↩ Reabrir</button>`;
     const meta=p.estado==='realizado'?`Dejado por ${esc(p.por_quien||'')} (${esc(p.turno||'')}) · ✅ ${esc(p.hecho_por||'')} el ${esc(p.hecho_fecha||'')}`:`Dejado por <b>${esc(p.por_quien||'')}</b> · turno ${esc(p.turno||'')}${p.seg_por?` · 👁 ${esc(p.seg_por)}`:''}`;
     return `<div class="pend ${cls}"><div style="font-size:14px"><span class="badge ${e[1]}">${e[0]}</span> ${esc(p.texto)}</div><div style="font-size:12px;color:var(--suave);margin:6px 0">${meta}</div><div style="display:flex;gap:6px;flex-wrap:wrap">${acts}</div></div>`;};
-  document.getElementById('main').innerHTML=`<div class="page-title">Bitácora de turnos · Atención al cliente</div><div class="page-sub">Registra tu turno y deja los pendientes para el siguiente compañero</div>
+  document.getElementById('main').innerHTML=`<div class="page-title">Bitácora de turnos${PROFILE.dept?' · '+esc(PROFILE.dept):''}</div><div class="page-sub">Registra tu turno y deja los pendientes para el siguiente compañero</div>
     <div class="panel"><h2>🔁 Pendientes del equipo (${open.length})</h2><div style="font-size:13px;color:var(--suave);margin-bottom:8px">Se traspasan de turno a turno hasta completarse.</div>
       <div style="display:flex;gap:8px;margin-bottom:10px"><input id="penQ" placeholder="Añadir un pendiente rápido…" style="flex:1;padding:9px 12px;border:1px solid var(--gris2);border-radius:9px" onkeydown="if(event.key==='Enter')penAdd()"><button class="btn" onclick="penAdd()">+ Añadir</button></div>
       ${open.length?open.map(card).join(''):'<div style="color:var(--suave);font-size:13.5px">🎉 No hay pendientes abiertos.</div>'}
@@ -2234,6 +2258,36 @@ async function pageIncidencias(){
 }
 async function incCreate(e){e.preventDefault();const g=id=>{const el=document.getElementById(id);return el?el.value.trim():'';};if(!g('iT'))return false;const{error}=await sb.from('incidencias').insert({titulo:g('iT'),propiedad:g('iP'),prioridad:document.getElementById('iPr').value,proveedor:document.getElementById('iProv').value,estado:'Abierta',nota:g('iN'),creado_por:PROFILE.nombre});if(error){alert('Error: '+error.message);return false;}incFormOpen=false;show('incidencias');toast('✓ Incidencia creada');return false;}
 async function incEstado(id,est){await sb.from('incidencias').update({estado:est}).eq('id',id);show('incidencias');}
+
+/* ---------------- VIDEOS EXPLICATIVOS ---------------- */
+let vidFormOpen=false;
+function ytId(url){const m=(url||'').match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|embed\/|shorts\/))([\w-]{11})/);return m?m[1]:null;}
+async function pageVideos(){
+  const canEdit=CAN_MANAGE.includes(PROFILE.role);
+  const{data,error}=await sb.from('videos').select('*').order('created_at',{ascending:false});
+  if(error){document.getElementById('main').innerHTML='<div class="page-title">Videos explicativos</div><div class="panel">No se pudo cargar (¿ejecutaste supabase_videos.sql?): '+esc(error.message)+'</div>';return;}
+  const vids=data||[];
+  const card=v=>{const yt=ytId(v.url);
+    const media=yt?`<iframe width="100%" height="190" style="border:0;border-radius:9px 9px 0 0;display:block" src="https://www.youtube.com/embed/${yt}" allowfullscreen></iframe>`
+      :`<div style="height:120px;background:linear-gradient(135deg,var(--azul),var(--azul2));border-radius:9px 9px 0 0;display:flex;align-items:center;justify-content:center;font-size:34px">🎥</div>`;
+    return `<div class="panel" style="margin:0;padding:0;overflow:hidden">${media}
+      <div style="padding:13px"><b style="font-size:14.5px">${esc(v.titulo||'')}</b>${v.descripcion?`<p style="font-size:13px;color:var(--suave);margin:5px 0 0">${esc(v.descripcion)}</p>`:''}
+        <div style="display:flex;gap:8px;margin-top:10px;align-items:center">${!yt?`<a class="btn" href="${esc(v.url)}" target="_blank" rel="noopener" style="padding:5px 12px">▶ Ver</a>`:`<a href="${esc(v.url)}" target="_blank" rel="noopener" style="font-size:12.5px">Abrir en YouTube ↗</a>`}
+        ${canEdit?`<button class="btn ghost" style="padding:5px 10px;margin-left:auto;color:#c0392b" onclick="delVideo(${v.id})">🗑</button>`:''}</div></div></div>`;};
+  document.getElementById('main').innerHTML=`<div class="page-title">Videos explicativos</div>
+    <div class="page-sub">Tutoriales y guías en vídeo de Mantenimiento${canEdit?' · puedes añadir':''}</div>
+    ${canEdit?`<div style="margin-bottom:16px"><button class="btn" onclick="vidFormOpen=!vidFormOpen;show('videos')">${vidFormOpen?'✕ Cerrar':'➕ Añadir vídeo'}</button></div>
+      ${vidFormOpen?`<div class="panel" style="max-width:620px"><form class="box" onsubmit="return addVideo(event)" style="max-width:none">
+        <label>Título</label><input id="vT" required placeholder="Ej: Cómo purgar un radiador">
+        <label>Enlace del vídeo (YouTube u otro)</label><input id="vU" required placeholder="https://www.youtube.com/watch?v=...">
+        <label>Descripción (opcional)</label><textarea id="vD" rows="2"></textarea>
+        <div><button class="btn" type="submit">Guardar</button> <button class="btn ghost" type="button" onclick="vidFormOpen=false;show('videos')">Cancelar</button></div></form></div>`:''}`:''}
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:16px">${vids.map(card).join('')||'<div class="panel">Aún no hay vídeos.</div>'}</div>`;
+}
+async function addVideo(e){e.preventDefault();const g=id=>(document.getElementById(id).value||'').trim();if(!g('vT')||!g('vU'))return false;
+  const{error}=await sb.from('videos').insert({titulo:g('vT'),url:g('vU'),descripcion:g('vD'),creado_por:PROFILE.nombre});
+  if(error){alert('Error: '+error.message);return false;}vidFormOpen=false;show('videos');toast('✓ Vídeo añadido');return false;}
+async function delVideo(id){if(!confirm('¿Eliminar este vídeo?'))return;const{error}=await sb.from('videos').delete().eq('id',id);if(error){alert('Error: '+error.message);return;}show('videos');}
 
 /* ---------------- ONBOARDING (lista local) ---------------- */
 const ONB=[{t:"Firmar contrato y entregar documentación a RRHH",done:true},{t:"Crear cuenta y accesos del portal",done:true},{t:"Asignar departamento y rol",done:true},{t:"Entrega de uniforme y llaves",done:false},{t:"Formación: Prevención de Riesgos Laborales",done:false},{t:"Formación: Protección de datos (RGPD)",done:false},{t:"Leer el manual de empleado",done:false},{t:"Presentación al equipo",done:false}];
