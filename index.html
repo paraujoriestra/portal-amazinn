@@ -93,6 +93,9 @@
   .mbub.ot{background:#fff;border:1px solid var(--gris2);align-self:flex-start}
   .mbub .mseen{display:block;font-size:10px;margin-top:3px;text-align:right;letter-spacing:.2px}
   .mbub.me .mseen{color:rgba(255,255,255,.7)}
+  .msg-file{display:inline-flex;align-items:center;gap:6px;margin-top:4px;padding:7px 11px;border-radius:9px;font-size:12.5px;text-decoration:none;background:rgba(255,255,255,.16);border:1px solid rgba(255,255,255,.35);color:inherit}
+  .mbub.ot .msg-file{background:var(--gris);border-color:var(--gris2);color:var(--texto)}
+  .msg-file:hover{filter:brightness(1.05)}
   .msg-input{display:flex;gap:8px;padding:10px;border-top:1px solid var(--gris2);align-items:center}
   .msg-input input{flex:1;padding:9px 12px;border:1px solid var(--gris2);font-family:inherit;font-size:13.5px}
   .emoji-wrap{position:relative}
@@ -2258,11 +2261,35 @@ function convHTML(){
   const thread=MSG_ALL.filter(m=>(m.de_id===ME.id&&m.para_id===chatWithId)||(m.de_id===chatWithId&&m.para_id===ME.id));
   chatLastId = thread.length?Math.max(...thread.map(m=>m.id)):0;
   return `<div class="msg-conv"><div style="padding:12px 16px;border-bottom:1px solid var(--gris2);display:flex;align-items:center;gap:10px"><b>${esc(chatWithName)}</b></div>
-      <div class="msg-thread" id="msgThread">${thread.map(m=>{const mine=m.de_id===ME.id;const st=mine?`<span class="mseen" id="mseen_${m.id}">${m.leido?'✓✓ Visto':'✓ Enviado'}</span>`:'';return `<div class="mbub ${mine?'me':'ot'}">${esc(m.texto)}${st}</div>`;}).join('')||'<div id="msgEmpty" style="color:var(--suave);text-align:center;font-size:13px">Aún no hay mensajes. ¡Escribe el primero!</div>'}</div>
-      <div class="msg-input"><div class="emoji-wrap"><button type="button" class="emoji-btn" onclick="toggleEmoji(event)" title="Emojis">😊</button><div id="emojiPanel" class="emoji-panel"></div></div><input id="msgIn" placeholder="Escribe un mensaje…" onkeydown="if(event.key==='Enter')sendMsg()"><button class="btn" onclick="sendMsg()">Enviar</button></div></div>`;
+      <div class="msg-thread" id="msgThread">${thread.map(bubbleHTML).join('')||'<div id="msgEmpty" style="color:var(--suave);text-align:center;font-size:13px">Aún no hay mensajes. ¡Escribe el primero!</div>'}</div>
+      <div class="msg-input"><div class="emoji-wrap"><button type="button" class="emoji-btn" onclick="toggleEmoji(event)" title="Emojis">😊</button><div id="emojiPanel" class="emoji-panel"></div></div><label class="emoji-btn" style="cursor:pointer" title="Adjuntar archivo">📎<input type="file" id="msgFile" style="display:none" onchange="enviarAdj(this)"></label><input id="msgIn" placeholder="Escribe un mensaje…" onkeydown="if(event.key==='Enter')sendMsg()"><button class="btn" onclick="sendMsg()">Enviar</button></div></div>`;
+}
+function iconoArch(t){return !t?'📎':(/pdf/.test(t)?'📄':(/image/.test(t)?'🖼️':(/word|document/.test(t)?'📝':(/sheet|excel/.test(t)?'📊':(/zip|compress/.test(t)?'🗜️':'📎')))));}
+function bubbleHTML(m){
+  const mine=m.de_id===ME.id;
+  const st=mine?`<span class="mseen" id="mseen_${m.id}">${m.leido?'✓✓ Visto':'✓ Enviado'}</span>`:'';
+  const txt=m.texto?`<div>${esc(m.texto)}</div>`:'';
+  const adj=m.adj_path?`<a class="msg-file" href="#" onclick="descargarAdj('${String(m.adj_path).replace(/'/g,"\\'")}','${String(m.adj_nombre||'archivo').replace(/'/g,"\\'")}');return false">${iconoArch(m.adj_tipo)} ${esc(m.adj_nombre||'archivo')} ⬇</a>`:'';
+  return `<div class="mbub ${mine?'me':'ot'}">${txt}${adj}${st}</div>`;
 }
 function refreshContactList(){const sv=document.getElementById('msgSearch');const cl=document.getElementById('contactList');if(cl)cl.innerHTML=buildContactList(sv?sv.value:'');}
-function appendBubble(m){const t=document.getElementById('msgThread');if(!t)return;const e=document.getElementById('msgEmpty');if(e)e.remove();const mine=m.de_id===ME.id;const d=document.createElement('div');d.className='mbub '+(mine?'me':'ot');d.appendChild(document.createTextNode(m.texto));if(mine){const s=document.createElement('span');s.className='mseen';s.id='mseen_'+m.id;s.textContent=m.leido?'✓✓ Visto':'✓ Enviado';d.appendChild(s);}t.appendChild(d);t.scrollTop=t.scrollHeight;}
+function appendBubble(m){const t=document.getElementById('msgThread');if(!t)return;const e=document.getElementById('msgEmpty');if(e)e.remove();const tmp=document.createElement('div');tmp.innerHTML=bubbleHTML(m);const node=tmp.firstElementChild;if(node){t.appendChild(node);t.scrollTop=t.scrollHeight;}}
+async function descargarAdj(path,nombre){
+  const{data,error}=await sb.storage.from('mensajes').createSignedUrl(path,120,{download:nombre});
+  if(error||!data){alert('No se pudo abrir el archivo: '+(error?error.message:''));return;}
+  window.open(data.signedUrl,'_blank');
+}
+async function enviarAdj(input){
+  const f=input.files[0]; input.value=''; if(!f||!chatWithId) return;
+  if(f.size>25*1024*1024){alert('Máximo 25 MB por archivo.');return;}
+  const path=ME.id+'/'+chatWithId+'/'+Date.now()+'_'+f.name.replace(/[^\w.\-]/g,'_');
+  const up=await sb.storage.from('mensajes').upload(path,f);
+  if(up.error){alert('No se pudo subir: '+up.error.message);return;}
+  const i=document.getElementById('msgIn'); const txt=(i?i.value:'').trim(); if(i)i.value='';
+  const{data,error}=await sb.from('mensajes').insert({de_id:ME.id,para_id:chatWithId,de_nombre:PROFILE.nombre,para_nombre:chatWithName,texto:txt,adj_path:path,adj_nombre:f.name,adj_tipo:f.type,leido:false}).select().single();
+  if(error){alert('Error: '+error.message);return;}
+  appendBubble(data);chatLastId=Math.max(chatLastId,data.id);MSG_ALL.push(data);refreshContactList();
+}
 async function pollChat(){
   if(curPage!=='mensajeria' || !chatWithId) return;
   const filt=`and(de_id.eq.${ME.id},para_id.eq.${chatWithId}),and(de_id.eq.${chatWithId},para_id.eq.${ME.id})`;
@@ -2296,7 +2323,8 @@ function buildContactList(term){
     const msgHit=term?conv.find(m=>(m.texto||'').toLowerCase().includes(term)):null;
     if(term && !nameHit && !msgHit) return '';
     // si la búsqueda coincide con un mensaje, muestro ese fragmento
-    const sub=(term && msgHit)?esc(msgHit.texto):(last?esc(last.texto):'—');
+    const preview=m=>m?(m.texto?esc(m.texto):(m.adj_path?'📎 '+esc(m.adj_nombre||'archivo'):'—')):'—';
+    const sub=(term && msgHit)?esc(msgHit.texto):preview(last);
     return `<div class="mc ${c.id===chatWithId?'on':''}" onclick="openChat('${c.id}','${(c.nombre||'').replace(/'/g,"\\'")}')">${av(c.nombre,c.color,34,c.foto)}<div style="overflow:hidden"><b style="display:block">${esc(c.nombre)}</b><small style="color:var(--suave);display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:170px">${sub}</small></div>${dot}</div>`;
   }).filter(Boolean).join('');
   if(!rows) return `<div style="padding:14px;color:var(--suave);font-size:13px">${term?'Sin resultados para "'+esc(term)+'"':'No hay otros usuarios todavía.'}</div>`;
