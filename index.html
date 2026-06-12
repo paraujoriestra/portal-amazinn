@@ -1389,7 +1389,7 @@ const ORG_AREAS={'Dirección':'#6b7280','Comercial':'#1F4E79','Operaciones':'#d3
 const ORG_PALETTE=['#2980b9','#27ae60','#e67e22','#8e44ad','#16a085','#c0392b','#d35400','#34495e','#1F4E79'];
 function areaColor(a){ if(!a) return '#6b7280'; if(ORG_AREAS[a]) return ORG_AREAS[a]; let h=0; for(let i=0;i<a.length;i++)h=(h*31+a.charCodeAt(i))>>>0; return ORG_PALETTE[h%ORG_PALETTE.length]; }
 async function pageOrganigrama(){
-  const{data}=await sb.from('profiles').select('id,nombre,dept,area,posicion,role,color,foto,jefe_id,fuera_org').eq('estado','aprobado');
+  const{data}=await sb.from('profiles').select('id,nombre,dept,area,posicion,role,color,foto,jefe_id,fuera_org,org_titulo').eq('estado','aprobado');
   ORG_PEOPLE=data||[];
   renderOrg();
 }
@@ -1406,7 +1406,7 @@ function renderOrg(){
   const ids=new Set(enOrg.map(p=>p.id));
   const children={};
   enOrg.forEach(p=>{const k=(p.jefe_id&&ids.has(p.jefe_id))?p.jefe_id:'__root__';(children[k]=children[k]||[]).push(p);});
-  const sub=p=>esc(p.posicion||roleNice(p.role));
+  const sub=p=>esc(p.org_titulo||p.posicion||roleNice(p.role));
   const tagTxt=p=>{const a=p.area||'',d=p.dept||'';return d?(a?a+' · '+d:d):a;};
   const card=(p,extra)=>{const col=areaColor(p.area);const t=tagTxt(p);
     return `<div class="org-node${canEdit?' drag':''}" data-id="${p.id}" style="border-top:3px solid ${col}" ${canEdit?`draggable="true" ondragstart="orgDragStart(event,'${p.id}')"`:''} ${extra||''}>
@@ -1869,7 +1869,8 @@ function userForm(){const u=userDraft;const colores=['#1F4E79','#16a085','#8e44a
         <select id="uEquipo" onchange="if(this.value==='__new__')crearCatInline('equipo')"><option value="__none__" ${!u.equipo?'selected':''}>— Ninguno —</option>${CAT.equipos.map(eq=>`<option ${u.equipo===eq?'selected':''}>${esc(eq)}</option>`).join('')}<option value="__new__">➕ Crear nuevo…</option></select></div></div>
     <div class="row"><div><label>Rol / permisos</label>${u.role==='propietario'
         ? `<input value="Propietario 👑" disabled style="background:var(--gris)"><small style="color:var(--suave)">El rol de Propietario no se puede cambiar.</small>`
-        : `<select id="uR">${ROLES.filter(r=>r[0]!=='propietario').map(r=>`<option value="${r[0]}" ${u.role===r[0]?'selected':''}>${esc(r[1])}</option>`).join('')}</select>`}</div><div></div></div>
+        : `<select id="uR">${ROLES.filter(r=>r[0]!=='propietario').map(r=>`<option value="${r[0]}" ${u.role===r[0]?'selected':''}>${esc(r[1])}</option>`).join('')}</select>`}</div>
+      <div><label>Título en organigrama (opcional)</label><input id="uOrgT" value="${esc(u.org_titulo||'')}" placeholder="Ej: CEO Latam"></div></div>
     <div class="row"><div><label>Nº de teléfono</label><input id="uTel" value="${esc(u.telefono||'')}"></div>
       <div><label>Nº de identificación</label><input id="uIdent" value="${esc(u.identificacion||'')}"></div></div>
     <label>Cumpleaños</label><input id="uC" type="date" value="${u.cumple||''}">
@@ -1888,6 +1889,7 @@ function captureUserForm(){
   const rn=g('uR'); if(rn&&rn!=='__new__') userDraft.role=rn;
   if(g('uTel')!==null) userDraft.telefono=g('uTel');
   if(g('uIdent')!==null) userDraft.identificacion=g('uIdent');
+  if(g('uOrgT')!==null) userDraft.org_titulo=g('uOrgT');
   if(g('uC')!==null) userDraft.cumple=g('uC')||null;
   const col=document.querySelector('input[name="uCol"]:checked'); if(col) userDraft.color=col.value;
 }
@@ -1926,7 +1928,7 @@ async function userSave(e){e.preventDefault();
   let role;
   if(userDraft.role==='propietario'){ role='propietario'; }
   else { const rn=g('uR'); role=(rn&&rn!=='__new__')?rn:userDraft.role; }
-  const row={nombre:val('uN'),dept,area,role,posicion,vac:+val('uV')||0,cumple:val('uC')||null,equipo,telefono:val('uTel'),identificacion:val('uIdent'),color:col?col.value:'#1F4E79'};
+  const row={nombre:val('uN'),dept,area,role,posicion,vac:+val('uV')||0,cumple:val('uC')||null,equipo,telefono:val('uTel'),identificacion:val('uIdent'),org_titulo:val('uOrgT'),color:col?col.value:'#1F4E79'};
   const f=document.getElementById('uFoto').files[0];
   if(f){ row.foto=await fileToAvatar(f); }            // respaldo si no se usó el recorte
   else { row.foto = (userDraft.foto!==undefined ? userDraft.foto : null); }  // recorte aplicado, foto existente, o "Quitar foto"
