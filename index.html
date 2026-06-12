@@ -1875,13 +1875,17 @@ async function aprobarReg(id){
   const posicion=psSel&&psSel.value!=='__none__'?psSel.value:'';
   const equipo=eqSel&&eqSel.value!=='__none__'?eqSel.value:null;
   const { data:prof } = await sb.from('profiles').select('email,nombre').eq('id',id).single();
-  const { error } = await sb.from('profiles').update({ estado:'aprobado', role, dept, area, posicion, equipo }).eq('id',id);
+  const { data:saved, error } = await sb.from('profiles').update({ estado:'aprobado', role, dept, area, posicion, equipo }).eq('id',id).select('area,dept,posicion,role,equipo').single();
   if(error){ alert('No se pudo aprobar: '+error.message); return; }
+  // Verificación: confirmar que se guardó lo asignado
+  if(saved && (saved.area!==area || saved.dept!==dept || saved.posicion!==posicion)){
+    alert('Atención: el acceso se aprobó, pero no se guardaron bien algunos datos (área/departamento/posición). Edítalos en Administración. Detalle guardado: área="'+(saved.area||'')+'", depto="'+(saved.dept||'')+'", posición="'+(saved.posicion||'')+'".');
+  }
   // Aviso por email (si el servicio está configurado). No bloquea la aprobación.
   let mailed=false;
   try{ const { error:fe } = await sb.functions.invoke('aprobacion-email',{ body:{ email:prof&&prof.email, nombre:prof&&prof.nombre } }); mailed=!fe; }catch(e){ mailed=false; }
   loadPendingCount(); show('registros');
-  toast(mailed?'✓ Aprobado · email enviado':'✓ Usuario aprobado');
+  toast((mailed?'✓ Aprobado · email enviado':'✓ Aprobado')+' · '+roleNice(role)+(dept?' · '+dept:(area?' · '+area:'')));
 }
 async function rechazarReg(id){
   if(!confirm('¿Rechazar esta solicitud? El usuario no podrá entrar al portal.')) return;
