@@ -289,6 +289,8 @@
   .thk-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px}
   .thk{display:flex;align-items:center;gap:6px;font-size:13.5px;background:var(--gris);border:1px solid var(--gris2);border-radius:8px;padding:7px 11px}
   .thk-h{width:62px;padding:5px 7px;border:1px solid var(--gris2);border-radius:6px;font-size:12.5px;font-family:inherit}
+  .hor-eq{display:flex;flex-wrap:wrap;gap:6px}
+  .hor-eq .thk{cursor:pointer}
   .org-top{display:flex;gap:18px;align-items:flex-start}
   .org-main{flex:1;min-width:0}
   .org-aside{width:215px;flex:0 0 auto;border:1px dashed var(--gris2);border-radius:12px;padding:13px;background:var(--gris)}
@@ -828,7 +830,8 @@ const SHIFTS=[{v:"",l:"—",c:"#dfe3ea"},{v:"M",l:"Mañana 09–17",c:"#cfe0f2"}
 const SH=Object.fromEntries(SHIFTS.map(s=>[s.v,s]));
 // Horarios v2: catálogo de turnos
 let TURNOS_TIPO=[];
-let horW={area:'',dept:'',equipo:'',desde:'',hasta:'',turnos:null,gen:false};
+let horW={area:'',dept:'',equipos:[],desde:'',hasta:'',turnos:null,gen:false};
+function horToggleEquipo(name,on){ horW.equipos=horW.equipos||[]; if(on){ if(!horW.equipos.includes(name)) horW.equipos.push(name);} else horW.equipos=horW.equipos.filter(x=>x!==name); horW.gen=false; show('horarios'); }
 async function loadTurnosTipo(){ const{data}=await sb.from('turnos_tipo').select('*').order('orden').order('id'); TURNOS_TIPO=data||[]; if(horW.turnos===null) horW.turnos=TURNOS_TIPO.map(t=>t.id); }
 function turnoTipo(id){ return TURNOS_TIPO.find(t=>String(t.id)===String(id)); }
 function abreviaTurno(t){ const n=(t&&t.nombre)||''; return n.slice(0,3); }
@@ -1297,11 +1300,14 @@ async function horCrear(){
   const areaSel=`<select ${canArea?'':'disabled'} onchange="horW.area=this.value;horW.dept='';horW.gen=false;show('horarios')"><option value="">Todas</option>${CAT.areas.map(a=>`<option ${horW.area===a?'selected':''}>${esc(a)}</option>`).join('')}</select>`;
   const depOpts=CAT.deptos.filter(d=>!horW.area||d.area===horW.area);
   const deptSel=`<select ${canDept?'':'disabled'} onchange="horW.dept=this.value;horW.gen=false;show('horarios')"><option value="">Todos${horW.area?' los de '+esc(horW.area):''}</option>${depOpts.map(d=>`<option ${horW.dept===d.nombre?'selected':''}>${esc(d.nombre)}</option>`).join('')}</select>`;
-  const eqSel=`<select onchange="horW.equipo=this.value;horW.gen=false;show('horarios')"><option value="">Cualquiera</option>${CAT.equipos.map(e=>`<option ${horW.equipo===e?'selected':''}>${esc(e)}</option>`).join('')}</select>`;
+  horW.equipos=horW.equipos||[];
+  const eqSel=CAT.equipos.length
+    ? `<div class="hor-eq">${CAT.equipos.map(e=>`<label class="thk" style="padding:5px 9px;font-size:12.5px"><input type="checkbox" ${horW.equipos.includes(e)?'checked':''} onchange="horToggleEquipo('${e.replace(/'/g,"\\'")}',this.checked)"> ${esc(e)}</label>`).join('')}</div><small style="color:var(--suave)">${horW.equipos.length?horW.equipos.length+' equipo(s) seleccionados':'Vacío = todos'}</small>`
+    : '<small style="color:var(--suave)">No hay equipos creados</small>';
   const checks=TURNOS_TIPO.map(t=>{const h=horHora(t.id);return `<div class="thk"><label style="display:inline-flex;align-items:center;gap:8px;flex:1"><input type="checkbox" ${horW.turnos.includes(t.id)?'checked':''} onchange="horToggleTurno(${t.id},this.checked)"><span class="cell-b" style="background:${t.color}">${esc(abreviaTurno(t))}</span> ${esc(t.nombre)}</label><input class="thk-h" value="${esc(h.ini)}" placeholder="inicio" onchange="horSetHora(${t.id},'ini',this.value)"><span style="color:var(--suave)">–</span><input class="thk-h" value="${esc(h.fin)}" placeholder="fin" onchange="horSetHora(${t.id},'fin',this.value)"></div>`;}).join('');
   const form=`<div class="panel" style="max-width:820px">
     <div class="hor-step"><b>1 · Alcance</b><div class="row" style="margin-top:8px">
-      <div><label>Área</label>${areaSel}</div><div><label>Departamento</label>${deptSel}</div><div><label>Equipo (opcional)</label>${eqSel}</div></div>
+      <div><label>Área</label>${areaSel}</div><div><label>Departamento</label>${deptSel}</div><div><label>Equipos (uno, varios o todos)</label>${eqSel}</div></div>
       ${role==='responsable'?'<small style="color:var(--suave)">Como responsable, planificas tu propio departamento.</small>':(role==='direccion'?'<small style="color:var(--suave)">Como dirección, planificas los departamentos de tu área.</small>':'')}</div>
     <div class="hor-step"><b>2 · Fechas</b><div class="row" style="margin-top:8px">
       <div><label>Desde</label><input type="date" value="${horW.desde}" onchange="horW.desde=this.value"></div>
@@ -1318,7 +1324,7 @@ async function horGrid(){
   let q=sb.from('profiles').select('id,nombre,dept,area,equipo').eq('estado','aprobado');
   if(horW.area) q=q.eq('area',horW.area);
   if(horW.dept) q=q.eq('dept',horW.dept);
-  if(horW.equipo) q=q.eq('equipo',horW.equipo);
+  if(horW.equipos&&horW.equipos.length) q=q.in('equipo',horW.equipos);
   const{data:ppl}=await q.order('nombre');
   const people=ppl||[];
   if(!people.length) return '<div class="panel">No hay personas aprobadas en ese alcance.</div>';
