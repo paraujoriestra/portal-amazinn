@@ -327,6 +327,8 @@
   .btn-del{background:transparent;color:#c0392b;border:1px solid #e3b7b1;padding:8px 14px;border-radius:9px;font-weight:600;font-size:12.5px;cursor:pointer;margin-left:8px}
   .btn-del:hover{background:#c0392b;color:#fff;border-color:#c0392b}
   .nav-badge{margin-left:auto;background:#e23b3b;color:#fff;font-size:11px;font-weight:700;min-width:18px;height:18px;border-radius:9px;display:inline-flex;align-items:center;justify-content:center;padding:0 5px;line-height:1}
+  .grp-name{display:inline-flex;align-items:center;gap:8px}
+  .grp-name .nav-badge{margin-left:0;min-width:17px;height:17px;font-size:10.5px}
   #nav a{display:flex;align-items:center;cursor:pointer}
   .mc-dot{margin-left:auto;background:#e23b3b;color:#fff;font-size:10.5px;font-weight:700;min-width:17px;height:17px;border-radius:9px;display:inline-flex;align-items:center;justify-content:center;padding:0 5px}
   .btn-read:hover{filter:brightness(.95)}
@@ -753,10 +755,9 @@ async function enterApp(user){
   buildNav();
   document.getElementById('chatFab').style.display='flex';
   loadNotifs();
-  loadMsgUnread();
-  loadPendingCount();
+  refreshBadges();
   if(window._msgPoll) clearInterval(window._msgPoll);
-  window._msgPoll = setInterval(()=>{loadMsgUnread();loadPendingCount();}, 20000);
+  window._msgPoll = setInterval(refreshBadges, 20000);
   chatMsgs=[{from:'bot',msg:`¡Hola, ${(PROFILE.nombre||'').split(' ')[0]||''}! 🤖 Soy <b>Wally</b>, el asistente de Amazinn Places. Pregúntame cómo encontrar algo.`}];
   show('inicio');
 }
@@ -924,36 +925,30 @@ function toggleBell(e){
 function goNotif(sec,e){if(e)e.stopPropagation();const p=document.getElementById('notifPanel');if(p)p.style.display='none';if(sec)show(sec);}
 document.addEventListener('click',(e)=>{const p=document.getElementById('notifPanel');if(!p||p.style.display!=='block')return;if(e.target.closest('#notifPanel')||e.target.closest('#bell'))return;p.style.display='none';});
 async function notifyTeam(dept,icon,texto,sec){ try{ await sb.from('notificaciones').insert({dept,icon,texto,sec}); }catch(e){} }
-let MSG_UNREAD=0;
-async function loadMsgUnread(){
-  const { count } = await sb.from('mensajes').select('id',{count:'exact',head:true}).eq('para_id',ME.id).eq('leido',false);
-  MSG_UNREAD = count||0;
-  updateMsgBadge();
+/* ---------------- INSIGNIAS DEL MENÚ (por sección y por grupo) ---------------- */
+let NAV_BADGES={};
+function setBadge(id,n){ NAV_BADGES[id]=n||0; renderNavBadges(); }
+function renderNavBadges(){
+  document.querySelectorAll('#nav a').forEach(a=>{ const n=NAV_BADGES[a.dataset.id]||0; let b=a.querySelector('.nav-badge');
+    if(n>0){ if(!b){b=document.createElement('span');b.className='nav-badge';a.appendChild(b);} b.textContent=n>99?'99+':n; } else if(b) b.remove(); });
+  const groups=navGroups(); const heads=document.querySelectorAll('#nav .grp-tog');
+  groups.forEach((g,i)=>{ const head=heads[i]; if(!head) return; const nameEl=head.querySelector('.grp-name')||head; const sum=g.items.reduce((s,it)=>s+(NAV_BADGES[it.id]||0),0); let b=nameEl.querySelector('.nav-badge');
+    if(sum>0){ if(!b){ b=document.createElement('span'); b.className='nav-badge'; nameEl.appendChild(b); } b.textContent=sum>99?'99+':sum; } else if(b) b.remove(); });
 }
-function updateMsgBadge(){
-  const a=document.querySelector('#nav a[data-id="mensajeria"]');
-  if(!a) return;
-  let b=a.querySelector('.nav-badge');
-  if(MSG_UNREAD>0){
-    if(!b){ b=document.createElement('span'); b.className='nav-badge'; a.appendChild(b); }
-    b.textContent = MSG_UNREAD>99?'99+':MSG_UNREAD;
-  } else if(b){ b.remove(); }
+async function loadMsgUnread(){ const{count}=await sb.from('mensajes').select('id',{count:'exact',head:true}).eq('para_id',ME.id).eq('leido',false); setBadge('mensajeria',count||0); }
+async function loadPendingCount(){ if(!isAdmin()){ setBadge('registros',0); return; } const{count}=await sb.from('profiles').select('id',{count:'exact',head:true}).eq('estado','pendiente'); setBadge('registros',count||0); }
+async function loadComUnread(){
+  try{ const{data:coms}=await sb.from('comunicados').select('id,dirigido');
+    const vis=(coms||[]).filter(c=>c.dirigido==='*'||c.dirigido===PROFILE.dept);
+    if(!vis.length){ setBadge('comunicados',0); return; }
+    const{data:lec}=await sb.from('comunicado_lecturas').select('comunicado_id').eq('user_id',ME.id);
+    const leidos=new Set((lec||[]).map(l=>l.comunicado_id));
+    setBadge('comunicados', vis.filter(c=>!leidos.has(c.id)).length);
+  }catch(e){}
 }
-let PENDING_REG=0;
-async function loadPendingCount(){
-  if(!isAdmin()){ PENDING_REG=0; updateRegBadge(); return; }
-  const { count } = await sb.from('profiles').select('id',{count:'exact',head:true}).eq('estado','pendiente');
-  PENDING_REG = count||0; updateRegBadge();
-}
-function updateRegBadge(){
-  const a=document.querySelector('#nav a[data-id="registros"]');
-  if(!a) return;
-  let b=a.querySelector('.nav-badge');
-  if(PENDING_REG>0){
-    if(!b){ b=document.createElement('span'); b.className='nav-badge'; a.appendChild(b); }
-    b.textContent = PENDING_REG>99?'99+':PENDING_REG;
-  } else if(b){ b.remove(); }
-}
+async function loadAprobPend(){ if(!CAN_MANAGE.includes(PROFILE.role)){ setBadge('aprobaciones',0); return; }
+  try{ const{count}=await sb.from('solicitudes').select('id',{count:'exact',head:true}).eq('estado','Pendiente'); setBadge('aprobaciones',count||0); }catch(e){} }
+async function refreshBadges(){ await Promise.all([loadMsgUnread(),loadPendingCount(),loadComUnread(),loadAprobPend()]); }
 function buildNav(){
   const nav=document.getElementById('nav');
   const groups=navGroups();
@@ -962,7 +957,7 @@ function buildNav(){
   groups.forEach(g=>{
     const open=navOpen.has(g.name);
     const head=document.createElement('div'); head.className='grp-tog'+(open?' open':'');
-    head.innerHTML=`<span>${g.name}</span><span class="car">${open?'▾':'▸'}</span>`;
+    head.innerHTML=`<span class="grp-name">${g.name}</span><span class="car">${open?'▾':'▸'}</span>`;
     head.onclick=()=>{ if(navOpen.has(g.name)){navOpen.clear();} else {navOpen.clear();navOpen.add(g.name);} buildNav(); };
     nav.appendChild(head);
     const box=document.createElement('div'); if(!open) box.style.display='none';
@@ -970,8 +965,7 @@ function buildNav(){
     nav.appendChild(box);
   });
   highlightNav();
-  updateMsgBadge();
-  updateRegBadge();
+  renderNavBadges();
 }
 function highlightNav(){document.querySelectorAll('#nav a').forEach(a=>a.classList.toggle('active',a.dataset.id===curPage));}
 function ensureGroupOpen(id){const g=groupOf(id);if(g&&navOpen&&!(navOpen.size===1&&navOpen.has(g))){navOpen.clear();navOpen.add(g);buildNav();}}
@@ -1232,7 +1226,7 @@ async function createCom(e){
 async function confirmRead(id){
   const { error } = await sb.from('comunicado_lecturas').insert({ comunicado_id:id, user_id:ME.id });
   if(error && !String(error.message).includes('duplicate')){ alert('Error: '+error.message); return; }
-  pageComunicados();
+  loadComUnread(); pageComunicados();
 }
 async function deleteCom(id){
   if(!confirm('¿Eliminar este comunicado de forma permanente? No se puede deshacer.')) return;
@@ -1705,7 +1699,7 @@ async function pageAprobaciones(){
       <td>${s.estado==='Pendiente'?`<button class="btn" style="padding:5px 11px" onclick="setSol(${s.id},'Aprobada')">Aprobar</button> <button class="btn ghost" style="padding:5px 11px" onclick="setSol(${s.id},'Rechazada')">Rechazar</button>`:`<span class="badge ${SOL_EST[s.estado]||'b-grey'}">${esc(s.estado)}</span>`}</td></tr>`).join('')||'<tr><td colspan="5" style="color:var(--suave)">No hay solicitudes.</td></tr>'}
     </tbody></table></div>`;
 }
-async function setSol(id,estado){await sb.from('solicitudes').update({estado}).eq('id',id);show('aprobaciones');}
+async function setSol(id,estado){await sb.from('solicitudes').update({estado}).eq('id',id);loadAprobPend();show('aprobaciones');}
 
 /* ---------------- CALENDARIO ---------------- */
 let evFormOpen=false, evEditId=null;
