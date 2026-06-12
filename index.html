@@ -262,6 +262,8 @@
   .con-row:last-child{border-bottom:none}
   .con-dot{width:10px;height:10px;border-radius:50%;background:var(--gris2);flex:0 0 auto}
   .con-dot.on{background:#1f9d55;box-shadow:0 0 0 3px rgba(31,157,85,.22)}
+  .av-wrap{position:relative;display:inline-block;line-height:0;flex:0 0 auto}
+  .av-dot{position:absolute;right:-1px;bottom:-1px;width:11px;height:11px;border-radius:50%;background:#1f9d55;border:2px solid #fff;box-sizing:border-box}
   .kebab{background:none;border:none;cursor:pointer;font-size:18px;line-height:1;color:var(--suave);padding:2px 8px;border-radius:6px}
   .kebab:hover{background:var(--gris);color:var(--texto)}
   .rowmenu-pop{position:absolute;display:none;flex-direction:column;background:#fff;border:1px solid var(--gris2);border-radius:10px;box-shadow:0 10px 28px rgba(0,0,0,.16);z-index:9999;min-width:150px;padding:5px}
@@ -993,6 +995,7 @@ async function refreshBadges(){ await Promise.all([loadMsgUnread(),loadPendingCo
 /* Presencia (última conexión) */
 async function ping(){ try{ await sb.from('profiles').update({last_seen:new Date().toISOString()}).eq('id',ME.id); }catch(e){} }
 function isOnline(iso){ return iso ? (Date.now()-new Date(iso).getTime())<120000 : false; }
+function avP(nombre,color,size,foto,last_seen){ return `<span class="av-wrap">${av(nombre,color,size,foto)}${isOnline(last_seen)?'<span class="av-dot"></span>':''}</span>`; }
 function haceTiempo(iso){ if(!iso) return 'nunca conectado'; const s=Math.floor((Date.now()-new Date(iso).getTime())/1000);
   if(s<60) return 'hace un momento'; const m=Math.floor(s/60); if(m<60) return 'hace '+m+' min';
   const h=Math.floor(m/60); if(h<24) return 'hace '+h+' h'; const d=Math.floor(h/24); if(d<30) return 'hace '+d+' día'+(d>1?'s':'');
@@ -1519,7 +1522,7 @@ const ORG_AREAS={'Dirección':'#6b7280','Comercial':'#1F4E79','Operaciones':'#d3
 const ORG_PALETTE=['#2980b9','#27ae60','#e67e22','#8e44ad','#16a085','#c0392b','#d35400','#34495e','#1F4E79'];
 function areaColor(a){ if(!a) return '#6b7280'; if(ORG_AREAS[a]) return ORG_AREAS[a]; let h=0; for(let i=0;i<a.length;i++)h=(h*31+a.charCodeAt(i))>>>0; return ORG_PALETTE[h%ORG_PALETTE.length]; }
 async function pageOrganigrama(){
-  const{data}=await sb.from('profiles').select('id,nombre,dept,area,posicion,role,color,foto,jefe_id,fuera_org,org_titulo').eq('estado','aprobado');
+  const{data}=await sb.from('profiles').select('id,nombre,dept,area,posicion,role,color,foto,jefe_id,fuera_org,org_titulo,last_seen').eq('estado','aprobado');
   ORG_PEOPLE=data||[];
   renderOrg();
 }
@@ -1540,7 +1543,7 @@ function renderOrg(){
   const tagTxt=p=>{const a=p.area||'',d=p.dept||'';return d?(a?a+' · '+d:d):a;};
   const card=(p,extra)=>{const col=areaColor(p.area);const t=tagTxt(p);
     return `<div class="org-node${canEdit?' drag':''}" data-id="${p.id}" style="border-top:3px solid ${col}" ${canEdit?`draggable="true" ondragstart="orgDragStart(event,'${p.id}')"`:''} ${extra||''}>
-      ${av(p.nombre,p.color,34,p.foto)}<div class="on-info"><b>${esc(p.nombre||'—')}</b><small>${sub(p)}</small>${t?`<span class="onode-tag" style="background:${col}1a;color:${col}">${esc(t)}</span>`:''}</div></div>`;};
+      ${avP(p.nombre,p.color,34,p.foto,p.last_seen)}<div class="on-info"><b>${esc(p.nombre||'—')}</b><small>${sub(p)}</small>${t?`<span class="onode-tag" style="background:${col}1a;color:${col}">${esc(t)}</span>`:''}</div></div>`;};
   function node(p){
     const kids=(children[p.id]||[]);
     const drop=canEdit?`ondragover="orgOver(event)" ondragleave="orgLeave(event)" ondrop="orgDrop(event,'${p.id}')"`:'';
@@ -2460,7 +2463,7 @@ function pageDepto(){return `<div class="page-title">Área de ${esc(PROFILE.dept
 /* ---------------- MENSAJERÍA (datos reales) ---------------- */
 let chatWithId=null, chatWithName=null, chatLastId=0;
 async function pageMensajeria(){
-  const {data:profs}=await sb.from('profiles').select('id,nombre,color,foto').neq('id',ME.id).order('nombre');
+  const {data:profs}=await sb.from('profiles').select('id,nombre,color,foto,last_seen').neq('id',ME.id).order('nombre');
   const contacts=profs||[];
   const {data:msgs}=await sb.from('mensajes').select('*').order('created_at');
   const MS=msgs||[];
@@ -2481,7 +2484,9 @@ function convHTML(){
   if(!chatWithId) return `<div class="msg-conv" style="align-items:center;justify-content:center;color:var(--suave);font-size:14px">Selecciona un compañero para chatear</div>`;
   const thread=MSG_ALL.filter(m=>(m.de_id===ME.id&&m.para_id===chatWithId)||(m.de_id===chatWithId&&m.para_id===ME.id));
   chatLastId = thread.length?Math.max(...thread.map(m=>m.id)):0;
-  return `<div class="msg-conv"><div style="padding:12px 16px;border-bottom:1px solid var(--gris2);display:flex;align-items:center;gap:10px"><b>${esc(chatWithName)}</b></div>
+  const c=MSG_CONTACTS.find(x=>x.id===chatWithId); const cOn=c&&isOnline(c.last_seen);
+  const estado=c?`<small style="color:${cOn?'#1f9d55':'var(--suave)'};font-weight:${cOn?'700':'400'}">${cOn?'En línea':('últ. vez '+haceTiempo(c.last_seen))}</small>`:'';
+  return `<div class="msg-conv"><div style="padding:10px 16px;border-bottom:1px solid var(--gris2);display:flex;flex-direction:column;gap:1px"><b>${esc(chatWithName)}</b>${estado}</div>
       <div class="msg-thread" id="msgThread">${thread.map(bubbleHTML).join('')||'<div id="msgEmpty" style="color:var(--suave);text-align:center;font-size:13px">Aún no hay mensajes. ¡Escribe el primero!</div>'}</div>
       <div class="msg-input"><div class="emoji-wrap"><button type="button" class="emoji-btn" onclick="toggleEmoji(event)" title="Emojis">😊</button><div id="emojiPanel" class="emoji-panel"></div></div><label class="emoji-btn" style="cursor:pointer" title="Adjuntar archivo">📎<input type="file" id="msgFile" style="display:none" onchange="enviarAdj(this)"></label><input id="msgIn" placeholder="Escribe un mensaje…" onkeydown="if(event.key==='Enter')sendMsg()"><button class="btn" onclick="sendMsg()">Enviar</button></div></div>`;
 }
@@ -2546,7 +2551,7 @@ function buildContactList(term){
     // si la búsqueda coincide con un mensaje, muestro ese fragmento
     const preview=m=>m?(m.texto?esc(m.texto):(m.adj_path?'📎 '+esc(m.adj_nombre||'archivo'):'—')):'—';
     const sub=(term && msgHit)?esc(msgHit.texto):preview(last);
-    return `<div class="mc ${c.id===chatWithId?'on':''}" onclick="openChat('${c.id}','${(c.nombre||'').replace(/'/g,"\\'")}')">${av(c.nombre,c.color,34,c.foto)}<div style="overflow:hidden"><b style="display:block">${esc(c.nombre)}</b><small style="color:var(--suave);display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:170px">${sub}</small></div>${dot}</div>`;
+    return `<div class="mc ${c.id===chatWithId?'on':''}" onclick="openChat('${c.id}','${(c.nombre||'').replace(/'/g,"\\'")}')">${avP(c.nombre,c.color,34,c.foto,c.last_seen)}<div style="overflow:hidden"><b style="display:block">${esc(c.nombre)}</b><small style="color:var(--suave);display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:170px">${sub}</small></div>${dot}</div>`;
   }).filter(Boolean).join('');
   if(!rows) return `<div style="padding:14px;color:var(--suave);font-size:13px">${term?'Sin resultados para "'+esc(term)+'"':'No hay otros usuarios todavía.'}</div>`;
   return rows;
