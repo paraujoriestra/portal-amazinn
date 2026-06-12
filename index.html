@@ -1667,10 +1667,18 @@ async function orgDropAside(e){ e.preventDefault(); e.stopPropagation(); e.curre
 
 /* ---------------- IMPORTAR EXCEL (Dirección/Admin/Propietario) ---------------- */
 const IMPORT_COLS={ proveedores:['Nombre proveedor','Tipología','Concepto','RUC','Email','Teléfono','Banco','Tipo de cuenta','Nº de cuenta'], propietarios:['Nombre propietario','Propiedad','Concepto','Sociedad','RUC','Email','Teléfono','Banco','Tipo de cuenta','Nº de cuenta'], suministros:['tipo','referencia','medidor','titular','compania','propiedad','nota'] };
-function importBtn(tabla){ if(!isDireccion()) return ''; return `<label class="btn ghost" style="cursor:pointer">📥 Importar Excel<input type="file" accept=".xlsx,.xls,.csv" style="display:none" onchange="importExcel('${tabla}',this)"></label><a href="#" style="font-size:12px;color:var(--acento)" onclick="plantillaExcel('${tabla}');return false">descargar plantilla</a>`; }
+function importBtn(tabla,sub){ if(!isDireccion()) return ''; sub=sub||''; return `<label class="btn ghost" style="cursor:pointer">📥 Importar Excel<input type="file" accept=".xlsx,.xls,.csv" style="display:none" onchange="importExcel('${tabla}',this,'${sub}')"></label><a href="#" style="font-size:12px;color:var(--acento)" onclick="plantillaExcel('${tabla}','${sub}');return false">descargar plantilla</a>`; }
+function importCols(tabla,sub){
+  if(tabla==='suministros'){
+    if(sub==='electricidad') return ['Nº NIS','Nº de medidor','A nombre de','Compañía','Propiedad','Nota'];
+    if(sub==='agua') return ['Nº IDAAN','A nombre de','Compañía','Propiedad','Nota'];
+    return ['Nº de suscriptor','A nombre de','Compañía','Propiedad','Nota'];
+  }
+  return IMPORT_COLS[tabla]||[];
+}
 function normKey(k){ return (k==null?'':''+k).trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,''); }
 function rowGet(map,...names){ for(const n of names){ const v=map[normKey(n)]; if(v!==undefined&&v!=='') return (''+v).trim(); } return ''; }
-function mapRow(tabla,r){
+function mapRow(tabla,r,sub){
   const map={}; Object.keys(r).forEach(k=>map[normKey(k)]=r[k]);
   if(tabla==='proveedores'){
     const nombre=rowGet(map,'nombre proveedor','nombre','proveedor','empresa'); if(!nombre) return null;
@@ -1697,16 +1705,22 @@ function mapRow(tabla,r){
       tipo_cuenta:rowGet(map,'tipo de cuenta','tipo cuenta'),
       num_cuenta:rowGet(map,'nº de cuenta','no de cuenta','numero de cuenta','n de cuenta','num cuenta','cuenta') };
   }
-  const tipo=rowGet(map,'tipo'); const ref=rowGet(map,'referencia','ref','nis','idaan','suscriptor','nº nis','nº idaan','nº de suscriptor');
-  if(!tipo&&!ref) return null;
-  return { tipo:tipo||'otro', referencia:ref, medidor:rowGet(map,'medidor','nº de medidor','no de medidor','numero de medidor'), titular:rowGet(map,'titular','a nombre de'), compania:rowGet(map,'compania','empresa','suministrador'), propiedad:rowGet(map,'propiedad','apartamento','casa','unidad'), nota:rowGet(map,'nota','notas','observaciones') };
+  // suministros: el "tipo" lo marca la pestaña (sub), no una columna del Excel
+  const tipo=sub||rowGet(map,'tipo')||'otro';
+  const ref=rowGet(map,'nº nis','nº idaan','nº de suscriptor','referencia','nis','idaan','suscriptor','ref');
+  const titular=rowGet(map,'a nombre de','titular');
+  const propiedad=rowGet(map,'propiedad','apartamento','casa','unidad');
+  if(!ref && !titular && !propiedad) return null;
+  const out={ tipo, referencia:ref, titular, compania:rowGet(map,'compania','empresa','suministrador'), propiedad, nota:rowGet(map,'nota','notas','observaciones') };
+  if(tipo==='electricidad') out.medidor=rowGet(map,'nº de medidor','medidor','no de medidor','numero de medidor');
+  return out;
 }
-function plantillaExcel(tabla){
+function plantillaExcel(tabla,sub){
   if(typeof XLSX==='undefined'){ alert('No se pudo cargar el lector de Excel. Revisa tu conexión.'); return; }
-  const cols=IMPORT_COLS[tabla]; const ws=XLSX.utils.aoa_to_sheet([cols]);
-  const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'Plantilla'); XLSX.writeFile(wb,'plantilla_'+tabla+'.xlsx');
+  const cols=importCols(tabla,sub); const ws=XLSX.utils.aoa_to_sheet([cols]);
+  const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'Plantilla'); XLSX.writeFile(wb,'plantilla_'+tabla+(sub?'_'+sub:'')+'.xlsx');
 }
-async function importExcel(tabla,input){
+async function importExcel(tabla,input,sub){
   const f=input.files[0]; input.value=''; if(!f) return;
   if(!isDireccion()){ alert('Solo Dirección, Administrador y Propietario pueden importar.'); return; }
   if(typeof XLSX==='undefined'){ alert('No se pudo cargar el lector de Excel. Revisa tu conexión e inténtalo de nuevo.'); return; }
@@ -1716,9 +1730,9 @@ async function importExcel(tabla,input){
     const ws=wb.Sheets[wb.SheetNames[0]];
     const rows=XLSX.utils.sheet_to_json(ws,{defval:''});
     if(!rows.length){ alert('El archivo no tiene filas de datos.'); return; }
-    const mapped=rows.map(r=>mapRow(tabla,r)).filter(Boolean);
-    if(!mapped.length){ alert('No se reconocieron las columnas. Descarga la plantilla y usa esos encabezados.'); return; }
-    if(!confirm('Se importarán '+mapped.length+' fila(s) a '+tabla+'. ¿Continuar?')) return;
+    const mapped=rows.map(r=>mapRow(tabla,r,sub)).filter(Boolean);
+    if(!mapped.length){ alert('No se reconocieron las columnas. Descarga la plantilla de esta pestaña y usa esos encabezados.'); return; }
+    if(!confirm('Se importarán '+mapped.length+' fila(s)'+(sub?' a '+sub:'')+'. ¿Continuar?')) return;
     const{error}=await sb.from(tabla).insert(mapped);
     if(error){ alert('Error al importar: '+error.message); return; }
     toast('✓ '+mapped.length+' registro(s) importados'); show(tabla);
@@ -1863,7 +1877,7 @@ async function pageSuministros(){
   document.getElementById('main').innerHTML=`
     <div class="page-title">Suministros por activo</div><div class="page-sub">Referencias de los contratos de cada propiedad</div>
     <div class="tabs">${tabs.map(t=>`<button class="${supTab===t[0]?'on':''}" onclick="setSupTab('${t[0]}')">${t[1]}</button>`).join('')}</div>
-    ${canEdit?`<div style="margin-bottom:14px;display:flex;gap:8px;flex-wrap:wrap;align-items:center"><button class="btn ghost" onclick="supFormOpen=!supFormOpen;show('suministros')">${supFormOpen?'✕ Cerrar':'➕ Añadir registro'}</button>${importBtn('suministros')}</div>`:''}
+    ${canEdit?`<div style="margin-bottom:14px;display:flex;gap:8px;flex-wrap:wrap;align-items:center"><button class="btn ghost" onclick="supFormOpen=!supFormOpen;show('suministros')">${supFormOpen?'✕ Cerrar':'➕ Añadir registro'}</button>${importBtn('suministros',supTab)}</div>`:''}
     ${canEdit&&supFormOpen?`<div class="panel" style="max-width:600px"><form class="box" onsubmit="return createSup(event)" style="max-width:none">
       <div class="row"><div><label>${refLbl}</label><input id="sR"></div>${conMedidor?'<div><label>Nº de medidor</label><input id="sMed"></div>':'<div></div>'}</div>
       <div class="row"><div><label>A nombre de</label><input id="sT"></div><div><label>Compañía</label><input id="sC"></div></div>
