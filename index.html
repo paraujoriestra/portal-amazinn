@@ -1649,13 +1649,17 @@ async function pageRegistros(){
       <button class="btn ghost" style="padding:6px 12px" onclick="regFoto('${u.id}')">📷 Foto</button></div>
     <div style="font-size:13.5px;line-height:2;background:var(--gris);border-radius:9px;padding:8px 14px">
       📞 <b>${esc(u.telefono||'—')}</b> &nbsp;·&nbsp; 🪪 <b>${esc(u.identificacion||'—')}</b> &nbsp;·&nbsp; 🎂 <b>${u.cumple||'—'}</b></div>
+    ${(()=>{const ca=u.area||CAT.areas[0]||'';const deps=CAT.deptos.filter(d=>d.area===ca);return `
     <div class="row" style="margin-top:12px">
-      <div><label>Rol / permisos</label><select id="rgR_${u.id}">${ROLES.filter(r=>r[0]!=='propietario').map(r=>`<option value="${r[0]}">${esc(r[1])}</option>`).join('')}</select></div>
-      <div><label>Departamento</label><select id="rgD_${u.id}">${CAT.deptos.map(d=>`<option ${u.dept===d.nombre?'selected':''}>${esc(d.nombre)}</option>`).join('')}</select></div>
-    </div>
+      <div><label>Área</label><select id="rgA_${u.id}" onchange="filtraDeptosReg('${u.id}')">${CAT.areas.map(a=>`<option ${ca===a?'selected':''}>${esc(a)}</option>`).join('')}</select></div>
+      <div><label>Departamento</label><select id="rgD_${u.id}">${deps.map(d=>`<option ${u.dept===d.nombre?'selected':''}>${esc(d.nombre)}</option>`).join('')||'<option value="">—</option>'}</select></div>
+    </div>`;})()}
     <div class="row">
       <div><label>Posición</label><select id="rgC_${u.id}"><option value="__none__">— Sin posición —</option>${CAT.posiciones.map(p=>`<option>${esc(p)}</option>`).join('')}</select></div>
       <div><label>Equipo</label><select id="rgE_${u.id}"><option value="__none__">— Ninguno —</option>${CAT.equipos.map(e=>`<option>${esc(e)}</option>`).join('')}</select></div>
+    </div>
+    <div class="row">
+      <div><label>Rol / permisos</label><select id="rgR_${u.id}">${ROLES.filter(r=>r[0]!=='propietario').map(r=>`<option value="${r[0]}">${esc(r[1])}</option>`).join('')}</select></div><div></div>
     </div>
     <div style="margin-top:14px;display:flex;gap:8px">
       <button class="btn" onclick="aprobarReg('${u.id}')">✅ Aprobar acceso</button>
@@ -1665,13 +1669,20 @@ async function pageRegistros(){
     <div class="page-sub">Solicitudes de acceso al portal · asigna rol, departamento y foto antes de aprobar</div>
     ${us.length?cards:'<div class="panel">No hay registros pendientes. ✅</div>'}`;
 }
+function filtraDeptosReg(id){
+  const a=document.getElementById('rgA_'+id).value;
+  const sel=document.getElementById('rgD_'+id);
+  const deps=CAT.deptos.filter(d=>d.area===a);
+  sel.innerHTML=deps.map(d=>`<option>${esc(d.nombre)}</option>`).join('')||'<option value="">—</option>';
+}
 async function aprobarReg(id){
   const role=document.getElementById('rgR_'+id).value, dept=document.getElementById('rgD_'+id).value;
+  const area=(document.getElementById('rgA_'+id)||{}).value || deptArea(dept);
   const psSel=document.getElementById('rgC_'+id), eqSel=document.getElementById('rgE_'+id);
   const posicion=psSel&&psSel.value!=='__none__'?psSel.value:'';
   const equipo=eqSel&&eqSel.value!=='__none__'?eqSel.value:null;
   const { data:prof } = await sb.from('profiles').select('email,nombre').eq('id',id).single();
-  const { error } = await sb.from('profiles').update({ estado:'aprobado', role, dept, area:deptArea(dept), posicion, equipo }).eq('id',id);
+  const { error } = await sb.from('profiles').update({ estado:'aprobado', role, dept, area, posicion, equipo }).eq('id',id);
   if(error){ alert('No se pudo aprobar: '+error.message); return; }
   // Aviso por email (si el servicio está configurado). No bloquea la aprobación.
   let mailed=false;
@@ -1733,15 +1744,18 @@ async function deleteUser(id,nombre){
 function userForm(){const u=userDraft;const colores=['#1F4E79','#16a085','#8e44ad','#d35400','#c0392b','#2980b9','#27ae60','#e67e22','#34495e'];
   return `<div class="panel" style="max-width:640px"><h2>✏️ Editar ${esc(u.nombre||'usuario')}</h2><form class="box" onsubmit="return userSave(event)" style="max-width:none">
     <div class="row"><div><label>Nombre</label><input id="uN" value="${esc(u.nombre||'')}"></div><div><label>Días vacaciones</label><input id="uV" type="number" value="${u.vac||0}"></div></div>
-    <div class="row"><div><label>Departamento <small style="color:var(--suave)">(área: ${esc(deptArea(u.dept)||'—')})</small></label>
-        <select id="uD" onchange="if(this.value==='__new__')crearCatInline('departamento');else{userDraft.dept=this.value;userDraft.area=deptArea(this.value);}">${CAT.deptos.map(d=>`<option ${u.dept===d.nombre?'selected':''}>${esc(d.nombre)}</option>`).join('')}<option value="__new__">➕ Crear nuevo…</option></select></div>
-      <div><label>Posición</label>
-        <select id="uPos" onchange="if(this.value==='__new__')crearCatInline('posicion')"><option value="__none__" ${!u.posicion?'selected':''}>— Sin posición —</option>${CAT.posiciones.map(p=>`<option ${u.posicion===p?'selected':''}>${esc(p)}</option>`).join('')}<option value="__new__">➕ Crear nueva…</option></select></div></div>
-    <div class="row"><div><label>Equipo</label>
-        <select id="uEquipo" onchange="if(this.value==='__new__')crearCatInline('equipo')"><option value="__none__" ${!u.equipo?'selected':''}>— Ninguno —</option>${CAT.equipos.map(eq=>`<option ${u.equipo===eq?'selected':''}>${esc(eq)}</option>`).join('')}<option value="__new__">➕ Crear nuevo…</option></select></div>
-      <div><label>Rol / permisos</label>${u.role==='propietario'
+    ${(()=>{const curArea=u.area||deptArea(u.dept)||CAT.areas[0]||'';const depsArea=CAT.deptos.filter(d=>d.area===curArea);return `
+    <div class="row"><div><label>Área</label>
+        <select id="uArea" onchange="if(this.value==='__new__')crearCatInline('area');else onAreaChange(this.value)">${CAT.areas.map(a=>`<option ${curArea===a?'selected':''}>${esc(a)}</option>`).join('')}<option value="__new__">➕ Crear nueva…</option></select></div>
+      <div><label>Departamento</label>
+        <select id="uD" onchange="if(this.value==='__new__')crearCatInline('departamento');else userDraft.dept=this.value">${depsArea.map(d=>`<option ${u.dept===d.nombre?'selected':''}>${esc(d.nombre)}</option>`).join('')||'<option value="">— sin departamentos en esta área —</option>'}<option value="__new__">➕ Crear nuevo…</option></select></div></div>`;})()}
+    <div class="row"><div><label>Posición</label>
+        <select id="uPos" onchange="if(this.value==='__new__')crearCatInline('posicion')"><option value="__none__" ${!u.posicion?'selected':''}>— Sin posición —</option>${CAT.posiciones.map(p=>`<option ${u.posicion===p?'selected':''}>${esc(p)}</option>`).join('')}<option value="__new__">➕ Crear nueva…</option></select></div>
+      <div><label>Equipo</label>
+        <select id="uEquipo" onchange="if(this.value==='__new__')crearCatInline('equipo')"><option value="__none__" ${!u.equipo?'selected':''}>— Ninguno —</option>${CAT.equipos.map(eq=>`<option ${u.equipo===eq?'selected':''}>${esc(eq)}</option>`).join('')}<option value="__new__">➕ Crear nuevo…</option></select></div></div>
+    <div class="row"><div><label>Rol / permisos</label>${u.role==='propietario'
         ? `<input value="Propietario 👑" disabled style="background:var(--gris)"><small style="color:var(--suave)">El rol de Propietario no se puede cambiar.</small>`
-        : `<select id="uR">${ROLES.filter(r=>r[0]!=='propietario').map(r=>`<option value="${r[0]}" ${u.role===r[0]?'selected':''}>${esc(r[1])}</option>`).join('')}</select>`}</div></div>
+        : `<select id="uR">${ROLES.filter(r=>r[0]!=='propietario').map(r=>`<option value="${r[0]}" ${u.role===r[0]?'selected':''}>${esc(r[1])}</option>`).join('')}</select>`}</div><div></div></div>
     <div class="row"><div><label>Nº de teléfono</label><input id="uTel" value="${esc(u.telefono||'')}"></div>
       <div><label>Nº de identificación</label><input id="uIdent" value="${esc(u.identificacion||'')}"></div></div>
     <label>Cumpleaños</label><input id="uC" type="date" value="${u.cumple||''}">
@@ -1753,7 +1767,8 @@ function captureUserForm(){
   const g=id=>{const el=document.getElementById(id);return el?el.value:null;};
   if(g('uN')!==null) userDraft.nombre=g('uN');
   if(g('uV')!==null) userDraft.vac=+g('uV')||0;
-  const d=g('uD'); if(d&&d!=='__new__'){ userDraft.dept=d; userDraft.area=deptArea(d); }
+  const ar=g('uArea'); if(ar&&ar!=='__new__') userDraft.area=ar;
+  const d=g('uD'); if(d&&d!=='__new__'&&d!=='') userDraft.dept=d;
   const ps=g('uPos'); if(ps!==null&&ps!=='__new__') userDraft.posicion=ps==='__none__'?'':ps;
   const eq=g('uEquipo'); if(eq!==null&&eq!=='__new__') userDraft.equipo=eq==='__none__'?null:eq;
   const rn=g('uR'); if(rn&&rn!=='__new__') userDraft.role=rn;
@@ -1762,17 +1777,26 @@ function captureUserForm(){
   if(g('uC')!==null) userDraft.cumple=g('uC')||null;
   const col=document.querySelector('input[name="uCol"]:checked'); if(col) userDraft.color=col.value;
 }
+function onAreaChange(area){
+  captureUserForm();
+  userDraft.area=area;
+  const inArea=CAT.deptos.filter(d=>d.area===area).map(d=>d.nombre);
+  if(!inArea.includes(userDraft.dept)) userDraft.dept=inArea[0]||'';
+  show('admin');
+}
 async function crearCatInline(tipo){
   captureUserForm();
   const n=prompt('Nuevo '+(tipo==='posicion'?'posición':tipo)+':'); const v=(n||'').trim();
   if(!v){ show('admin'); return; }
   let res;
-  if(tipo==='departamento') res=await sb.from('departamentos').insert({nombre:v,area:userDraft.area||deptArea(userDraft.dept)||CAT.areas[0]||null});
-  else if(tipo==='equipo')  res=await sb.from('equipos').insert({nombre:v});
-  else                      res=await sb.from('posiciones').insert({nombre:v});
+  if(tipo==='area')              res=await sb.from('areas').insert({nombre:v});
+  else if(tipo==='departamento') res=await sb.from('departamentos').insert({nombre:v,area:userDraft.area||deptArea(userDraft.dept)||CAT.areas[0]||null});
+  else if(tipo==='equipo')       res=await sb.from('equipos').insert({nombre:v});
+  else                           res=await sb.from('posiciones').insert({nombre:v});
   if(res.error){ alert(res.error.message); show('admin'); return; }
   await loadCatalogos();
-  if(tipo==='departamento'){ userDraft.dept=v; userDraft.area=deptArea(v); }
+  if(tipo==='area'){ userDraft.area=v; const inA=CAT.deptos.filter(d=>d.area===v).map(d=>d.nombre); userDraft.dept=inA[0]||''; }
+  else if(tipo==='departamento'){ userDraft.dept=v; userDraft.area=deptArea(v); }
   else if(tipo==='equipo')  userDraft.equipo=v;
   else                      userDraft.posicion=v;
   show('admin');
