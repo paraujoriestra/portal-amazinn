@@ -253,6 +253,28 @@
   .cat-add input{flex:1;padding:8px 11px;border:1px solid var(--gris2);border-radius:8px;font-family:inherit;font-size:13px}
   .cat-add select{padding:8px;border:1px solid var(--gris2);border-radius:8px;font-family:inherit;font-size:13px}
   @media(max-width:760px){.cat-grid{grid-template-columns:1fr}}
+  /* ---- Organigrama (árbol) ---- */
+  .org-rootzone{border:2px dashed var(--gris2);border-radius:10px;padding:11px;text-align:center;color:var(--suave);font-size:13px;margin-bottom:16px}
+  .org-rootzone.org-over{outline:2px dashed var(--acento);background:var(--gris)}
+  .org-tree{overflow-x:auto;padding:6px 0 20px}
+  .org-tree ul{position:relative;padding-top:22px;display:flex;justify-content:center;gap:6px;margin:0;list-style:none}
+  .org-tree > ul{padding-top:0}
+  .org-tree li{list-style:none;text-align:center;position:relative;padding:22px 8px 0}
+  .org-tree li::before,.org-tree li::after{content:'';position:absolute;top:0;right:50%;border-top:2px solid var(--gris2);width:50%;height:22px}
+  .org-tree li::after{right:auto;left:50%;border-left:2px solid var(--gris2)}
+  .org-tree li:only-child{padding-top:6px}
+  .org-tree li:only-child::before,.org-tree li:only-child::after{display:none}
+  .org-tree li:first-child::before,.org-tree li:last-child::after{border:0 none}
+  .org-tree li:last-child::before{border-right:2px solid var(--gris2);border-radius:0 6px 0 0}
+  .org-tree li:first-child::after{border-radius:6px 0 0 0}
+  .org-tree ul ul::before{content:'';position:absolute;top:0;left:50%;border-left:2px solid var(--gris2);width:0;height:22px}
+  .org-node{display:inline-flex;align-items:center;gap:10px;border:1px solid var(--gris2);background:#fff;border-radius:11px;padding:9px 13px;box-shadow:var(--sombra);position:relative;white-space:nowrap}
+  .org-node.drag{cursor:grab}
+  .org-node.drag:active{cursor:grabbing}
+  .org-node .on-info{text-align:left}
+  .org-node .on-info b{font-size:13.5px}
+  .org-node .on-info small{color:var(--suave);font-size:11px;display:block}
+  .org-node.org-over{outline:2px dashed var(--acento);outline-offset:3px}
   /* ---- Recortador de foto de perfil ---- */
   .crop-ov{position:fixed;inset:0;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;z-index:9999}
   .crop-box{background:#fff;border-radius:14px;padding:22px;max-width:330px;box-shadow:0 20px 60px rgba(0,0,0,.3)}
@@ -1340,21 +1362,49 @@ function pagePerfil(){
     <div style="font-size:12.5px;color:var(--suave);max-width:620px">Puedes cambiar tu foto. El resto de datos (rol, departamento, vacaciones) los gestiona el administrador.</div>`;
 }
 async function cambiarMiFoto(input){const f=input.files[0];if(!f)return;const foto=await fileToAvatar(f);const{error}=await sb.from('profiles').update({foto}).eq('id',ME.id);if(error){alert('Error: '+error.message);return;}PROFILE.foto=foto;const avEl=document.getElementById('av');avEl.textContent='';avEl.style.background=`#eee url('${foto}') center/cover no-repeat`;show('perfil');toast('✓ Foto actualizada');}
+let ORG_PEOPLE=[], orgDragId=null;
 async function pageOrganigrama(){
-  const{data}=await sb.from('profiles').select('nombre,dept,role,color,foto').order('dept');
-  const ppl=data||[];
-  const byDept={};
-  ppl.forEach(p=>{const d=p.dept||'Sin departamento';(byDept[d]=byDept[d]||[]).push(p);});
-  const roleNice=r=>({empleado:'Empleado',responsable:'Responsable',direccion:'Dirección',admin:'Administrador',propietario:'Propietario'})[r]||r;
-  const blocks=Object.keys(byDept).sort().map(d=>`
-    <div class="panel"><h2>${esc(d)} <span class="badge b-grey" style="font-weight:600">${byDept[d].length}</span></h2>
-      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:12px">
-      ${byDept[d].map(p=>`<div style="display:flex;align-items:center;gap:11px;border:1px solid var(--gris2);border-radius:10px;padding:11px">
-        ${av(p.nombre,p.color,40,p.foto)}<div><b style="font-size:14px">${esc(p.nombre||'—')}</b><br><small style="color:var(--suave)">${roleNice(p.role)}</small></div></div>`).join('')}
-      </div></div>`).join('');
-  document.getElementById('main').innerHTML=`<div class="page-title">Organigrama</div>
-    <div class="page-sub">Equipo de Amazinn Places por departamento (${ppl.length} personas)</div>${blocks}`;
+  const{data}=await sb.from('profiles').select('id,nombre,dept,area,posicion,role,color,foto,jefe_id').eq('estado','aprobado');
+  ORG_PEOPLE=(data||[]).filter(p=>p.estado!=='rechazado');
+  renderOrg();
 }
+function orgById(id){return ORG_PEOPLE.find(p=>p.id===id);}
+function orgIsDescendant(nodeId, ancestorId){
+  let cur=orgById(nodeId);
+  while(cur && cur.jefe_id){ if(cur.jefe_id===ancestorId) return true; cur=orgById(cur.jefe_id); }
+  return false;
+}
+function renderOrg(){
+  const ppl=ORG_PEOPLE, canEdit=isOwner();
+  const ids=new Set(ppl.map(p=>p.id));
+  const children={};
+  ppl.forEach(p=>{const k=(p.jefe_id&&ids.has(p.jefe_id))?p.jefe_id:'__root__';(children[k]=children[k]||[]).push(p);});
+  const sub=p=>esc(p.posicion||roleNice(p.role))+(p.dept?' · '+esc(p.dept):(p.area?' · '+esc(p.area):''));
+  function node(p){
+    const kids=(children[p.id]||[]);
+    const dnd=canEdit?`draggable="true" ondragstart="orgDragStart(event,'${p.id}')" ondragover="orgOver(event)" ondragleave="orgLeave(event)" ondrop="orgDrop(event,'${p.id}')"`:'';
+    return `<li><div class="org-node${canEdit?' drag':''}" data-id="${p.id}" ${dnd}>
+        ${av(p.nombre,p.color,38,p.foto)}<div class="on-info"><b>${esc(p.nombre||'—')}</b><small>${sub(p)}</small></div>
+      </div>${kids.length?`<ul>${kids.map(node).join('')}</ul>`:''}</li>`;
+  }
+  const roots=(children['__root__']||[]);
+  const rootZone=canEdit?`<div class="org-rootzone" ondragover="orgOver(event)" ondragleave="orgLeave(event)" ondrop="orgDropRoot(event)">⬆ Suelta aquí para dejar a alguien en el nivel superior (sin jefe)</div>`:'';
+  document.getElementById('main').innerHTML=`<div class="page-title">Organigrama</div>
+    <div class="page-sub">${canEdit?'Arrastra a cada persona sobre su responsable para reorganizar. Solo tú puedes editarlo.':'Estructura del equipo de Amazinn Places ('+ppl.length+' personas)'}</div>
+    ${rootZone}
+    <div class="org-tree">${roots.length?`<ul>${roots.map(node).join('')}</ul>`:'<div class="panel">Aún no hay personas aprobadas.</div>'}</div>`;
+}
+function orgDragStart(e,id){ orgDragId=id; e.dataTransfer.effectAllowed='move'; e.dataTransfer.setData('text/plain',id); }
+function orgOver(e){ e.preventDefault(); e.dataTransfer.dropEffect='move'; e.currentTarget.classList.add('org-over'); }
+function orgLeave(e){ e.currentTarget.classList.remove('org-over'); }
+async function orgSetJefe(id,jefe){ const{error}=await sb.from('profiles').update({jefe_id:jefe}).eq('id',id); if(error){alert('No se pudo guardar: '+error.message);return;} orgDragId=null; pageOrganigrama(); }
+async function orgDrop(e,targetId){
+  e.preventDefault(); e.stopPropagation(); e.currentTarget.classList.remove('org-over');
+  const id=orgDragId; if(!id||id===targetId) return;
+  if(orgIsDescendant(targetId,id)){ alert('No puedes colocar a alguien por debajo de uno de sus propios subordinados.'); return; }
+  await orgSetJefe(id,targetId);
+}
+async function orgDropRoot(e){ e.preventDefault(); e.currentTarget.classList.remove('org-over'); const id=orgDragId; if(!id)return; await orgSetJefe(id,null); }
 
 /* ---------------- PROVEEDORES ---------------- */
 let provFormOpen=false;
