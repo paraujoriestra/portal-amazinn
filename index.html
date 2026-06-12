@@ -6,6 +6,7 @@
 <title>Amazinn Places · Portal interno</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;800;900&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
@@ -321,6 +322,27 @@
   .tc-hours{display:flex;align-items:center;gap:5px;flex:0 0 auto}
   .thk{display:flex;align-items:center;gap:6px;font-size:13.5px;background:var(--gris);border:1px solid var(--gris2);border-radius:8px;padding:7px 11px}
   .thk-h{width:60px;padding:5px 7px;border:1px solid var(--gris2);border-radius:6px;font-size:12.5px;font-family:inherit;text-align:center}
+  /* Mi horario · tarjetas por día */
+  .mh-print{background:#fff;border:1px solid var(--gris2);border-radius:14px;padding:22px;box-shadow:var(--sombra)}
+  .mh-head{display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid var(--azul);padding-bottom:12px;margin-bottom:14px;gap:12px}
+  .mh-name{font-size:21px;font-weight:800;color:#1a1a1a;line-height:1.1}
+  .mh-meta{font-size:12.5px;color:var(--suave);margin-top:2px}
+  .mh-summary{display:flex;gap:20px;flex-wrap:wrap;font-size:13px;color:var(--suave);margin-bottom:16px}
+  .mh-summary b{color:var(--azul);font-size:16px}
+  .mh-weeklabel{font-size:10.5px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:var(--suave);margin:6px 0 8px}
+  .dia-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:8px;margin-bottom:8px}
+  .dia-card{background:#fff;border:1px solid var(--gris2);border-radius:11px;padding:10px 9px;text-align:center;min-width:0;box-shadow:0 1px 3px rgba(0,0,0,.04)}
+  .dia-card.wknd{background:#faf8f4}
+  .dc-top{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px}
+  .dc-wd{font-weight:800;font-size:12.5px;color:#1a1a1a}
+  .dc-date{font-size:10.5px;color:var(--suave)}
+  .dc-shift{font-size:11.5px;font-weight:700;border-radius:7px;padding:6px 4px;margin-bottom:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .dc-hrs{font-size:11px;color:#333;font-weight:600}
+  .dc-loc{font-size:10px;color:var(--suave);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .mh-legend{display:flex;gap:13px;flex-wrap:wrap;font-size:11px;color:var(--suave);margin-top:12px;border-top:1px dashed var(--gris2);padding-top:11px}
+  .mh-legend span{display:inline-flex;align-items:center;gap:5px}
+  .mh-legend i{width:11px;height:11px;border-radius:3px;display:inline-block}
+  @media(max-width:720px){.dia-grid{grid-template-columns:repeat(2,1fr)}}
   .hor-eq{display:flex;flex-wrap:wrap;gap:6px}
   .hor-eq .thk{cursor:pointer}
   .org-top{display:flex;gap:18px;align-items:flex-start}
@@ -690,18 +712,20 @@ const LOGO="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAWgAAAFCCAYAAADc0keFAA
 
 let DEPTS = ["Dirección","Recursos Humanos","Atención al cliente","Operaciones","Limpieza","Mantenimiento","Almacén","Recepción nocturna","Marketing"];
 // Estructura: Áreas › Departamentos › Posiciones › Equipos
-let CAT = { areas:[], deptos:[], posiciones:[], equipos:[] };
+let CAT = { areas:[], deptos:[], posiciones:[], equipos:[], ubicaciones:[] };
 async function loadCatalogos(){
-  const [a,d,p,e] = await Promise.all([
+  const [a,d,p,e,u] = await Promise.all([
     sb.from('areas').select('nombre').order('nombre'),
     sb.from('departamentos').select('nombre,area').order('nombre'),
     sb.from('posiciones').select('nombre').order('id'),
     sb.from('equipos').select('nombre').order('nombre'),
+    sb.from('ubicaciones').select('nombre').order('nombre'),
   ]);
   CAT.areas      = (a.data||[]).map(x=>x.nombre);
   CAT.deptos     = d.data||[];
   CAT.posiciones = (p.data||[]).map(x=>x.nombre);
   CAT.equipos    = (e.data||[]).map(x=>x.nombre);
+  CAT.ubicaciones= (u.data||[]).map(x=>x.nombre);
   if(CAT.deptos.length) DEPTS = CAT.deptos.map(x=>x.nombre);
 }
 function deptArea(nombre){ const d=CAT.deptos.find(x=>x.nombre===nombre); return d?d.area:''; }
@@ -1402,11 +1426,13 @@ async function horGrid(){
   const days=horDays(horW.desde,horW.hasta);
   if(!days.length) return '<div class="panel">Rango de fechas no válido.</div>';
   const ids=people.map(p=>p.id);
-  const{data:ex}=await sb.from('turnos').select('empleado_id,fecha,tipo_id').in('empleado_id',ids).gte('fecha',isoD(days[0])).lte('fecha',isoD(days[days.length-1]));
-  const map={};(ex||[]).forEach(t=>map[t.empleado_id+'|'+t.fecha]=t.tipo_id);
+  const{data:ex}=await sb.from('turnos').select('empleado_id,fecha,tipo_id,lugar').in('empleado_id',ids).gte('fecha',isoD(days[0])).lte('fecha',isoD(days[days.length-1]));
+  const map={}, locMap={};(ex||[]).forEach(t=>{map[t.empleado_id+'|'+t.fecha]=t.tipo_id; if(t.lugar&&!locMap[t.empleado_id]) locMap[t.empleado_id]=t.lugar;});
   const chosen=TURNOS_TIPO.filter(t=>horW.turnos.includes(t.id));
-  const head=`<tr><th class="emp">Empleado</th>${days.map(d=>`<th class="${isWk(d)?'wknd':''}">${lblD(d)}</th>`).join('')}</tr>`;
-  const rows=people.map(p=>`<tr><td class="emp">${esc(p.nombre)}<br><small style="color:var(--suave)">${esc(p.dept||p.area||'')}</small></td>${days.map(d=>{const iso=isoD(d);const cur=map[p.id+'|'+iso]||'';
+  const ubicOpts=cur=>`<option value="">— Ninguna —</option>${CAT.ubicaciones.map(u=>`<option ${cur===u?'selected':''}>${esc(u)}</option>`).join('')}`;
+  const head=`<tr><th class="emp">Empleado</th><th>📍 Ubicación</th>${days.map(d=>`<th class="${isWk(d)?'wknd':''}">${lblD(d)}</th>`).join('')}</tr>`;
+  const rows=people.map(p=>`<tr><td class="emp">${esc(p.nombre)}<br><small style="color:var(--suave)">${esc(p.dept||p.area||'')}</small></td>
+    <td><select class="uloc" data-emp="${p.id}">${ubicOpts(locMap[p.id]||'')}</select></td>${days.map(d=>{const iso=isoD(d);const cur=map[p.id+'|'+iso]||'';
     return `<td class="${isWk(d)?'wknd':''}"><select class="tcell2" data-emp="${p.id}" data-name="${esc(p.nombre)}" data-dept="${esc(p.dept||'')}" data-fecha="${iso}"><option value="">—</option>${chosen.map(t=>`<option value="${t.id}" ${String(cur)===String(t.id)?'selected':''}>${esc(t.nombre)}</option>`).join('')}</select></td>`;}).join('')}</tr>`).join('');
   return `<div class="panel"><div style="margin-bottom:12px;display:flex;gap:8px;flex-wrap:wrap"><button class="btn" onclick="horGuardar()">💾 Guardar y publicar</button><button class="btn ghost" onclick="horW.gen=false;show('horarios')">↩ Cambiar alcance/fechas</button>
       <span style="font-size:12.5px;color:var(--suave);align-self:center">${people.length} persona(s) · ${days.length} día(s)</span></div>
@@ -1415,7 +1441,8 @@ async function horGrid(){
 async function horGuardar(){
   const cells=[...document.querySelectorAll('.tcell2')];
   if(!cells.length){alert('No hay cuadrícula que guardar.');return;}
-  const rows=cells.map(s=>{const tid=s.value?Number(s.value):null;const h=tid?horHora(tid):{ini:'',fin:''};return {dept:s.dataset.dept||horW.dept||PROFILE.dept||'—',empleado_id:s.dataset.emp,empleado_nombre:s.dataset.name,fecha:s.dataset.fecha,tipo_id:tid,hora_ini:tid?h.ini:null,hora_fin:tid?h.fin:null,updated_at:new Date().toISOString()};});
+  const locMap={}; document.querySelectorAll('.uloc').forEach(u=>{ locMap[u.dataset.emp]=u.value||null; });
+  const rows=cells.map(s=>{const tid=s.value?Number(s.value):null;const h=tid?horHora(tid):{ini:'',fin:''};return {dept:s.dataset.dept||horW.dept||PROFILE.dept||'—',empleado_id:s.dataset.emp,empleado_nombre:s.dataset.name,fecha:s.dataset.fecha,tipo_id:tid,hora_ini:tid?h.ini:null,hora_fin:tid?h.fin:null,lugar:(tid?(locMap[s.dataset.emp]||null):null),updated_at:new Date().toISOString()};});
   const{error}=await sb.from('turnos').upsert(rows,{onConflict:'empleado_id,fecha'});
   if(error){alert('No se pudo guardar: '+error.message);return;}
   const dests=[...new Set(rows.map(r=>r.dept))];
@@ -1425,15 +1452,38 @@ async function horGuardar(){
 async function horMine(days){
   const{data}=await sb.from('turnos').select('*').eq('empleado_id',ME.id).gte('fecha',isoD(days[0])).lte('fecha',isoD(days[days.length-1]));
   const map={};(data||[]).forEach(t=>map[t.fecha]=t);
-  const rows=days.map(d=>{const iso=isoD(d);const t=map[iso];const tp=t?turnoTipo(t.tipo_id):null;
+  const ds=['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'], ms=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+  let trab=0,libres=0,vac=0;
+  const card=d=>{const iso=isoD(d);const t=map[iso];const tp=t?turnoTipo(t.tipo_id):null;
+    const esVac=tp&&/vacacion/i.test(tp.nombre), esLibre=!tp||/libre/i.test(tp.nombre||'');
+    if(esVac)vac++; else if(esLibre)libres++; else trab++;
+    const col=tp?tp.color:'#eee', nombre=tp?tp.nombre:'Sin turno';
     const ini=(t&&t.hora_ini)||(tp&&tp.hora_ini), fin=(t&&t.hora_fin)||(tp&&tp.hora_fin);
-    const horario=ini?`${ini}–${fin}`:'—';
-    const badge=tp?`<span class="badge" style="background:${tp.color};color:#333">${esc(tp.nombre)}</span>`:'<span style="color:var(--suave)">—</span>';
-    return `<tr><td><b>${lblD(d)}</b></td><td>${horario}</td><td>${badge}</td></tr>`;}).join('');
+    const hrs=ini?`${ini} – ${fin}`:(esVac?'🌴 Descanso':(esLibre?'Día libre':'—'));
+    const lugar=(t&&t.lugar)?t.lugar:'';
+    const wknd=(d.getDay()===0||d.getDay()===6);
+    return `<div class="dia-card${wknd?' wknd':''}" style="border-top:4px solid ${tp?col:'#dcd6ca'}">
+      <div class="dc-top"><span class="dc-wd">${ds[d.getDay()]}</span><span class="dc-date">${d.getDate()} ${ms[d.getMonth()]}</span></div>
+      <div class="dc-shift" style="background:${col};color:#2a2a2a">${esc(nombre)}</div>
+      <div class="dc-hrs">${esc(hrs)}</div>
+      ${lugar?`<div class="dc-loc">📍 ${esc(lugar)}</div>`:'<div class="dc-loc" style="opacity:.35">—</div>'}</div>`;
+  };
+  let weeks='';
+  for(let w=0;w<Math.ceil(days.length/7);w++){ const slice=[]; for(let i=w*7;i<Math.min((w+1)*7,days.length);i++) slice.push(card(days[i]));
+    weeks+=`<div class="mh-weeklabel">Semana ${w+1}</div><div class="dia-grid">${slice.join('')}</div>`; }
   const any=(data||[]).filter(t=>t.tipo_id).length;
-  return `<div class="panel">${any?'':'<div style="color:var(--suave);font-size:13.5px;margin-bottom:10px">Aún no han publicado tus turnos para estos días.</div>'}
-    <table><thead><tr><th>Día</th><th>Horario</th><th>Turno</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+  return `${any?'':'<div class="panel" style="margin-bottom:14px;color:var(--suave);font-size:13.5px">Aún no han publicado tus turnos para estos días.</div>'}
+    <div id="miHorarioPrint" class="mh-print">
+      <div class="mh-head"><div><div class="mh-name">${esc(PROFILE.nombre||'')}</div><div class="mh-meta">${esc(PROFILE.dept||PROFILE.area||'')} · ${lblD(days[0])} → ${lblD(days[days.length-1])}</div></div><img src="${LOGO}" alt="Amazinn Places" style="height:30px"></div>
+      <div class="mh-summary"><span><b>${trab}</b> días de trabajo</span><span><b>${libres}</b> libres</span>${vac?`<span><b>${vac}</b> vacaciones</span>`:''}</div>
+      ${weeks}
+      <div class="mh-legend">${TURNOS_TIPO.map(t=>`<span><i style="background:${t.color}"></i>${esc(t.nombre)}</span>`).join('')}</div>
+    </div>
+    <div style="margin-top:16px"><button class="btn" onclick="descargarHorarioPDF()">📥 Descargar PDF</button></div>`;
 }
+function descargarHorarioPDF(){ const el=document.getElementById('miHorarioPrint'); if(!el) return;
+  if(typeof html2pdf==='undefined'){ window.print(); return; }
+  html2pdf().set({margin:6,filename:'Mi_horario_Amazinn.pdf',image:{type:'jpeg',quality:.98},html2canvas:{scale:2,backgroundColor:'#ffffff'},jsPDF:{unit:'mm',format:'a4',orientation:'portrait'}}).from(el).save(); }
 async function horTeam(dept,days){
   if(!dept) return `<div class="panel">Sin departamento asignado.</div>`;
   const team=await teamOf(dept);
@@ -2024,6 +2074,7 @@ function pageCatalogos(){
   const deptList=CAT.deptos.map(d=>`<div class="cat-row"><span>${esc(d.nombre)} <small style="color:var(--suave)">· ${esc(d.area||'sin área')}</small></span><button class="cat-x" onclick="delDepto('${d.nombre.replace(/'/g,"\\'")}')">🗑</button></div>`).join('')||'<div class="cat-empty">—</div>';
   const posList=CAT.posiciones.map(p=>`<div class="cat-row"><span>${esc(p)}</span><button class="cat-x" onclick="delPos('${p.replace(/'/g,"\\'")}')">🗑</button></div>`).join('')||'<div class="cat-empty">—</div>';
   const equipoList=CAT.equipos.map(e=>`<div class="cat-row"><span>${esc(e)}</span><button class="cat-x" onclick="delEquipo('${e.replace(/'/g,"\\'")}')">🗑</button></div>`).join('')||'<div class="cat-empty">Sin equipos todavía</div>';
+  const ubicList=CAT.ubicaciones.map(u=>`<div class="cat-row"><span>${esc(u)}</span><button class="cat-x" onclick="delUbic('${u.replace(/'/g,"\\'")}')">🗑</button></div>`).join('')||'<div class="cat-empty">Sin ubicaciones todavía</div>';
   const S='<span style="color:#1f9d55;font-weight:700">✓</span>', N='<span style="color:var(--gris2)">—</span>';
   const rolesTabla=[
     ['Empleado','Solo lo suyo','Ve los suyos',N,N,N,N],
@@ -2048,6 +2099,9 @@ function pageCatalogos(){
 
       <div class="panel"><h2>👥 Equipos</h2><div class="cat-list">${equipoList}</div>
         <div class="cat-add"><input id="nEquipo" placeholder="Nuevo equipo (ej: Hotel Mío)"><button class="btn" onclick="addEquipo()">➕</button></div></div>
+
+      <div class="panel"><h2>📍 Ubicaciones</h2><div class="cat-list">${ubicList}</div>
+        <div class="cat-add"><input id="nUbic" placeholder="Nueva ubicación (ej: Recepción central)"><button class="btn" onclick="addUbic()">➕</button></div></div>
     </div>
     <div class="panel" style="margin-top:16px"><h2>🔑 Roles y alcances (referencia)</h2>
       <div style="overflow-x:auto"><table class="rol-tabla"><thead><tr>
@@ -2064,6 +2118,8 @@ async function addPos(){ const n=(val('nPos')||'').trim(); if(!n)return; const{e
 async function delPos(n){ if(!confirm('¿Eliminar la posición "'+n+'"?'))return; const{error}=await sb.from('posiciones').delete().eq('nombre',n); if(error){alert(error.message);return;} catReload(); }
 async function addEquipo(){ const n=(val('nEquipo')||'').trim(); if(!n)return; const{error}=await sb.from('equipos').insert({nombre:n}); if(error){alert(error.message);return;} toast('✓ Añadido'); catReload(); }
 async function delEquipo(n){ if(!confirm('¿Eliminar el equipo "'+n+'"?'))return; const{error}=await sb.from('equipos').delete().eq('nombre',n); if(error){alert(error.message);return;} catReload(); }
+async function addUbic(){ const n=(val('nUbic')||'').trim(); if(!n)return; const{error}=await sb.from('ubicaciones').insert({nombre:n}); if(error){alert(error.message);return;} toast('✓ Añadida'); catReload(); }
+async function delUbic(n){ if(!confirm('¿Eliminar la ubicación "'+n+'"?'))return; const{error}=await sb.from('ubicaciones').delete().eq('nombre',n); if(error){alert(error.message);return;} catReload(); }
 
 /* ---------------- REGISTROS PENDIENTES (aprobación) ---------------- */
 async function pageRegistros(){
