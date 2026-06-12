@@ -258,6 +258,10 @@
   .tbl-compact td{padding:6px 9px;white-space:nowrap}
   .tbl-compact td b{font-weight:600}
   .tbl-compact .badge{font-size:10px;padding:1px 7px}
+  .con-row{display:flex;align-items:center;gap:11px;padding:11px 4px;border-bottom:1px solid var(--gris)}
+  .con-row:last-child{border-bottom:none}
+  .con-dot{width:10px;height:10px;border-radius:50%;background:var(--gris2);flex:0 0 auto}
+  .con-dot.on{background:#1f9d55;box-shadow:0 0 0 3px rgba(31,157,85,.22)}
   .kebab{background:none;border:none;cursor:pointer;font-size:18px;line-height:1;color:var(--suave);padding:2px 8px;border-radius:6px}
   .kebab:hover{background:var(--gris);color:var(--texto)}
   .rowmenu-pop{position:absolute;display:none;flex-direction:column;background:#fff;border:1px solid var(--gris2);border-radius:10px;box-shadow:0 10px 28px rgba(0,0,0,.16);z-index:9999;min-width:150px;padding:5px}
@@ -785,9 +789,9 @@ async function enterApp(user){
   buildNav();
   document.getElementById('chatFab').style.display='flex';
   loadNotifs();
-  refreshBadges();
+  refreshBadges(); ping();
   if(window._msgPoll) clearInterval(window._msgPoll);
-  window._msgPoll = setInterval(refreshBadges, 20000);
+  window._msgPoll = setInterval(()=>{refreshBadges();ping();}, 20000);
   chatMsgs=[{from:'bot',msg:`¡Hola, ${(PROFILE.nombre||'').split(' ')[0]||''}! 🤖 Soy <b>Wally</b>, el asistente de Amazinn Places. Pregúntame cómo encontrar algo.`}];
   const h=(location.hash||'').replace(/^#/,'');
   const start=(h==='inicio'||h==='perfil'||NAV.some(n=>n.id===h))?h:'inicio';
@@ -829,6 +833,7 @@ const NAV=[
   {grp:'Recursos'},
   {id:'perfil',ic:'👤',t:'Mi perfil'},
   {id:'organigrama',ic:'🏢',t:'Organigrama'},
+  {id:'conexiones',ic:'🟢',t:'Conexiones', roles:['responsable','direccion','admin']},
   {id:'proveedores',ic:'🚚',t:'Proveedores'},
   {id:'propietarios',ic:'🏠',t:'Propietarios'},
   {id:'suministros',ic:'🔌',t:'Suministros'},
@@ -901,6 +906,7 @@ const ICONS={
   organigrama:'<rect x="9" y="2" width="6" height="5" rx="1"/><rect x="2" y="16" width="6" height="5" rx="1"/><rect x="16" y="16" width="6" height="5" rx="1"/><path d="M12 7v4M5 16v-3h14v3"/>',
   proveedores:'<path d="M2 6h12v9H2zM14 9h4l3 3v3h-7z"/><circle cx="6.5" cy="18" r="1.6"/><circle cx="17.5" cy="18" r="1.6"/>',
   propietarios:'<path d="M3 11l9-7 9 7"/><path d="M5 10v10h14V10"/><path d="M10 20v-6h4v6"/>',
+  conexiones:'<path d="M5 12.5a10 10 0 0 1 14 0"/><path d="M8.5 16a5 5 0 0 1 7 0"/><circle cx="12" cy="19" r="1"/>',
   suministros:'<path d="M9 2v6M15 2v6M7 8h10v3a5 5 0 0 1-10 0z"/><path d="M12 16v5"/>',
   mensajes:'<path d="M21 15a2 2 0 0 1-2 2H8l-4 4V5a2 2 0 0 1 2-2h13a2 2 0 0 1 2 2z"/>',
   bitacora:'<rect x="5" y="4" width="14" height="17" rx="1"/><path d="M9 4V3h6v1M8 10h8M8 14h8M8 18h5"/>',
@@ -984,6 +990,13 @@ async function loadComUnread(){
 async function loadAprobPend(){ if(!CAN_MANAGE.includes(PROFILE.role)){ setBadge('aprobaciones',0); return; }
   try{ const{count}=await sb.from('solicitudes').select('id',{count:'exact',head:true}).eq('estado','Pendiente'); setBadge('aprobaciones',count||0); }catch(e){} }
 async function refreshBadges(){ await Promise.all([loadMsgUnread(),loadPendingCount(),loadComUnread(),loadAprobPend()]); }
+/* Presencia (última conexión) */
+async function ping(){ try{ await sb.from('profiles').update({last_seen:new Date().toISOString()}).eq('id',ME.id); }catch(e){} }
+function isOnline(iso){ return iso ? (Date.now()-new Date(iso).getTime())<120000 : false; }
+function haceTiempo(iso){ if(!iso) return 'nunca conectado'; const s=Math.floor((Date.now()-new Date(iso).getTime())/1000);
+  if(s<60) return 'hace un momento'; const m=Math.floor(s/60); if(m<60) return 'hace '+m+' min';
+  const h=Math.floor(m/60); if(h<24) return 'hace '+h+' h'; const d=Math.floor(h/24); if(d<30) return 'hace '+d+' día'+(d>1?'s':'');
+  return 'el '+new Date(iso).toLocaleDateString('es-ES'); }
 function buildNav(){
   const nav=document.getElementById('nav');
   const groups=navGroups();
@@ -1017,6 +1030,7 @@ function show(id){
   else if(id==='organigrama'){ m.innerHTML='<div class="page-title">Organigrama</div><div class="page-sub">Cargando…</div>'; pageOrganigrama(); }
   else if(id==='proveedores'){ m.innerHTML='<div class="page-title">Proveedores</div><div class="page-sub">Cargando…</div>'; pageProveedores(); }
   else if(id==='propietarios'){ m.innerHTML='<div class="page-title">Propietarios</div><div class="page-sub">Cargando…</div>'; pagePropietarios(); }
+  else if(id==='conexiones'){ m.innerHTML='<div class="page-title">Conexiones</div><div class="page-sub">Cargando…</div>'; pageConexiones(); }
   else if(id==='suministros'){ m.innerHTML='<div class="page-title">Suministros</div><div class="page-sub">Cargando…</div>'; pageSuministros(); }
   else if(id==='sugerencias'){ m.innerHTML='<div class="page-title">Sugerencias</div><div class="page-sub">Cargando…</div>'; pageSugerencias(); }
   else if(id==='fichaje'){ m.innerHTML='<div class="page-title">Fichaje</div><div class="page-sub">Cargando…</div>'; pageFichaje(); }
@@ -1635,6 +1649,23 @@ async function importExcel(tabla,input){
     if(error){ alert('Error al importar: '+error.message); return; }
     toast('✓ '+mapped.length+' registro(s) importados'); show(tabla);
   }catch(e){ alert('No se pudo leer el Excel: '+(e&&e.message?e.message:e)); }
+}
+
+/* ---------------- CONEXIONES (presencia) ---------------- */
+async function pageConexiones(){
+  if(!CAN_MANAGE.includes(PROFILE.role)){ document.getElementById('main').innerHTML='<div class="panel">No tienes acceso a esta sección.</div>'; return; }
+  const{data,error}=await sb.from('profiles').select('id,nombre,foto,color,dept,area,posicion,role,last_seen').eq('estado','aprobado');
+  if(error){ document.getElementById('main').innerHTML='<div class="panel">Error (¿ejecutaste supabase_last_seen.sql?): '+esc(error.message)+'</div>'; return; }
+  const ppl=(data||[]).slice().sort((a,b)=>{ const oa=isOnline(a.last_seen),ob=isOnline(b.last_seen); if(oa!==ob) return oa?-1:1;
+    return (b.last_seen?new Date(b.last_seen).getTime():0)-(a.last_seen?new Date(a.last_seen).getTime():0); });
+  const online=ppl.filter(p=>isOnline(p.last_seen)).length;
+  const rows=ppl.map(p=>{const on=isOnline(p.last_seen);
+    return `<div class="con-row"><span class="con-dot ${on?'on':''}"></span>${av(p.nombre,p.color,34,p.foto)}
+      <div style="flex:1;min-width:0"><b>${esc(p.nombre)}</b><br><small style="color:var(--suave)">${esc(p.posicion||roleNice(p.role))}${p.dept?' · '+esc(p.dept):(p.area?' · '+esc(p.area):'')}</small></div>
+      <div style="font-size:12.5px;white-space:nowrap;color:${on?'#1f9d55':'var(--suave)'};font-weight:${on?'700':'400'}">${on?'En línea':haceTiempo(p.last_seen)}</div></div>`;}).join('');
+  document.getElementById('main').innerHTML=`<div class="page-title">Conexiones</div>
+    <div class="page-sub"><b style="color:#1f9d55">${online} en línea</b> ahora · de ${ppl.length} personas · se actualiza solo</div>
+    <div class="panel">${rows||'<div style="color:var(--suave)">Sin datos todavía.</div>'}</div>`;
 }
 
 /* ---------------- Buscador de tablas ---------------- */
