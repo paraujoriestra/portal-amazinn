@@ -981,8 +981,8 @@ function renderNavBadges(){
 async function loadMsgUnread(){ const{count}=await sb.from('mensajes').select('id',{count:'exact',head:true}).eq('para_id',ME.id).eq('leido',false); setBadge('mensajeria',count||0); }
 async function loadPendingCount(){ if(!isAdmin()){ setBadge('registros',0); return; } const{count}=await sb.from('profiles').select('id',{count:'exact',head:true}).eq('estado','pendiente'); setBadge('registros',count||0); }
 async function loadComUnread(){
-  try{ const{data:coms}=await sb.from('comunicados').select('id,dirigido');
-    const vis=(coms||[]).filter(c=>c.dirigido==='*'||c.dirigido===PROFILE.dept);
+  try{ const{data:coms}=await sb.from('comunicados').select('id,dirigido,area,equipo');
+    const vis=(coms||[]).filter(inScope);
     if(!vis.length){ setBadge('comunicados',0); return; }
     const{data:lec}=await sb.from('comunicado_lecturas').select('comunicado_id').eq('user_id',ME.id);
     const leidos=new Set((lec||[]).map(l=>l.comunicado_id));
@@ -992,6 +992,20 @@ async function loadComUnread(){
 async function loadAprobPend(){ if(!CAN_MANAGE.includes(PROFILE.role)){ setBadge('aprobaciones',0); return; }
   try{ const{count}=await sb.from('solicitudes').select('id',{count:'exact',head:true}).eq('estado','Pendiente'); setBadge('aprobaciones',count||0); }catch(e){} }
 async function refreshBadges(){ await Promise.all([loadMsgUnread(),loadPendingCount(),loadComUnread(),loadAprobPend()]); }
+/* ----- Alcance (Área/Departamento/Equipo) reutilizable ----- */
+function scopeSelects(ids,cur){ cur=cur||{};
+  return `<div class="row">
+    <div><label>Área</label><select id="${ids.a}"><option value="">Todas</option>${CAT.areas.map(a=>`<option ${cur.area===a?'selected':''}>${esc(a)}</option>`).join('')}</select></div>
+    <div><label>Departamento</label><select id="${ids.d}"><option value="*">Todos</option>${DEPTS.map(d=>`<option ${(cur.dept||cur.dirigido)===d?'selected':''}>${esc(d)}</option>`).join('')}</select></div>
+    <div><label>Equipo</label><select id="${ids.e}"><option value="">Cualquiera</option>${CAT.equipos.map(e=>`<option ${cur.equipo===e?'selected':''}>${esc(e)}</option>`).join('')}</select></div></div>`;
+}
+function inScopeFor(o,u){ const dept=(o.dirigido!==undefined&&o.dirigido!==null)?o.dirigido:o.dept;
+  const okA=!o.area||o.area===u.area; const okD=(dept==='*'||!dept)||dept===u.dept; const okE=!o.equipo||o.equipo===u.equipo;
+  return okA&&okD&&okE; }
+function inScope(o){ return isAdmin()||inScopeFor(o,PROFILE); }
+function scopeLabel(o){ const dept=(o.dirigido!==undefined&&o.dirigido!==null)?o.dirigido:o.dept; const p=[];
+  if(o.area)p.push(o.area); if(dept&&dept!=='*')p.push(dept); if(o.equipo)p.push('Equipo '+o.equipo);
+  return p.length?p.join(' · '):'Toda la empresa'; }
 /* Presencia (última conexión) */
 async function ping(){ try{ await sb.from('profiles').update({last_seen:new Date().toISOString()}).eq('id',ME.id); }catch(e){} }
 function isOnline(iso){ return iso ? (Date.now()-new Date(iso).getTime())<120000 : false; }
@@ -1073,7 +1087,7 @@ async function pageInicio(){
     : `<div class="bday-ban">🎂 Hoy es el cumpleaños de <b>${esc(b.nombre)}</b> (${esc(b.dept||'')}). ¡No olvides felicitarle! 🥳</div>`).join('');
   const {data:coms}=await sb.from('comunicados').select('*').order('created_at',{ascending:false});
   const {data:lect}=await sb.from('comunicado_lecturas').select('comunicado_id,user_id');
-  const vis=(coms||[]).filter(c=>c.dirigido==='*'||c.dirigido===p.dept);
+  const vis=(coms||[]).filter(inScope);
   const readIds=new Set((lect||[]).filter(l=>l.user_id===ME.id).map(l=>l.comunicado_id));
   const sinLeer=vis.filter(c=>!readIds.has(c.id)).length;
   const {data:kud}=await sb.from('kudos').select('*').order('created_at',{ascending:false}).limit(2);
@@ -1131,9 +1145,9 @@ async function pageComunicados(){
   const { data:coms, error } = await sb.from('comunicados').select('*').order('created_at',{ascending:false});
   if(error){ document.getElementById('main').innerHTML='<div class="page-title">Comunicados</div><div class="panel">Error al cargar: '+error.message+'</div>'; return; }
   const { data:lect } = await sb.from('comunicado_lecturas').select('comunicado_id,user_id');
-  const { data:profs } = await sb.from('profiles').select('id,nombre,dept,color,foto,cargo');
+  const { data:profs } = await sb.from('profiles').select('id,nombre,dept,area,equipo,color,foto,cargo');
   const { data:adjs } = await sb.from('comunicado_adjuntos').select('*');
-  CC.coms=(coms||[]).filter(c=>c.dirigido==='*'||c.dirigido===PROFILE.dept);
+  CC.coms=(coms||[]).filter(inScope);
   CC.lect=lect||[]; CC.pr=profs||[]; CC.adj=adjs||[];
   renderComu();
 }
@@ -1151,7 +1165,7 @@ function comCardHTML(c){
   const yo=ids.includes(ME.id);
   const fecha=new Date(c.created_at).toLocaleDateString('es-ES',{day:'numeric',month:'short',year:'numeric'});
   const read = yo?'<span class="read-ok">✓ Has confirmado la lectura</span>':`<button class="btn-read" onclick="confirmRead(${c.id})">✔ Confirmar lectura</button>`;
-  const dest = c.dirigido==='*'?'Toda la empresa':c.dirigido;
+  const dest = scopeLabel(c);
   const autor = CC.pr.find(u=>u.id===c.autor_id);
   const aCol = autor?autor.color:null, aFoto = autor?autor.foto:null, aCargo = autor&&autor.cargo?autor.cargo:'';
   const canDel = isAdmin() || c.autor_id===ME.id;
@@ -1161,7 +1175,7 @@ function comCardHTML(c){
   const adjHTML = mis.length?`<div class="cc-adj">${mis.map(a=>`<a class="att" href="${a.url}" target="_blank" rel="noopener" download="${esc(a.nombre)}">${ico(a.tipo)} ${esc(a.nombre)}</a>`).join('')}</div>`:'';
   let detalle='';
   if(CC.canCreate){
-    const aud=CC.pr.filter(u=>c.dirigido==='*'||c.dirigido===u.dept);
+    const aud=CC.pr.filter(u=>inScopeFor(c,u));
     const conf=aud.filter(u=>ids.includes(u.id)).map(u=>u.nombre);
     const pend=aud.filter(u=>!ids.includes(u.id)).map(u=>u.nombre);
     detalle=`<details class="lectura"><summary>👁 ${conf.length}/${aud.length} han confirmado la lectura${pend.length?' · '+pend.length+' pendiente(s)':''}</summary>
@@ -1238,10 +1252,10 @@ function toggleComForm(){
     <div class="panel" style="max-width:760px"><h2>✍️ Nuevo comunicado</h2>
       <form class="box" onsubmit="return createCom(event)" style="max-width:none">
         <label>Título</label><input id="cTit" required>
-        <div class="row">
-          <div><label>Dirigido a</label><select id="cDir"><option value="*">Toda la empresa</option>${DEPTS.map(d=>`<option value="${d}">${d}</option>`).join('')}</select></div>
-          <div><label>Nivel</label><select id="cNiv"><option value="info">Informativo</option><option value="imp">Importante</option><option value="urg">Urgente</option></select></div>
-        </div>
+        <label style="font-weight:700;color:var(--azul)">Dirigido a (alcance)</label>
+        ${scopeSelects({a:'cArea',d:'cDir',e:'cEq'},{})}
+        <div style="font-size:12px;color:var(--suave);margin:-4px 0 12px">Déjalo en "Todas / Todos / Cualquiera" para toda la empresa, o acota por área, departamento y/o equipo.</div>
+        <label>Nivel</label><select id="cNiv" style="max-width:260px"><option value="info">Informativo</option><option value="imp">Importante</option><option value="urg">Urgente</option></select>
         <label>Contenido</label><textarea id="cCpo" rows="5" required></textarea>
         <label>📅 Asociar a una fecha del calendario (opcional)</label>
         <input id="cFecha" type="date">
@@ -1256,7 +1270,10 @@ function toggleComForm(){
 async function createCom(e){
   e.preventDefault();
   const row={ titulo:document.getElementById('cTit').value.trim(), cuerpo:document.getElementById('cCpo').value.trim(),
-    nivel:document.getElementById('cNiv').value, dirigido:document.getElementById('cDir').value,
+    nivel:document.getElementById('cNiv').value,
+    dirigido:document.getElementById('cDir').value||'*',
+    area:(document.getElementById('cArea').value||null),
+    equipo:(document.getElementById('cEq').value||null),
     fecha_evento:(document.getElementById('cFecha').value||null),
     autor_id:ME.id, autor_nombre:PROFILE.nombre };
   const btn = e.target.querySelector('button[type=submit]');
@@ -1915,10 +1932,11 @@ const TIPO_EV={aviso:['Aviso','#d9534f'],evento:['Evento','#e0a800'],formacion:[
 async function pageCalendario(){
   const canEdit=CAN_MANAGE.includes(PROFILE.role);
   const{data}=await sb.from('eventos').select('*').order('ini');
-  const evs=data||[];
+  EV_DATA=data||[];
+  const evs=(data||[]).filter(inScope);
   // Comunicados con fecha → aparecen como eventos enlazados
-  const{data:coms}=await sb.from('comunicados').select('id,titulo,fecha_evento,dirigido').not('fecha_evento','is',null);
-  (coms||[]).filter(c=>c.dirigido==='*'||c.dirigido===PROFILE.dept).forEach(c=>{
+  const{data:coms}=await sb.from('comunicados').select('id,titulo,fecha_evento,dirigido,area,equipo').not('fecha_evento','is',null);
+  (coms||[]).filter(inScope).forEach(c=>{
     evs.push({ id:'c'+c.id, comId:c.id, titulo:c.titulo, ini:c.fecha_evento, fin:c.fecha_evento, tipo:'comunicado' });
   });
   const now=new Date(),Y=now.getFullYear(),M=now.getMonth();
@@ -1935,24 +1953,28 @@ async function pageCalendario(){
   const lista=[...evs].sort((a,b)=>a.ini<b.ini?-1:1).map(e=>{const t=TIPO_EV[e.tipo]||TIPO_EV.evento;const r=e.ini===e.fin?e.ini:e.ini+' → '+e.fin;const isCom=e.tipo==='comunicado';
     const acc=isCom
       ? `<span style="margin-left:auto"><button class="btn ghost" style="padding:3px 9px" onclick="openComFromCal(${e.comId})">📢 Ver comunicado</button></span>`
-      : (canEdit?`<span style="margin-left:auto;display:flex;gap:6px"><button class="btn ghost" style="padding:3px 9px" onclick="evEdit(${e.id},'${esc(e.titulo).replace(/'/g,"\\'")}','${e.ini}','${e.fin}','${e.tipo}')">✏️</button><button class="btn ghost" style="padding:3px 9px" onclick="evDel(${e.id})">🗑️</button></span>`:`<span class="badge b-grey" style="margin-left:auto">${t[0]}</span>`);
+      : (canEdit?`<span style="margin-left:auto;display:flex;gap:6px"><button class="btn ghost" style="padding:3px 9px" onclick="evEdit(${e.id})">✏️</button><button class="btn ghost" style="padding:3px 9px" onclick="evDel(${e.id})">🗑️</button></span>`:`<span class="badge b-grey" style="margin-left:auto">${t[0]}</span>`);
     return `<div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--gris);font-size:13.5px"><span style="font-weight:700;color:var(--azul);min-width:170px">${r}</span><span style="width:10px;height:10px;border-radius:50%;background:${t[1]}"></span>${isCom?'📢 ':''}${esc(e.titulo)}${acc}</div>`;}).join('');
   document.getElementById('main').innerHTML=`<div class="page-title">Calendario · ${ms[M]} ${Y}</div><div class="page-sub">Eventos importantes: avisos, formaciones y fechas marcadas</div>
     ${canEdit?`<div style="margin-bottom:16px"><button class="btn" onclick="evNew()">➕ Nuevo evento</button></div>${evFormOpen?evForm():''}`:''}
     <div class="panel">${grid}<div style="display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--suave);margin-top:12px">${Object.values(TIPO_EV).map(t=>`<span><i style="display:inline-block;width:12px;height:12px;border-radius:3px;background:${t[1]}"></i> ${t[0]}</span>`).join('')}</div></div>
     <div class="panel"><h2>📌 Eventos</h2>${lista||'<div style="color:var(--suave);font-size:13.5px">No hay eventos.</div>'}</div>`;
 }
-let evDraft={};
+let evDraft={}, EV_DATA=[];
 function evNew(){evEditId=null;evDraft={};evFormOpen=true;show('calendario');}
-function evEdit(id,titulo,ini,fin,tipo){evEditId=id;evDraft={titulo,ini,fin,tipo};evFormOpen=true;show('calendario');}
+function evEdit(id){evEditId=id;evDraft=EV_DATA.find(x=>x.id===id)||{};evFormOpen=true;show('calendario');}
 function evForm(){const e=evDraft;const tipos=[['aviso','Aviso'],['evento','Evento'],['formacion','Formación'],['comunicado','Comunicado']];
-  return `<div class="panel" style="max-width:620px"><h2>${evEditId?'✏️ Editar evento':'🗓️ Nuevo evento'}</h2><form class="box" onsubmit="return evSave(event)" style="max-width:none">
+  return `<div class="panel" style="max-width:640px"><h2>${evEditId?'✏️ Editar evento':'🗓️ Nuevo evento'}</h2><form class="box" onsubmit="return evSave(event)" style="max-width:none">
     <label>Título</label><input id="evT" required value="${e.titulo?esc(e.titulo):''}">
     <div class="row"><div><label>Desde</label><input id="evI" type="date" required value="${e.ini||''}"></div><div><label>Hasta</label><input id="evF" type="date" required value="${e.fin||''}"></div>
     <div><label>Tipo</label><select id="evTipo">${tipos.map(t=>`<option value="${t[0]}" ${e.tipo===t[0]?'selected':''}>${t[1]}</option>`).join('')}</select></div></div>
+    <label style="font-weight:700;color:var(--azul)">Dirigido a (alcance)</label>
+    ${scopeSelects({a:'evArea',d:'evDept',e:'evEq'},e)}
     <div><button class="btn" type="submit">Guardar</button> <button class="btn ghost" type="button" onclick="evFormOpen=false;show('calendario')">Cancelar</button></div></form></div>`;}
 async function evSave(e){e.preventDefault();let ini=val('evI'),fin=val('evF')||val('evI');if(fin<ini)fin=ini;
-  const row={titulo:val('evT'),ini,fin,tipo:document.getElementById('evTipo').value};if(!row.titulo)return false;
+  const row={titulo:val('evT'),ini,fin,tipo:document.getElementById('evTipo').value,
+    area:(document.getElementById('evArea').value||null), dept:document.getElementById('evDept').value||'*', equipo:(document.getElementById('evEq').value||null)};
+  if(!row.titulo)return false;
   const{error}=evEditId?await sb.from('eventos').update(row).eq('id',evEditId):await sb.from('eventos').insert(row);
   if(error){alert('Error: '+error.message);return false;}evFormOpen=false;show('calendario');return false;}
 async function evDel(id){if(!confirm('¿Eliminar evento?'))return;await sb.from('eventos').delete().eq('id',id);show('calendario');}
