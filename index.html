@@ -671,6 +671,8 @@
   /* Submenú de cada sección con un tono distinto para diferenciarlo */
   nav.side .grp-items{background:#ece2d0}
   body.dark nav.side .grp-items{background:#26241f}
+  /* Icono de sección: solo visible en el modo plegado (rail) */
+  nav.side .grp-tog .grp-ic{display:none;font-size:18px;line-height:1}
   /* Chincheta (solo escritorio) */
   .nav-pin{display:none}
 
@@ -686,17 +688,15 @@
     .nav-pin button:hover{opacity:1}
     body.nav-pinned .nav-pin button{opacity:1;transform:rotate(0)}
 
-    /* --- Plegado: solo cuando NO está fijado y NO hay hover --- */
+    /* --- Plegado: un solo icono por SECCIÓN, áreas ocultas --- */
     body:not(.nav-pinned) nav.side:not(:hover) .nav-pin{justify-content:center;padding:8px 0 6px}
-    body:not(.nav-pinned) nav.side:not(:hover) .grp-items{background:transparent}
-    body:not(.nav-pinned) nav.side:not(:hover) .grp-items.closed{display:block}
+    body:not(.nav-pinned) nav.side:not(:hover) .grp-items{display:none}
     body:not(.nav-pinned) nav.side:not(:hover) .grp-tog .grp-name,
     body:not(.nav-pinned) nav.side:not(:hover) .grp-tog .car{display:none}
-    body:not(.nav-pinned) nav.side:not(:hover) .grp-tog{justify-content:center;padding:7px 0;margin-top:4px;border-top:1px solid var(--gris2);background:transparent}
-    body:not(.nav-pinned) nav.side:not(:hover) a{justify-content:center;padding:11px 0;gap:0;position:relative;border-left-color:transparent}
-    body:not(.nav-pinned) nav.side:not(:hover) a .label{display:none}
-    body:not(.nav-pinned) nav.side:not(:hover) a.active{background:var(--azul-claro);border-left-color:transparent}
-    body:not(.nav-pinned) nav.side:not(:hover) a .nav-badge{position:absolute;top:5px;right:16px;min-width:9px;width:9px;height:9px;padding:0;font-size:0;border-radius:50%}
+    body:not(.nav-pinned) nav.side:not(:hover) .grp-tog .grp-ic{display:block}
+    body:not(.nav-pinned) nav.side:not(:hover) .grp-tog{justify-content:center;padding:13px 0;margin-top:0;border-top:none;position:relative}
+    body:not(.nav-pinned) nav.side:not(:hover) .grp-tog.has-active{color:var(--acento);background:var(--azul-claro)}
+    body:not(.nav-pinned) nav.side:not(:hover) .grp-tog.has-badge::after{content:'';position:absolute;top:9px;right:18px;width:9px;height:9px;border-radius:50%;background:#e23b3b}
 
     /* --- Fijado: siempre abierto --- */
     body.nav-pinned nav.side{width:252px;box-shadow:none}
@@ -1076,7 +1076,8 @@ function renderNavBadges(){
     if(n>0){ if(!b){b=document.createElement('span');b.className='nav-badge';a.appendChild(b);} b.textContent=n>99?'99+':n; } else if(b) b.remove(); });
   const groups=navGroups(); const heads=document.querySelectorAll('#nav .grp-tog');
   groups.forEach((g,i)=>{ const head=heads[i]; if(!head) return; const nameEl=head.querySelector('.grp-name')||head; const sum=g.items.reduce((s,it)=>s+(NAV_BADGES[it.id]||0),0); let b=nameEl.querySelector('.nav-badge');
-    if(sum>0){ if(!b){ b=document.createElement('span'); b.className='nav-badge'; nameEl.appendChild(b); } b.textContent=sum>99?'99+':sum; } else if(b) b.remove(); });
+    if(sum>0){ if(!b){ b=document.createElement('span'); b.className='nav-badge'; nameEl.appendChild(b); } b.textContent=sum>99?'99+':sum; } else if(b) b.remove();
+    head.classList.toggle('has-badge', sum>0); });
 }
 async function loadMsgUnread(){ const{count}=await sb.from('mensajes').select('id',{count:'exact',head:true}).eq('para_id',ME.id).eq('leido',false); setBadge('mensajeria',count||0); }
 async function loadPendingCount(){ if(!isAdmin()){ setBadge('registros',0); return; } const{count}=await sb.from('profiles').select('id',{count:'exact',head:true}).eq('estado','pendiente'); setBadge('registros',count||0); }
@@ -1114,9 +1115,9 @@ function haceTiempo(iso){ if(!iso) return 'nunca conectado'; const s=Math.floor(
   if(s<60) return 'hace un momento'; const m=Math.floor(s/60); if(m<60) return 'hace '+m+' min';
   const h=Math.floor(m/60); if(h<24) return 'hace '+h+' h'; const d=Math.floor(h/24); if(d<30) return 'hace '+d+' día'+(d>1?'s':'');
   return 'el '+new Date(iso).toLocaleDateString('es-ES'); }
+const GRP_ICON={'General':'🏠','RRHH':'👥','Recursos':'📦','Mantenimiento':'🛠️','Limpieza':'🧹','Atención al cliente':'💬','Marketing':'🎨','Formación':'🎓','Mi departamento':'🗂️','Dirección':'📊','Gestión':'⚙️'};
 function buildNav(){
   const nav=document.getElementById('nav');
-  const sc=nav.scrollTop;
   const groups=navGroups();
   if(navOpen===null) navOpen=new Set(groups[0]?[groups[0].name]:[]);
   nav.innerHTML='';
@@ -1126,17 +1127,11 @@ function buildNav(){
   nav.appendChild(pin);
   groups.forEach(g=>{
     const open=navOpen.has(g.name);
-    const head=document.createElement('div'); head.className='grp-tog'+(open?' open':'');
-    head.innerHTML=`<span class="grp-name">${g.name}</span><span class="car">${open?'▾':'▸'}</span>`;
-    head.onclick=()=>{
-      const navEl=document.getElementById('nav');
-      const before=head.getBoundingClientRect().top;             // posición visible del grupo pulsado
-      if(navOpen.has(g.name)){navOpen.clear();} else {navOpen.clear();navOpen.add(g.name);}
-      buildNav();
-      const gi=navGroups().findIndex(x=>x.name===g.name);          // mantenerlo en el mismo sitio (sin salto)
-      const nh=navEl.querySelectorAll('.grp-tog')[gi];
-      if(nh){ const after=nh.getBoundingClientRect().top; navEl.scrollTop += (after-before); }
-    };
+    const hasActive=g.items.some(it=>it.id===curPage);
+    const head=document.createElement('div'); head.className='grp-tog'+(open?' open':'')+(hasActive?' has-active':'');
+    head.title=g.name;
+    head.innerHTML=`<span class="grp-ic">${GRP_ICON[g.name]||'•'}</span><span class="grp-name">${g.name}</span><span class="car">${open?'▾':'▸'}</span>`;
+    head.onclick=()=>{ if(navOpen.has(g.name)){navOpen.clear();} else {navOpen.clear();navOpen.add(g.name);} buildNav(); };
     nav.appendChild(head);
     const box=document.createElement('div'); box.className='grp-items'+(open?'':' closed');
     g.items.forEach(it=>{const a=document.createElement('a');a.dataset.id=it.id;a.title=it.t;a.innerHTML=`<span class="nicw">${navIcon(it.id)}</span><span class="label">${it.t}</span>`;a.onclick=()=>show(it.id);box.appendChild(a);});
@@ -1144,7 +1139,6 @@ function buildNav(){
   });
   highlightNav();
   renderNavBadges();
-  nav.scrollTop=sc;
 }
 function highlightNav(){document.querySelectorAll('#nav a').forEach(a=>a.classList.toggle('active',a.dataset.id===curPage));}
 function ensureGroupOpen(id){const g=groupOf(id);if(g&&navOpen&&!(navOpen.size===1&&navOpen.has(g))){navOpen.clear();navOpen.add(g);buildNav();}}
