@@ -833,8 +833,8 @@ const NAV=[
   {grp:'Dirección', roles:['direccion','admin']},
   {id:'kpis',ic:'📊',t:'Tablero de KPIs', roles:['direccion','admin']},
   {id:'auditoria',ic:'🔒',t:'Auditoría', roles:['admin']},
-  {grp:'Gestión', roles:['responsable','direccion','admin']},
-  {id:'aprobaciones',ic:'✅',t:'Aprobaciones', roles:['responsable','direccion','admin']},
+  {grp:'Gestión', roles:['direccion','admin']},
+  {id:'aprobaciones',ic:'✅',t:'Aprobaciones', roles:['direccion','admin']},
   {id:'registros',ic:'🆕',t:'Registros pendientes', roles:['admin']},
   {id:'admin',ic:'⚙️',t:'Administración', roles:['admin']},
   {id:'catalogos',ic:'🗂️',t:'Catálogos', owner:true},
@@ -1821,7 +1821,7 @@ function pageCatalogos(){
   const S='<span style="color:#1f9d55;font-weight:700">✓</span>', N='<span style="color:var(--gris2)">—</span>';
   const rolesTabla=[
     ['Empleado','Solo lo suyo','Ve los suyos',N,N,N,N],
-    ['Responsable','Su departamento','Crea los de su departamento',S,S,N,N],
+    ['Responsable','Su departamento','Crea los de su departamento',N,S,N,N],
     ['Dirección','Su área completa','Crea los de su área',S,S,S,N],
     ['Administrador','Toda la empresa','Crea cualquiera',S,S,S,S],
     ['Propietario','Absoluto y exclusivo','Crea cualquiera',S,S,S,S+' <small style="color:var(--suave)">(+ borrar usuarios y catálogos)</small>'],
