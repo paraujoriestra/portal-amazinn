@@ -606,26 +606,30 @@ const LOGO="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAWgAAAFCCAYAAADc0keFAA
 ['logoLogin','logoHdr'].forEach(id=>{const e=document.getElementById(id);if(e)e.src=LOGO;});
 
 let DEPTS = ["Dirección","Recursos Humanos","Atención al cliente","Operaciones","Limpieza","Mantenimiento","Almacén","Recepción nocturna","Marketing"];
-// Catálogos editables (Departamentos, Cargos, Equipos, Roles)
-let CAT = { cargos:[], equipos:[], roles:[] };
+// Estructura: Áreas › Departamentos › Posiciones › Equipos
+let CAT = { areas:[], deptos:[], posiciones:[], equipos:[] };
 async function loadCatalogos(){
-  const [d,c,e,r] = await Promise.all([
-    sb.from('departamentos').select('nombre').order('nombre'),
-    sb.from('cargos').select('*').order('nombre'),
+  const [a,d,p,e] = await Promise.all([
+    sb.from('areas').select('nombre').order('nombre'),
+    sb.from('departamentos').select('nombre,area').order('nombre'),
+    sb.from('posiciones').select('nombre').order('id'),
     sb.from('equipos').select('nombre').order('nombre'),
-    sb.from('roles_cat').select('*').order('id'),
   ]);
-  if(d.data && d.data.length) DEPTS = d.data.map(x=>x.nombre);
-  CAT.cargos  = c.data||[];
-  CAT.equipos = (e.data||[]).map(x=>x.nombre);
-  CAT.roles   = r.data||[];
+  CAT.areas      = (a.data||[]).map(x=>x.nombre);
+  CAT.deptos     = d.data||[];
+  CAT.posiciones = (p.data||[]).map(x=>x.nombre);
+  CAT.equipos    = (e.data||[]).map(x=>x.nombre);
+  if(CAT.deptos.length) DEPTS = CAT.deptos.map(x=>x.nombre);
 }
-function roleBase(nombre){ const r=CAT.roles.find(x=>x.nombre===nombre); return r?r.base:'empleado'; }
-function rolLabel(p){ return (p&&p.rol_nombre) ? p.rol_nombre : roleNice(p&&p.role); }
+function deptArea(nombre){ const d=CAT.deptos.find(x=>x.nombre===nombre); return d?d.area:''; }
+function rolLabel(p){ return roleNice(p&&p.role); }
 const NIVEL = { info:["Informativo","b-blue"], imp:["Importante","b-amber"], urg:["Urgente","b-red"] };
-const CAN_COM = ["responsable","rrhh","admin","propietario"];
-// El Propietario tiene todos los poderes de admin (y más).
-function isAdmin(){ return PROFILE.role==='admin' || PROFILE.role==='propietario'; }
+// Roles fijos (de menor a mayor): Empleado, Responsable (su depto), Dirección (su área), Administrador (todo), Propietario.
+const ROLES = [['empleado','Empleado'],['responsable','Responsable'],['direccion','Dirección'],['admin','Administrador'],['propietario','Propietario']];
+const CAN_COM = ["responsable","direccion","admin","propietario"];
+function isAdmin(){ return PROFILE.role==='admin' || PROFILE.role==='propietario'; }     // manda en todo
+function isDireccion(){ return ['direccion','admin','propietario'].includes(PROFILE.role); } // área o más
+function esRRHH(){ return isAdmin() || PROFILE.dept==='RRHH' || PROFILE.area==='Recursos Humanos'; }
 function isOwner(){ return PROFILE.role==='propietario'; }
 
 let sb=null, ME=null, PROFILE=null, curPage='inicio';
@@ -761,16 +765,16 @@ const NAV=[
   {id:'formacion',ic:'📚',t:'Formaciones'},
   {grp:'Mi departamento'},
   {id:'depto',ic:'🗂️',t:'Área de equipo'},
-  {grp:'Dirección', roles:['admin']},
-  {id:'kpis',ic:'📊',t:'Tablero de KPIs', roles:['admin']},
+  {grp:'Dirección', roles:['direccion','admin']},
+  {id:'kpis',ic:'📊',t:'Tablero de KPIs', roles:['direccion','admin']},
   {id:'auditoria',ic:'🔒',t:'Auditoría', roles:['admin']},
-  {grp:'Gestión', roles:['responsable','rrhh','admin']},
-  {id:'aprobaciones',ic:'✅',t:'Aprobaciones', roles:['responsable','rrhh','admin']},
+  {grp:'Gestión', roles:['responsable','direccion','admin']},
+  {id:'aprobaciones',ic:'✅',t:'Aprobaciones', roles:['responsable','direccion','admin']},
   {id:'registros',ic:'🆕',t:'Registros pendientes', roles:['admin']},
   {id:'admin',ic:'⚙️',t:'Administración', roles:['admin']},
   {id:'catalogos',ic:'🗂️',t:'Catálogos', owner:true},
 ];
-const CAN_MANAGE=['responsable','rrhh','admin','propietario'];
+const CAN_MANAGE=['responsable','direccion','admin','propietario'];
 let supTab='electricidad', navOpen=null;
 const SHIFTS=[{v:"",l:"—",c:"#dfe3ea"},{v:"M",l:"Mañana 09–17",c:"#cfe0f2"},{v:"T",l:"Tarde 14–22",c:"#f7e6b0"},{v:"P",l:"Partido",c:"#cdeee3"},{v:"N",l:"Noche 22–06",c:"#cfe0f2"},{v:"L",l:"Libre",c:"#dfe3ea"},{v:"V",l:"Vacaciones",c:"#f6cfcd"}];
 const SH=Object.fromEntries(SHIFTS.map(s=>[s.v,s]));
@@ -956,7 +960,7 @@ function show(id){
 
 /* ---------------- INICIO ---------------- */
 async function pageInicio(){
-  const p=PROFILE, cargo=p.cargo||roleNice(p.role);
+  const p=PROFILE, cargo=p.posicion||roleNice(p.role);
   const {data:bd}=await sb.from('profiles').select('nombre,dept,cumple').not('cumple','is',null);
   const now=new Date(), mm=String(now.getMonth()+1).padStart(2,'0'), dd=String(now.getDate()).padStart(2,'0');
   const hoy=(bd||[]).filter(x=>{const a=(x.cumple||'').split('-');return a[1]===mm&&a[2]===dd;});
@@ -1012,7 +1016,7 @@ async function pageInicio(){
       </div>
     </div>`;
 }
-function roleNice(r){return ({empleado:'Empleado',responsable:'Responsable',rrhh:'RRHH',admin:'Administrador',propietario:'Propietario'})[r]||r;}
+function roleNice(r){return ({empleado:'Empleado',responsable:'Responsable',direccion:'Dirección',admin:'Administrador',propietario:'Propietario'})[r]||r;}
 
 /* ---------------- COMUNICADOS (datos reales · bandeja + filtros) ---------------- */
 const COM_COLOR={info:'#3b82f6',imp:'#d99100',urg:'#e23b3b'};
@@ -1321,9 +1325,11 @@ function pagePerfil(){
         <div style="margin-top:10px"><label class="btn ghost" style="padding:6px 12px;cursor:pointer">📷 Cambiar foto<input type="file" accept="image/*" style="display:none" onchange="miFotoPick(this)"></label></div></div>
       <div style="flex:1;min-width:220px">
         <div style="font-size:22px;font-weight:800;font-family:'Playfair Display',Georgia,serif">${esc(p.nombre||'')}</div>
-        <div style="color:var(--acento);font-weight:700;margin:2px 0 12px">${esc(p.cargo||p.dept||'')}</div>
+        <div style="color:var(--acento);font-weight:700;margin:2px 0 12px">${esc(p.posicion||p.dept||'')}</div>
         <div style="font-size:14px;line-height:2">
+          ${p.area?`<div>🏛️ <b>Área:</b> ${esc(p.area)}</div>`:''}
           <div>🏢 <b>Departamento:</b> ${esc(p.dept||'—')}</div>
+          ${p.posicion?`<div>📊 <b>Posición:</b> ${esc(p.posicion)}</div>`:''}
           ${p.equipo?`<div>👥 <b>Equipo:</b> ${esc(p.equipo)}</div>`:''}
           <div>🧑‍💼 <b>Rol:</b> ${esc(rol)}</div>
           <div>✉️ <b>Email:</b> ${esc(p.email||ME.email||'—')}</div>
@@ -1339,7 +1345,7 @@ async function pageOrganigrama(){
   const ppl=data||[];
   const byDept={};
   ppl.forEach(p=>{const d=p.dept||'Sin departamento';(byDept[d]=byDept[d]||[]).push(p);});
-  const roleNice=r=>({empleado:'Empleado',responsable:'Responsable',rrhh:'RRHH',admin:'Administrador',propietario:'Propietario'})[r]||r;
+  const roleNice=r=>({empleado:'Empleado',responsable:'Responsable',direccion:'Dirección',admin:'Administrador',propietario:'Propietario'})[r]||r;
   const blocks=Object.keys(byDept).sort().map(d=>`
     <div class="panel"><h2>${esc(d)} <span class="badge b-grey" style="font-weight:600">${byDept[d].length}</span></h2>
       <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:12px">
@@ -1413,7 +1419,7 @@ async function createSup(e){e.preventDefault();
 /* ---------------- SUGERENCIAS ---------------- */
 const SUG_EST={Pendiente:'b-amber','En estudio':'b-blue',Aplicada:'b-green',Descartada:'b-grey'};
 async function pageSugerencias(){
-  const manage=(PROFILE.role==='rrhh'||isAdmin());
+  const manage=esRRHH();
   const{data,error}=await sb.from('sugerencias').select('*').order('created_at',{ascending:false});
   if(error){document.getElementById('main').innerHTML='<div class="panel">Error: '+error.message+'</div>';return;}
   const list=(data||[]).map(g=>{const fecha=new Date(g.created_at).toLocaleDateString('es-ES',{day:'numeric',month:'short',year:'numeric'});
@@ -1450,7 +1456,7 @@ function qrSVG(seed){const n=23,cell=6,pad=2,dim=(n+pad*2)*cell;let h=0;for(cons
   let x='';for(let r=0;r<n;r++)for(let c=0;c<n;c++){const f=fin(r,c,0,0)??fin(r,c,0,n-7)??fin(r,c,n-7,0);const on=(f!==null&&f!==undefined)?f:rnd()>0.52;if(on)x+=`<rect x="${(c+pad)*cell}" y="${(r+pad)*cell}" width="${cell}" height="${cell}"/>`;}
   return `<svg viewBox="0 0 ${dim} ${dim}" width="130" height="130" xmlns="http://www.w3.org/2000/svg"><rect width="${dim}" height="${dim}" fill="#fff"/><g fill="#111">${x}</g></svg>`;}
 async function pageFichaje(){
-  const isRRHH=PROFILE.role==='rrhh'||isAdmin(), isMgr=CAN_MANAGE.includes(PROFILE.role), today=hoyISO();
+  const isRRHH=esRRHH(), isMgr=CAN_MANAGE.includes(PROFILE.role), today=hoyISO();
   const{data:mine}=await sb.from('fichajes').select('*').eq('user_id',ME.id).eq('fecha',today).order('hora');
   const mias=mine||[]; const ult=mias.length?mias[mias.length-1]:null; const dentro=ult?ult.tipo==='entrada':false;
   const status=dentro?`<div style="font-size:20px;font-weight:800;color:var(--acento)">🟢 Estás fichado (dentro)</div><div style="color:var(--suave);font-size:13px">Entrada a las ${ult.hora} en ${esc(ult.lugar||'')}</div>`
@@ -1596,44 +1602,42 @@ function pageCarteles(){const t=CARTELES[cartelTpl];
 function updateCartel(){const t=CARTELES[cartelTpl];document.getElementById('cartelPrint').innerHTML=cartelHTML(val('caT'),document.getElementById('caB').value,val('caU'),t.color,t.icon);}
 
 /* ---------------- CATÁLOGOS (Propietario) ---------------- */
-const BASES=[['empleado','Empleado'],['responsable','Responsable'],['rrhh','RRHH'],['admin','Dirección']];
-function baseLabel(b){const x=BASES.find(o=>o[0]===b);return x?x[1]:b;}
 function pageCatalogos(){
   if(!isOwner()){ document.getElementById('main').innerHTML='<div class="panel">Solo el Propietario puede gestionar los catálogos.</div>'; return; }
-  const deptList=DEPTS.map(d=>`<div class="cat-row"><span>${esc(d)}</span><button class="cat-x" onclick="delDepto('${d.replace(/'/g,"\\'")}')">🗑</button></div>`).join('')||'<div class="cat-empty">—</div>';
-  const cargoList=CAT.cargos.map(c=>`<div class="cat-row"><span>${esc(c.nombre)}${c.dept?` <small style="color:var(--suave)">· ${esc(c.dept)}</small>`:''}</span><button class="cat-x" onclick="delCargo(${c.id})">🗑</button></div>`).join('')||'<div class="cat-empty">—</div>';
+  const areaList=CAT.areas.map(a=>`<div class="cat-row"><span>${esc(a)}</span><button class="cat-x" onclick="delArea('${a.replace(/'/g,"\\'")}')">🗑</button></div>`).join('')||'<div class="cat-empty">—</div>';
+  const deptList=CAT.deptos.map(d=>`<div class="cat-row"><span>${esc(d.nombre)} <small style="color:var(--suave)">· ${esc(d.area||'sin área')}</small></span><button class="cat-x" onclick="delDepto('${d.nombre.replace(/'/g,"\\'")}')">🗑</button></div>`).join('')||'<div class="cat-empty">—</div>';
+  const posList=CAT.posiciones.map(p=>`<div class="cat-row"><span>${esc(p)}</span><button class="cat-x" onclick="delPos('${p.replace(/'/g,"\\'")}')">🗑</button></div>`).join('')||'<div class="cat-empty">—</div>';
   const equipoList=CAT.equipos.map(e=>`<div class="cat-row"><span>${esc(e)}</span><button class="cat-x" onclick="delEquipo('${e.replace(/'/g,"\\'")}')">🗑</button></div>`).join('')||'<div class="cat-empty">Sin equipos todavía</div>';
-  const rolList=CAT.roles.map(r=>`<div class="cat-row"><span>${esc(r.nombre)} <small style="color:var(--suave)">· como ${esc(baseLabel(r.base))}</small></span>${r.protegido?'<span class="cat-lock">🔒</span>':`<button class="cat-x" onclick="delRol(${r.id})">🗑</button>`}</div>`).join('');
+  const rolesInfo=[['Empleado','acceso básico, solo lo suyo'],['Responsable','manda en su departamento'],['Dirección','manda en su área completa'],['Administrador','manda en todo'],['Propietario','tú · acceso absoluto']];
   document.getElementById('main').innerHTML=`<div class="page-title">Catálogos</div>
-    <div class="page-sub">Gestiona Departamentos, Cargos, Equipos y Roles. Solo tú (Propietario) puedes editarlos.</div>
+    <div class="page-sub">Estructura de la empresa. Solo tú (Propietario) puedes editarla.</div>
     <div class="cat-grid">
-      <div class="panel"><h2>🏢 Departamentos</h2><div class="cat-list">${deptList}</div>
-        <div class="cat-add"><input id="nDepto" placeholder="Nuevo departamento"><button class="btn" onclick="addDepto()">➕</button></div></div>
+      <div class="panel"><h2>🏛️ Áreas</h2><div class="cat-list">${areaList}</div>
+        <div class="cat-add"><input id="nArea" placeholder="Nueva área"><button class="btn" onclick="addArea()">➕</button></div></div>
 
-      <div class="panel"><h2>💼 Cargos</h2><div class="cat-list">${cargoList}</div>
-        <div class="cat-add"><input id="nCargo" placeholder="Nuevo cargo">
-          <select id="nCargoDept" style="max-width:150px"><option value="__all__">General</option>${DEPTS.map(d=>`<option>${esc(d)}</option>`).join('')}</select>
-          <button class="btn" onclick="addCargo()">➕</button></div></div>
+      <div class="panel"><h2>🏢 Departamentos</h2><div class="cat-list">${deptList}</div>
+        <div class="cat-add"><input id="nDepto" placeholder="Nuevo departamento">
+          <select id="nDeptoArea" style="max-width:150px">${CAT.areas.map(a=>`<option>${esc(a)}</option>`).join('')}</select>
+          <button class="btn" onclick="addDepto()">➕</button></div></div>
+
+      <div class="panel"><h2>📊 Posiciones</h2><div class="cat-list">${posList}</div>
+        <div class="cat-add"><input id="nPos" placeholder="Nueva posición"><button class="btn" onclick="addPos()">➕</button></div></div>
 
       <div class="panel"><h2>👥 Equipos</h2><div class="cat-list">${equipoList}</div>
         <div class="cat-add"><input id="nEquipo" placeholder="Nuevo equipo (ej: Hotel Mío)"><button class="btn" onclick="addEquipo()">➕</button></div></div>
-
-      <div class="panel"><h2>🔑 Roles / permisos</h2><div class="cat-list">${rolList}</div>
-        <div class="cat-add"><input id="nRol" placeholder="Nuevo rol (ej: Gobernanta)">
-          <select id="nRolBase" style="max-width:150px">${BASES.map(b=>`<option value="${b[0]}">como ${b[1]}</option>`).join('')}</select>
-          <button class="btn" onclick="addRol()">➕</button></div>
-        <div style="font-size:12px;color:var(--suave);margin-top:8px">Cada rol nuevo hereda los accesos del nivel elegido ("como…").</div></div>
-    </div>`;
+    </div>
+    <div class="panel" style="margin-top:16px"><h2>🔑 Roles (fijos)</h2>
+      ${rolesInfo.map(r=>`<div style="display:flex;gap:12px;padding:6px 0;font-size:13.5px"><b style="min-width:120px">${r[0]}</b><span style="color:var(--suave)">${r[1]}</span></div>`).join('')}</div>`;
 }
 async function catReload(){ await loadCatalogos(); show('catalogos'); }
-async function addDepto(){ const n=(val('nDepto')||'').trim(); if(!n)return; const{error}=await sb.from('departamentos').insert({nombre:n}); if(error){alert(error.message);return;} toast('✓ Añadido'); catReload(); }
+async function addArea(){ const n=(val('nArea')||'').trim(); if(!n)return; const{error}=await sb.from('areas').insert({nombre:n}); if(error){alert(error.message);return;} toast('✓ Añadido'); catReload(); }
+async function delArea(n){ if(!confirm('¿Eliminar el área "'+n+'"?'))return; const{error}=await sb.from('areas').delete().eq('nombre',n); if(error){alert(error.message);return;} catReload(); }
+async function addDepto(){ const n=(val('nDepto')||'').trim(); const a=document.getElementById('nDeptoArea').value; if(!n)return; const{error}=await sb.from('departamentos').insert({nombre:n,area:a}); if(error){alert(error.message);return;} toast('✓ Añadido'); catReload(); }
 async function delDepto(n){ if(!confirm('¿Eliminar el departamento "'+n+'"?'))return; const{error}=await sb.from('departamentos').delete().eq('nombre',n); if(error){alert(error.message);return;} catReload(); }
-async function addCargo(){ const n=(val('nCargo')||'').trim(); const d=document.getElementById('nCargoDept').value; if(!n)return; const{error}=await sb.from('cargos').insert({nombre:n,dept:d==='__all__'?null:d}); if(error){alert(error.message);return;} toast('✓ Añadido'); catReload(); }
-async function delCargo(id){ if(!confirm('¿Eliminar este cargo?'))return; const{error}=await sb.from('cargos').delete().eq('id',id); if(error){alert(error.message);return;} catReload(); }
+async function addPos(){ const n=(val('nPos')||'').trim(); if(!n)return; const{error}=await sb.from('posiciones').insert({nombre:n}); if(error){alert(error.message);return;} toast('✓ Añadido'); catReload(); }
+async function delPos(n){ if(!confirm('¿Eliminar la posición "'+n+'"?'))return; const{error}=await sb.from('posiciones').delete().eq('nombre',n); if(error){alert(error.message);return;} catReload(); }
 async function addEquipo(){ const n=(val('nEquipo')||'').trim(); if(!n)return; const{error}=await sb.from('equipos').insert({nombre:n}); if(error){alert(error.message);return;} toast('✓ Añadido'); catReload(); }
 async function delEquipo(n){ if(!confirm('¿Eliminar el equipo "'+n+'"?'))return; const{error}=await sb.from('equipos').delete().eq('nombre',n); if(error){alert(error.message);return;} catReload(); }
-async function addRol(){ const n=(val('nRol')||'').trim(); const base=document.getElementById('nRolBase').value; if(!n)return; const{error}=await sb.from('roles_cat').insert({nombre:n,base}); if(error){alert(error.message);return;} toast('✓ Añadido'); catReload(); }
-async function delRol(id){ if(!confirm('¿Eliminar este rol?'))return; const{error}=await sb.from('roles_cat').delete().eq('id',id); if(error){alert(error.message);return;} catReload(); }
 
 /* ---------------- REGISTROS PENDIENTES (aprobación) ---------------- */
 async function pageRegistros(){
@@ -1646,11 +1650,11 @@ async function pageRegistros(){
     <div style="font-size:13.5px;line-height:2;background:var(--gris);border-radius:9px;padding:8px 14px">
       📞 <b>${esc(u.telefono||'—')}</b> &nbsp;·&nbsp; 🪪 <b>${esc(u.identificacion||'—')}</b> &nbsp;·&nbsp; 🎂 <b>${u.cumple||'—'}</b></div>
     <div class="row" style="margin-top:12px">
-      <div><label>Rol / permisos</label><select id="rgR_${u.id}">${CAT.roles.filter(r=>r.base!=='propietario').map(r=>`<option>${esc(r.nombre)}</option>`).join('')}</select></div>
-      <div><label>Departamento</label><select id="rgD_${u.id}">${DEPTS.map(d=>`<option ${u.dept===d?'selected':''}>${esc(d)}</option>`).join('')}</select></div>
+      <div><label>Rol / permisos</label><select id="rgR_${u.id}">${ROLES.filter(r=>r[0]!=='propietario').map(r=>`<option value="${r[0]}">${esc(r[1])}</option>`).join('')}</select></div>
+      <div><label>Departamento</label><select id="rgD_${u.id}">${CAT.deptos.map(d=>`<option ${u.dept===d.nombre?'selected':''}>${esc(d.nombre)}</option>`).join('')}</select></div>
     </div>
     <div class="row">
-      <div><label>Cargo</label><select id="rgC_${u.id}"><option value="__none__">— Sin cargo —</option>${CAT.cargos.map(c=>`<option>${esc(c.nombre)}</option>`).join('')}</select></div>
+      <div><label>Posición</label><select id="rgC_${u.id}"><option value="__none__">— Sin posición —</option>${CAT.posiciones.map(p=>`<option>${esc(p)}</option>`).join('')}</select></div>
       <div><label>Equipo</label><select id="rgE_${u.id}"><option value="__none__">— Ninguno —</option>${CAT.equipos.map(e=>`<option>${esc(e)}</option>`).join('')}</select></div>
     </div>
     <div style="margin-top:14px;display:flex;gap:8px">
@@ -1662,13 +1666,12 @@ async function pageRegistros(){
     ${us.length?cards:'<div class="panel">No hay registros pendientes. ✅</div>'}`;
 }
 async function aprobarReg(id){
-  const rol_nombre=document.getElementById('rgR_'+id).value, dept=document.getElementById('rgD_'+id).value;
-  const role=roleBase(rol_nombre);
-  const cgSel=document.getElementById('rgC_'+id), eqSel=document.getElementById('rgE_'+id);
-  const cargo=cgSel&&cgSel.value!=='__none__'?cgSel.value:'';
+  const role=document.getElementById('rgR_'+id).value, dept=document.getElementById('rgD_'+id).value;
+  const psSel=document.getElementById('rgC_'+id), eqSel=document.getElementById('rgE_'+id);
+  const posicion=psSel&&psSel.value!=='__none__'?psSel.value:'';
   const equipo=eqSel&&eqSel.value!=='__none__'?eqSel.value:null;
   const { data:prof } = await sb.from('profiles').select('email,nombre').eq('id',id).single();
-  const { error } = await sb.from('profiles').update({ estado:'aprobado', role, rol_nombre, dept, cargo, equipo }).eq('id',id);
+  const { error } = await sb.from('profiles').update({ estado:'aprobado', role, dept, area:deptArea(dept), posicion, equipo }).eq('id',id);
   if(error){ alert('No se pudo aprobar: '+error.message); return; }
   // Aviso por email (si el servicio está configurado). No bloquea la aprobación.
   let mailed=false;
@@ -1696,10 +1699,10 @@ let userEditId=null, userFormOpen=false;
 async function pageAdmin(){
   const{data}=await sb.from('profiles').select('*').order('dept');
   const us=data||[];
-  const rl=r=>({empleado:'Empleado',responsable:'Responsable',rrhh:'RRHH',admin:'Administrador',propietario:'Propietario'})[r]||r;
+  const rl=r=>roleNice(r);
   const rows=us.map(u=>{
     const esOwner=u.role==='propietario';
-    const badge=esOwner?'b-owner':u.role==='admin'?'b-red':u.role==='rrhh'?'b-blue':u.role==='responsable'?'b-amber':'b-grey';
+    const badge=esOwner?'b-owner':u.role==='admin'?'b-red':u.role==='direccion'?'b-blue':u.role==='responsable'?'b-amber':'b-grey';
     let accion;
     if(esOwner && u.id!==ME.id){
       accion='<span style="font-size:12px;color:var(--suave)">🔒 Protegido</span>';
@@ -1710,12 +1713,13 @@ async function pageAdmin(){
       }
     }
     return `<tr><td>${av(u.nombre,u.color,30,u.foto)}</td><td><b>${esc(u.nombre||'')}</b>${u.id===ME.id?' <span class="badge b-grey">tú</span>':''}${esOwner?' 👑':''}<br><small style="color:var(--suave)">${esc(u.email||'')}</small></td>
-    <td>${esc(u.dept||'')}${u.equipo?`<br><span class="badge b-grey" style="font-size:10px">👥 ${esc(u.equipo)}</span>`:''}</td><td><span class="badge ${badge}">${esc(u.rol_nombre||rl(u.role))}</span></td><td>${u.vac||0}</td>
+    <td>${esc(u.dept||'—')}${u.area?`<br><small style="color:var(--suave)">${esc(u.area)}</small>`:''}${u.equipo?`<br><span class="badge b-grey" style="font-size:10px">👥 ${esc(u.equipo)}</span>`:''}</td>
+    <td>${esc(u.posicion||'—')}</td><td><span class="badge ${badge}">${esc(rl(u.role))}</span></td><td>${u.vac||0}</td>
     <td>${accion}</td></tr>`;}).join('');
   document.getElementById('main').innerHTML=`<div class="page-title">Administración</div><div class="page-sub">Gestión de empleados y roles</div>
     <div class="panel" style="background:var(--azul-claro);border:none;font-size:13px">ℹ️ Para <b>crear</b> nuevos accesos, los empleados se registran desde la pantalla de inicio (o los añades en Supabase → Authentication). Aquí asignas su <b>departamento, rol, vacaciones y cumpleaños</b>.</div>
     ${userFormOpen?userForm():''}
-    <div class="panel"><table><thead><tr><th>Foto</th><th>Nombre / email</th><th>Departamento</th><th>Rol</th><th>Vac.</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`;
+    <div class="panel"><table><thead><tr><th>Foto</th><th>Nombre / email</th><th>Departamento / área</th><th>Posición</th><th>Rol</th><th>Vac.</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`;
 }
 let userDraft={};
 function userEdit(u){userEditId=u.id;userDraft=u;userFormOpen=true;show('admin');}
@@ -1729,15 +1733,15 @@ async function deleteUser(id,nombre){
 function userForm(){const u=userDraft;const colores=['#1F4E79','#16a085','#8e44ad','#d35400','#c0392b','#2980b9','#27ae60','#e67e22','#34495e'];
   return `<div class="panel" style="max-width:640px"><h2>✏️ Editar ${esc(u.nombre||'usuario')}</h2><form class="box" onsubmit="return userSave(event)" style="max-width:none">
     <div class="row"><div><label>Nombre</label><input id="uN" value="${esc(u.nombre||'')}"></div><div><label>Días vacaciones</label><input id="uV" type="number" value="${u.vac||0}"></div></div>
-    <div class="row"><div><label>Departamento</label>
-        <select id="uD" onchange="if(this.value==='__new__')crearCatInline('departamento')">${DEPTS.map(d=>`<option ${u.dept===d?'selected':''}>${esc(d)}</option>`).join('')}<option value="__new__">➕ Crear nuevo…</option></select></div>
+    <div class="row"><div><label>Departamento <small style="color:var(--suave)">(área: ${esc(deptArea(u.dept)||'—')})</small></label>
+        <select id="uD" onchange="if(this.value==='__new__')crearCatInline('departamento');else{userDraft.dept=this.value;userDraft.area=deptArea(this.value);}">${CAT.deptos.map(d=>`<option ${u.dept===d.nombre?'selected':''}>${esc(d.nombre)}</option>`).join('')}<option value="__new__">➕ Crear nuevo…</option></select></div>
+      <div><label>Posición</label>
+        <select id="uPos" onchange="if(this.value==='__new__')crearCatInline('posicion')"><option value="__none__" ${!u.posicion?'selected':''}>— Sin posición —</option>${CAT.posiciones.map(p=>`<option ${u.posicion===p?'selected':''}>${esc(p)}</option>`).join('')}<option value="__new__">➕ Crear nueva…</option></select></div></div>
+    <div class="row"><div><label>Equipo</label>
+        <select id="uEquipo" onchange="if(this.value==='__new__')crearCatInline('equipo')"><option value="__none__" ${!u.equipo?'selected':''}>— Ninguno —</option>${CAT.equipos.map(eq=>`<option ${u.equipo===eq?'selected':''}>${esc(eq)}</option>`).join('')}<option value="__new__">➕ Crear nuevo…</option></select></div>
       <div><label>Rol / permisos</label>${u.role==='propietario'
         ? `<input value="Propietario 👑" disabled style="background:var(--gris)"><small style="color:var(--suave)">El rol de Propietario no se puede cambiar.</small>`
-        : `<select id="uR" onchange="if(this.value==='__new__')crearRolInline()">${CAT.roles.filter(r=>r.base!=='propietario').map(r=>`<option ${(u.rol_nombre?u.rol_nombre===r.nombre:(r.protegido&&r.base===u.role))?'selected':''}>${esc(r.nombre)}</option>`).join('')}<option value="__new__">➕ Crear nuevo…</option></select>`}</div></div>
-    <div class="row"><div><label>Cargo</label>
-        <select id="uCargo" onchange="if(this.value==='__new__')crearCatInline('cargo')"><option value="__none__" ${!u.cargo?'selected':''}>— Sin cargo —</option>${CAT.cargos.map(c=>`<option ${u.cargo===c.nombre?'selected':''}>${esc(c.nombre)}</option>`).join('')}<option value="__new__">➕ Crear nuevo…</option></select></div>
-      <div><label>Equipo</label>
-        <select id="uEquipo" onchange="if(this.value==='__new__')crearCatInline('equipo')"><option value="__none__" ${!u.equipo?'selected':''}>— Ninguno —</option>${CAT.equipos.map(eq=>`<option ${u.equipo===eq?'selected':''}>${esc(eq)}</option>`).join('')}<option value="__new__">➕ Crear nuevo…</option></select></div></div>
+        : `<select id="uR">${ROLES.filter(r=>r[0]!=='propietario').map(r=>`<option value="${r[0]}" ${u.role===r[0]?'selected':''}>${esc(r[1])}</option>`).join('')}</select>`}</div></div>
     <div class="row"><div><label>Nº de teléfono</label><input id="uTel" value="${esc(u.telefono||'')}"></div>
       <div><label>Nº de identificación</label><input id="uIdent" value="${esc(u.identificacion||'')}"></div></div>
     <label>Cumpleaños</label><input id="uC" type="date" value="${u.cumple||''}">
@@ -1749,10 +1753,10 @@ function captureUserForm(){
   const g=id=>{const el=document.getElementById(id);return el?el.value:null;};
   if(g('uN')!==null) userDraft.nombre=g('uN');
   if(g('uV')!==null) userDraft.vac=+g('uV')||0;
-  const d=g('uD'); if(d&&d!=='__new__') userDraft.dept=d;
-  const cg=g('uCargo'); if(cg!==null&&cg!=='__new__') userDraft.cargo=cg==='__none__'?'':cg;
+  const d=g('uD'); if(d&&d!=='__new__'){ userDraft.dept=d; userDraft.area=deptArea(d); }
+  const ps=g('uPos'); if(ps!==null&&ps!=='__new__') userDraft.posicion=ps==='__none__'?'':ps;
   const eq=g('uEquipo'); if(eq!==null&&eq!=='__new__') userDraft.equipo=eq==='__none__'?null:eq;
-  const rn=g('uR'); if(rn&&rn!=='__new__'){ userDraft.rol_nombre=rn; userDraft.role=roleBase(rn); }
+  const rn=g('uR'); if(rn&&rn!=='__new__') userDraft.role=rn;
   if(g('uTel')!==null) userDraft.telefono=g('uTel');
   if(g('uIdent')!==null) userDraft.identificacion=g('uIdent');
   if(g('uC')!==null) userDraft.cumple=g('uC')||null;
@@ -1760,39 +1764,29 @@ function captureUserForm(){
 }
 async function crearCatInline(tipo){
   captureUserForm();
-  const n=prompt('Nuevo '+tipo+':'); const v=(n||'').trim();
+  const n=prompt('Nuevo '+(tipo==='posicion'?'posición':tipo)+':'); const v=(n||'').trim();
   if(!v){ show('admin'); return; }
   let res;
-  if(tipo==='departamento') res=await sb.from('departamentos').insert({nombre:v});
+  if(tipo==='departamento') res=await sb.from('departamentos').insert({nombre:v,area:userDraft.area||deptArea(userDraft.dept)||CAT.areas[0]||null});
   else if(tipo==='equipo')  res=await sb.from('equipos').insert({nombre:v});
-  else                      res=await sb.from('cargos').insert({nombre:v,dept:userDraft.dept||null});
+  else                      res=await sb.from('posiciones').insert({nombre:v});
   if(res.error){ alert(res.error.message); show('admin'); return; }
   await loadCatalogos();
-  if(tipo==='departamento') userDraft.dept=v;
+  if(tipo==='departamento'){ userDraft.dept=v; userDraft.area=deptArea(v); }
   else if(tipo==='equipo')  userDraft.equipo=v;
-  else                      userDraft.cargo=v;
+  else                      userDraft.posicion=v;
   show('admin');
-}
-async function crearRolInline(){
-  captureUserForm();
-  const n=prompt('Nombre del nuevo rol (ej: Gobernanta):'); const v=(n||'').trim();
-  if(!v){ show('admin'); return; }
-  const base=(prompt('¿De qué nivel hereda los permisos? Escribe: empleado, responsable, rrhh o admin','responsable')||'').trim();
-  if(!['empleado','responsable','rrhh','admin'].includes(base)){ alert('Nivel no válido. Escribe empleado, responsable, rrhh o admin.'); show('admin'); return; }
-  const { error }=await sb.from('roles_cat').insert({nombre:v,base});
-  if(error){ alert(error.message); show('admin'); return; }
-  await loadCatalogos(); userDraft.rol_nombre=v; userDraft.role=base; show('admin');
 }
 async function userSave(e){e.preventDefault();
   const col=document.querySelector('input[name="uCol"]:checked');
   const g=id=>{const el=document.getElementById(id);return el?el.value:null;};
   const dept=(()=>{const d=g('uD');return d&&d!=='__new__'?d:userDraft.dept;})();
-  const cargo=(()=>{const c=g('uCargo');if(c===null||c==='__new__')return userDraft.cargo||'';return c==='__none__'?'':c;})();
+  const posicion=(()=>{const p=g('uPos');if(p===null||p==='__new__')return userDraft.posicion||'';return p==='__none__'?'':p;})();
   const equipo=(()=>{const e2=g('uEquipo');if(e2===null||e2==='__new__')return userDraft.equipo||null;return e2==='__none__'?null:e2;})();
-  let role, rol_nombre;
-  if(userDraft.role==='propietario'){ role='propietario'; rol_nombre=userDraft.rol_nombre||'Propietario'; }
-  else { const rn=g('uR'); rol_nombre=(rn&&rn!=='__new__')?rn:(userDraft.rol_nombre||null); role=rol_nombre?roleBase(rol_nombre):userDraft.role; }
-  const row={nombre:val('uN'),dept,role,rol_nombre,vac:+val('uV')||0,cumple:val('uC')||null,cargo,equipo,telefono:val('uTel'),identificacion:val('uIdent'),color:col?col.value:'#1F4E79'};
+  let role;
+  if(userDraft.role==='propietario'){ role='propietario'; }
+  else { const rn=g('uR'); role=(rn&&rn!=='__new__')?rn:userDraft.role; }
+  const row={nombre:val('uN'),dept,area:deptArea(dept),role,posicion,vac:+val('uV')||0,cumple:val('uC')||null,equipo,telefono:val('uTel'),identificacion:val('uIdent'),color:col?col.value:'#1F4E79'};
   const f=document.getElementById('uFoto').files[0];
   if(f){ row.foto=await fileToAvatar(f); }            // respaldo si no se usó el recorte
   else { row.foto = (userDraft.foto!==undefined ? userDraft.foto : null); }  // recorte aplicado, foto existente, o "Quitar foto"
