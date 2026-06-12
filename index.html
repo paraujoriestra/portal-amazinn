@@ -739,7 +739,7 @@ function isDireccion(){ return ['direccion','admin','propietario'].includes(PROF
 function esRRHH(){ return isAdmin() || PROFILE.dept==='RRHH' || PROFILE.area==='Recursos Humanos'; }
 function isOwner(){ return PROFILE.role==='propietario'; }
 
-let sb=null, ME=null, PROFILE=null, curPage='inicio';
+let sb=null, ME=null, PROFILE=null, curPage='';
 
 // ¿Está configurado?
 if(SUPABASE_URL.startsWith("http") && SUPABASE_ANON_KEY && !SUPABASE_ANON_KEY.startsWith("PEGA")){
@@ -1063,46 +1063,48 @@ function buildNav(){
 function highlightNav(){document.querySelectorAll('#nav a').forEach(a=>a.classList.toggle('active',a.dataset.id===curPage));}
 function ensureGroupOpen(id){const g=groupOf(id);if(g&&navOpen&&!(navOpen.size===1&&navOpen.has(g))){navOpen.clear();navOpen.add(g);buildNav();}}
 function show(id){
+  const samePage=(curPage===id);   // recargar la MISMA página → sin "Cargando…" ni salto (fluido)
   curPage=id;
   try{ if(('#'+id)!==location.hash) history.replaceState(null,'','#'+id); }catch(e){}
   document.body.classList.remove('nav-open');
   ensureGroupOpen(id); highlightNav();
   const m=document.getElementById('main');
-  if(id==='perfil'){ m.innerHTML='<div class="page-title">Mi perfil</div><div class="page-sub">Cargando…</div>'; pagePerfil(); return; }
-  if(id==='inicio'){ m.innerHTML='<div class="page-sub">Cargando…</div>'; pageInicio(); return; }
-  else if(id==='comunicados'){ m.innerHTML='<div class="page-title">Comunicados</div><div class="page-sub">Cargando…</div>'; pageComunicados(); }
-  else if(id==='horarios'){ m.innerHTML='<div class="page-title">Horarios</div><div class="page-sub">Cargando…</div>'; pageHorarios(); }
-  else if(id==='organigrama'){ m.innerHTML='<div class="page-title">Organigrama</div><div class="page-sub">Cargando…</div>'; pageOrganigrama(); }
-  else if(id==='proveedores'){ m.innerHTML='<div class="page-title">Proveedores</div><div class="page-sub">Cargando…</div>'; pageProveedores(); }
-  else if(id==='propietarios'){ m.innerHTML='<div class="page-title">Propietarios</div><div class="page-sub">Cargando…</div>'; pagePropietarios(); }
-  else if(id==='conexiones'){ m.innerHTML='<div class="page-title">Conexiones</div><div class="page-sub">Cargando…</div>'; pageConexiones(); }
-  else if(id==='suministros'){ m.innerHTML='<div class="page-title">Suministros</div><div class="page-sub">Cargando…</div>'; pageSuministros(); }
-  else if(id==='sugerencias'){ m.innerHTML='<div class="page-title">Sugerencias</div><div class="page-sub">Cargando…</div>'; pageSugerencias(); }
-  else if(id==='fichaje'){ m.innerHTML='<div class="page-title">Fichaje</div><div class="page-sub">Cargando…</div>'; pageFichaje(); }
-  else if(id==='vacaciones'){ m.innerHTML='<div class="page-title">Vacaciones</div><div class="page-sub">Cargando…</div>'; pageSolicitud('vacaciones'); }
-  else if(id==='bajas'){ m.innerHTML='<div class="page-title">Notificar baja</div><div class="page-sub">Cargando…</div>'; pageSolicitud('baja'); }
-  else if(id==='aprobaciones'){ m.innerHTML='<div class="page-title">Aprobaciones</div><div class="page-sub">Cargando…</div>'; pageAprobaciones(); }
-  else if(id==='calendario'){ m.innerHTML='<div class="page-title">Calendario</div><div class="page-sub">Cargando…</div>'; pageCalendario(); }
-  else if(id==='cumple'){ m.innerHTML='<div class="page-title">Cumpleaños</div><div class="page-sub">Cargando…</div>'; pageCumple(); }
+  const ld=h=>{ if(!samePage) m.innerHTML=h; };   // placeholder solo al cambiar de página
+  if(id==='perfil'){ ld('<div class="page-title">Mi perfil</div><div class="page-sub">Cargando…</div>'); pagePerfil(); return; }
+  if(id==='inicio'){ ld('<div class="page-sub">Cargando…</div>'); pageInicio(); return; }
+  else if(id==='comunicados'){ ld('<div class="page-title">Comunicados</div><div class="page-sub">Cargando…</div>'); pageComunicados(); }
+  else if(id==='horarios'){ ld('<div class="page-title">Horarios</div><div class="page-sub">Cargando…</div>'); pageHorarios(); }
+  else if(id==='organigrama'){ ld('<div class="page-title">Organigrama</div><div class="page-sub">Cargando…</div>'); pageOrganigrama(); }
+  else if(id==='proveedores'){ ld('<div class="page-title">Proveedores</div><div class="page-sub">Cargando…</div>'); pageProveedores(); }
+  else if(id==='propietarios'){ ld('<div class="page-title">Propietarios</div><div class="page-sub">Cargando…</div>'); pagePropietarios(); }
+  else if(id==='conexiones'){ ld('<div class="page-title">Conexiones</div><div class="page-sub">Cargando…</div>'); pageConexiones(); }
+  else if(id==='suministros'){ ld('<div class="page-title">Suministros</div><div class="page-sub">Cargando…</div>'); pageSuministros(); }
+  else if(id==='sugerencias'){ ld('<div class="page-title">Sugerencias</div><div class="page-sub">Cargando…</div>'); pageSugerencias(); }
+  else if(id==='fichaje'){ ld('<div class="page-title">Fichaje</div><div class="page-sub">Cargando…</div>'); pageFichaje(); }
+  else if(id==='vacaciones'){ ld('<div class="page-title">Vacaciones</div><div class="page-sub">Cargando…</div>'); pageSolicitud('vacaciones'); }
+  else if(id==='bajas'){ ld('<div class="page-title">Notificar baja</div><div class="page-sub">Cargando…</div>'); pageSolicitud('baja'); }
+  else if(id==='aprobaciones'){ ld('<div class="page-title">Aprobaciones</div><div class="page-sub">Cargando…</div>'); pageAprobaciones(); }
+  else if(id==='calendario'){ ld('<div class="page-title">Calendario</div><div class="page-sub">Cargando…</div>'); pageCalendario(); }
+  else if(id==='cumple'){ ld('<div class="page-title">Cumpleaños</div><div class="page-sub">Cargando…</div>'); pageCumple(); }
   else if(id==='carteles'){ pageCarteles(); }
-  else if(id==='admin'){ m.innerHTML='<div class="page-title">Administración</div><div class="page-sub">Cargando…</div>'; pageAdmin(); }
-  else if(id==='registros'){ m.innerHTML='<div class="page-title">Registros pendientes</div><div class="page-sub">Cargando…</div>'; pageRegistros(); }
-  else if(id==='catalogos'){ m.innerHTML='<div class="page-title">Catálogos</div><div class="page-sub">Cargando…</div>'; pageCatalogos(); }
-  else if(id==='mensajes'){ m.innerHTML='<div class="page-title">Mensajes y plantillas</div><div class="page-sub">Cargando…</div>'; pageMensajes(); }
-  else if(id==='bitacora'){ m.innerHTML='<div class="page-title">Bitácora</div><div class="page-sub">Cargando…</div>'; pageBitacora(); }
-  else if(id==='formacion'){ m.innerHTML='<div class="page-title">Formaciones</div><div class="page-sub">Cargando…</div>'; pageFormacion(); }
-  else if(id==='kpis'){ m.innerHTML='<div class="page-title">KPIs</div><div class="page-sub">Cargando…</div>'; pageKpis(); }
-  else if(id==='auditoria'){ m.innerHTML='<div class="page-title">Auditoría</div><div class="page-sub">Cargando…</div>'; pageAuditoria(); }
+  else if(id==='admin'){ ld('<div class="page-title">Administración</div><div class="page-sub">Cargando…</div>'); pageAdmin(); }
+  else if(id==='registros'){ ld('<div class="page-title">Registros pendientes</div><div class="page-sub">Cargando…</div>'); pageRegistros(); }
+  else if(id==='catalogos'){ ld('<div class="page-title">Catálogos</div><div class="page-sub">Cargando…</div>'); pageCatalogos(); }
+  else if(id==='mensajes'){ ld('<div class="page-title">Mensajes y plantillas</div><div class="page-sub">Cargando…</div>'); pageMensajes(); }
+  else if(id==='bitacora'){ ld('<div class="page-title">Bitácora</div><div class="page-sub">Cargando…</div>'); pageBitacora(); }
+  else if(id==='formacion'){ ld('<div class="page-title">Formaciones</div><div class="page-sub">Cargando…</div>'); pageFormacion(); }
+  else if(id==='kpis'){ ld('<div class="page-title">KPIs</div><div class="page-sub">Cargando…</div>'); pageKpis(); }
+  else if(id==='auditoria'){ ld('<div class="page-title">Auditoría</div><div class="page-sub">Cargando…</div>'); pageAuditoria(); }
   else if(id==='docs'){ m.innerHTML=pageDocs(); }
   else if(id==='marca'){ m.innerHTML=pageMarca(); }
   else if(id==='tutoriales'){ m.innerHTML=pageTutoriales(); }
   else if(id==='depto'){ m.innerHTML=pageDepto(); }
-  else if(id==='mensajeria'){ m.innerHTML='<div class="page-title">Mensajería</div><div class="page-sub">Cargando…</div>'; pageMensajeria(); }
-  else if(id==='kudos'){ m.innerHTML='<div class="page-title">Reconocimientos</div><div class="page-sub">Cargando…</div>'; pageKudos(); }
-  else if(id==='incidencias'){ m.innerHTML='<div class="page-title">Incidencias</div><div class="page-sub">Cargando…</div>'; pageIncidencias(); }
-  else if(id==='videos'){ m.innerHTML='<div class="page-title">Videos explicativos</div><div class="page-sub">Cargando…</div>'; pageVideos(); }
+  else if(id==='mensajeria'){ ld('<div class="page-title">Mensajería</div><div class="page-sub">Cargando…</div>'); pageMensajeria(); }
+  else if(id==='kudos'){ ld('<div class="page-title">Reconocimientos</div><div class="page-sub">Cargando…</div>'); pageKudos(); }
+  else if(id==='incidencias'){ ld('<div class="page-title">Incidencias</div><div class="page-sub">Cargando…</div>'); pageIncidencias(); }
+  else if(id==='videos'){ ld('<div class="page-title">Videos explicativos</div><div class="page-sub">Cargando…</div>'); pageVideos(); }
   else if(id==='onboarding'){ m.innerHTML=pageOnboarding(); }
-  else if(id==='asignaciones'){ m.innerHTML='<div class="page-title">Limpieza · Asignaciones</div><div class="page-sub">Cargando…</div>'; pageAsignaciones(); }
+  else if(id==='asignaciones'){ ld('<div class="page-title">Limpieza · Asignaciones</div><div class="page-sub">Cargando…</div>'); pageAsignaciones(); }
   else if(id==='limpTutoriales'){ m.innerHTML=pageLimpTutoriales(); }
 }
 
@@ -2948,7 +2950,7 @@ function asgRenderEditor(){
   if(edit && !ASG.equipo){
     return `<div class="page-sub">Primero elige a qué equipo corresponde la asignación de este día.</div>
       <div class="panel" style="max-width:560px"><h2 style="margin-top:0">👥 ¿A qué equipo se asigna?</h2>
-      <div style="display:flex;gap:10px;flex-wrap:wrap">${EQUIPOS.map(e=>`<button class="btn ghost" style="font-size:15px;padding:12px 18px" onclick="asgSetEquipo(${JSON.stringify(e)})">${esc(e)}</button>`).join('')}</div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap">${EQUIPOS.map(e=>`<button class="btn ghost" style="font-size:15px;padding:12px 18px" onclick="asgSetEquipo('${e.replace(/'/g,"\\'")}')">${esc(e)}</button>`).join('')}</div>
       <p style="font-size:12.5px;color:var(--suave);margin-top:12px">Los desplegables de trabajador mostrarán solo el personal de ese equipo. Los equipos se gestionan en “Listado trabajadores”.</p></div>`;
   }
   return `${asgDatalists()}
