@@ -253,6 +253,18 @@
   .cat-x{background:transparent;border:none;cursor:pointer;font-size:13px;opacity:.6}
   .cat-x:hover{opacity:1}
   .cat-lock{font-size:13px;opacity:.6}
+  .tbl-compact{font-size:12px}
+  .tbl-compact th{padding:7px 9px;font-size:11px;text-transform:uppercase;letter-spacing:.3px;color:var(--suave);white-space:nowrap}
+  .tbl-compact td{padding:6px 9px;white-space:nowrap}
+  .tbl-compact td b{font-weight:600}
+  .tbl-compact .badge{font-size:10px;padding:1px 7px}
+  .kebab{background:none;border:none;cursor:pointer;font-size:18px;line-height:1;color:var(--suave);padding:2px 8px;border-radius:6px}
+  .kebab:hover{background:var(--gris);color:var(--texto)}
+  .rowmenu-pop{position:absolute;display:none;flex-direction:column;background:#fff;border:1px solid var(--gris2);border-radius:10px;box-shadow:0 10px 28px rgba(0,0,0,.16);z-index:9999;min-width:150px;padding:5px}
+  .rowmenu-pop button{background:none;border:none;text-align:left;padding:9px 12px;border-radius:7px;cursor:pointer;font-size:13.5px;font-family:inherit;color:var(--texto)}
+  .rowmenu-pop button:hover{background:var(--gris)}
+  .tbl-search{width:100%;max-width:360px;padding:10px 14px;border:1px solid var(--gris2);border-radius:22px;font-family:inherit;font-size:14px;background:#fff}
+  .tbl-search:focus{outline:none;border-color:var(--acento)}
   .rol-tabla{width:100%;border-collapse:collapse;font-size:13px;min-width:640px}
   .rol-tabla th{text-align:left;padding:9px 11px;background:var(--gris);border-bottom:2px solid var(--gris2);font-size:12px;color:var(--suave);white-space:nowrap}
   .rol-tabla td{padding:9px 11px;border-bottom:1px solid var(--gris);vertical-align:top}
@@ -1625,14 +1637,33 @@ async function importExcel(tabla,input){
   }catch(e){ alert('No se pudo leer el Excel: '+(e&&e.message?e.message:e)); }
 }
 
+/* ---------------- Buscador de tablas ---------------- */
+function dataS(arr){ return esc((arr||[]).filter(Boolean).join(' ').toLowerCase()).replace(/"/g,'&quot;'); }
+function tblSearch(bodyId){ return `<div style="margin-bottom:12px"><input class="tbl-search" placeholder="🔍 Buscar…" oninput="filterTable('${bodyId}',this.value)"></div>`; }
+function filterTable(bodyId,q){ q=(q||'').trim().toLowerCase(); const tb=document.getElementById(bodyId); if(!tb) return; [...tb.rows].forEach(r=>{ const s=r.getAttribute('data-s')||''; r.style.display=(!q||s.indexOf(q)>=0)?'':'none'; }); }
+function closeRowMenu(){ const m=document.getElementById('rowMenuPop'); if(m) m.style.display='none'; document.removeEventListener('click',closeRowMenu); }
+function proRowMenu(e,tabla,id){
+  e.stopPropagation();
+  let m=document.getElementById('rowMenuPop'); if(!m){ m=document.createElement('div'); m.id='rowMenuPop'; m.className='rowmenu-pop'; document.body.appendChild(m); }
+  const editFn = tabla==='proveedores'?`editProv(${id})`:`editProp(${id})`;
+  m.innerHTML=`<button onclick="closeRowMenu();${editFn}">✏️ Editar</button><button onclick="closeRowMenu();delRow('${tabla}',${id},'${tabla}')">🗑️ Eliminar</button>`;
+  const r=e.currentTarget.getBoundingClientRect();
+  m.style.display='flex';
+  m.style.top=(r.bottom+window.scrollY+4)+'px';
+  m.style.left=(Math.max(8, Math.min(r.left, window.innerWidth-168))+window.scrollX)+'px';
+  setTimeout(()=>document.addEventListener('click',closeRowMenu),0);
+}
+
 /* ---------------- PROVEEDORES ---------------- */
-let provFormOpen=false;
+let provFormOpen=false, provEditId=null, provDraft={}, PROV_DATA=[];
+function provNew(){ if(provFormOpen){provFormOpen=false;} else {provEditId=null;provDraft={};provFormOpen=true;} show('proveedores'); }
+function editProv(id){ provEditId=id; provDraft=PROV_DATA.find(x=>x.id===id)||{}; provFormOpen=true; show('proveedores'); }
 async function pageProveedores(){
   const canEdit=CAN_MANAGE.includes(PROFILE.role);
   const{data,error}=await sb.from('proveedores').select('*').order('nombre');
   if(error){document.getElementById('main').innerHTML='<div class="panel">Error: '+error.message+'</div>';return;}
-  const rows=(data||[]).map(p=>`<tr>
-    ${canEdit?`<td><button class="btn ghost" style="padding:4px 9px" onclick="delRow('proveedores',${p.id},'proveedores')" title="Eliminar">🗑️</button></td>`:''}
+  PROV_DATA=data||[];
+  const rows=(data||[]).map(p=>`<tr data-s="${dataS([p.nombre,p.tipologia,p.concepto,p.ruc,p.email,p.tel,p.banco,p.tipo_cuenta,p.num_cuenta])}">
     <td><b>${esc(p.nombre)}</b></td>
     <td>${p.tipologia?`<span class="badge b-blue">${esc(p.tipologia)}</span>`:''}</td>
     <td>${esc(p.concepto||'')}</td>
@@ -1641,35 +1672,39 @@ async function pageProveedores(){
     <td>${esc(p.tel||'')}</td>
     <td>${esc(p.banco||'')}</td>
     <td>${esc(p.tipo_cuenta||'')}</td>
-    <td>${esc(p.num_cuenta||'')}</td></tr>`).join('');
+    <td>${esc(p.num_cuenta||'')}</td>
+    ${canEdit?`<td><button class="kebab" onclick="proRowMenu(event,'proveedores',${p.id})" title="Opciones">⋮</button></td>`:''}</tr>`).join('');
   document.getElementById('main').innerHTML=`
     <div class="page-title">Proveedores</div><div class="page-sub">Directorio de proveedores${canEdit?' · puedes añadir':''}</div>
-    ${canEdit?`<div style="margin-bottom:14px;display:flex;gap:8px;flex-wrap:wrap;align-items:center"><button class="btn" onclick="provFormOpen=!provFormOpen;show('proveedores')">${provFormOpen?'✕ Cerrar':'➕ Nuevo proveedor'}</button>${importBtn('proveedores')}</div>`:''}
-    ${canEdit&&provFormOpen?`<div class="panel" style="max-width:720px"><form class="box" onsubmit="return createProv(event)" style="max-width:none">
-      <div class="row"><div><label>Nombre proveedor</label><input id="pN" required></div><div><label>Tipología</label><input id="pTip" placeholder="Electricidad, Limpieza…"></div></div>
-      <label>Concepto</label><input id="pCon" placeholder="Servicio/producto que provee">
-      <div class="row"><div><label>RUC</label><input id="pR"></div><div><label>Email</label><input id="pE" type="email"></div></div>
-      <div class="row"><div><label>Teléfono</label><input id="pT"></div><div><label>Banco</label><input id="pB"></div></div>
-      <div class="row"><div><label>Tipo de cuenta</label><input id="pTC" placeholder="Ahorro / Corriente"></div><div><label>Nº de cuenta</label><input id="pNC"></div></div>
-      <div><button class="btn" type="submit">Guardar</button></div></form></div>`:''}
-    <div class="panel"><div style="overflow-x:auto"><table><thead><tr>${canEdit?'<th></th>':''}<th>Nombre proveedor</th><th>Tipología</th><th>Concepto</th><th>RUC</th><th>Email</th><th>Teléfono</th><th>Banco</th><th>Tipo de cuenta</th><th>Nº de cuenta</th></tr></thead><tbody>${rows||'<tr><td colspan="10" style="color:var(--suave)">Aún no hay proveedores.</td></tr>'}</tbody></table></div></div>`;
+    ${canEdit?`<div style="margin-bottom:14px;display:flex;gap:8px;flex-wrap:wrap;align-items:center"><button class="btn" onclick="provNew()">${provFormOpen?'✕ Cerrar':'➕ Nuevo proveedor'}</button>${importBtn('proveedores')}</div>`:''}
+    ${canEdit&&provFormOpen?`<div class="panel" style="max-width:720px"><h2>${provEditId?'✏️ Editar proveedor':'➕ Nuevo proveedor'}</h2><form class="box" onsubmit="return saveProv(event)" style="max-width:none">
+      <div class="row"><div><label>Nombre proveedor</label><input id="pN" required value="${esc(provDraft.nombre||'')}"></div><div><label>Tipología</label><input id="pTip" placeholder="Electricidad, Limpieza…" value="${esc(provDraft.tipologia||'')}"></div></div>
+      <label>Concepto</label><input id="pCon" placeholder="Servicio/producto que provee" value="${esc(provDraft.concepto||'')}">
+      <div class="row"><div><label>RUC</label><input id="pR" value="${esc(provDraft.ruc||'')}"></div><div><label>Email</label><input id="pE" type="email" value="${esc(provDraft.email||'')}"></div></div>
+      <div class="row"><div><label>Teléfono</label><input id="pT" value="${esc(provDraft.tel||'')}"></div><div><label>Banco</label><input id="pB" value="${esc(provDraft.banco||'')}"></div></div>
+      <div class="row"><div><label>Tipo de cuenta</label><input id="pTC" placeholder="Ahorro / Corriente" value="${esc(provDraft.tipo_cuenta||'')}"></div><div><label>Nº de cuenta</label><input id="pNC" value="${esc(provDraft.num_cuenta||'')}"></div></div>
+      <div><button class="btn" type="submit">Guardar</button> <button class="btn ghost" type="button" onclick="provFormOpen=false;provEditId=null;show('proveedores')">Cancelar</button></div></form></div>`:''}
+    ${tblSearch('provBody')}
+    <div class="panel"><div style="overflow-x:auto"><table class="tbl-compact"><thead><tr><th>Nombre proveedor</th><th>Tipología</th><th>Concepto</th><th>RUC</th><th>Email</th><th>Teléfono</th><th>Banco</th><th>Tipo de cuenta</th><th>Nº de cuenta</th>${canEdit?'<th></th>':''}</tr></thead><tbody id="provBody">${rows||'<tr><td colspan="10" style="color:var(--suave)">Aún no hay proveedores.</td></tr>'}</tbody></table></div></div>`;
 }
-async function createProv(e){e.preventDefault();
+async function saveProv(e){e.preventDefault();
   const row={nombre:val('pN'),tipologia:val('pTip'),concepto:val('pCon'),ruc:val('pR'),email:val('pE'),tel:val('pT'),banco:val('pB'),tipo_cuenta:val('pTC'),num_cuenta:val('pNC')};
   if(!row.nombre)return false;
-  const{error}=await sb.from('proveedores').insert(row);
+  const{error}=provEditId?await sb.from('proveedores').update(row).eq('id',provEditId):await sb.from('proveedores').insert(row);
   if(error){alert('Error: '+error.message);return false;}
-  provFormOpen=false;show('proveedores');return false;
+  provFormOpen=false;provEditId=null;provDraft={};show('proveedores');return false;
 }
 
 /* ---------------- PROPIETARIOS ---------------- */
-let propFormOpen=false;
+let propFormOpen=false, propEditId=null, propDraft={}, PROP_DATA=[];
+function propNew(){ if(propFormOpen){propFormOpen=false;} else {propEditId=null;propDraft={};propFormOpen=true;} show('propietarios'); }
+function editProp(id){ propEditId=id; propDraft=PROP_DATA.find(x=>x.id===id)||{}; propFormOpen=true; show('propietarios'); }
 async function pagePropietarios(){
   const canEdit=CAN_MANAGE.includes(PROFILE.role);
   const{data,error}=await sb.from('propietarios').select('*').order('nombre');
   if(error){document.getElementById('main').innerHTML='<div class="panel">Error (¿ejecutaste supabase_propietarios.sql?): '+esc(error.message)+'</div>';return;}
-  const rows=(data||[]).map(p=>`<tr>
-    ${canEdit?`<td><button class="btn ghost" style="padding:4px 9px" onclick="delRow('propietarios',${p.id},'propietarios')" title="Eliminar">🗑️</button></td>`:''}
+  PROP_DATA=data||[];
+  const rows=(data||[]).map(p=>`<tr data-s="${dataS([p.nombre,p.propiedad,p.concepto,p.sociedad,p.ruc,p.email,p.tel,p.banco,p.tipo_cuenta,p.num_cuenta])}">
     <td><b>${esc(p.nombre)}</b></td>
     <td>${p.propiedad?`<span class="badge b-blue">${esc(p.propiedad)}</span>`:''}</td>
     <td>${esc(p.concepto||'')}</td>
@@ -1679,25 +1714,27 @@ async function pagePropietarios(){
     <td>${esc(p.tel||'')}</td>
     <td>${esc(p.banco||'')}</td>
     <td>${esc(p.tipo_cuenta||'')}</td>
-    <td>${esc(p.num_cuenta||'')}</td></tr>`).join('');
+    <td>${esc(p.num_cuenta||'')}</td>
+    ${canEdit?`<td><button class="kebab" onclick="proRowMenu(event,'propietarios',${p.id})" title="Opciones">⋮</button></td>`:''}</tr>`).join('');
   document.getElementById('main').innerHTML=`
     <div class="page-title">Propietarios</div><div class="page-sub">Directorio de propietarios${canEdit?' · puedes añadir':''}</div>
-    ${canEdit?`<div style="margin-bottom:14px;display:flex;gap:8px;flex-wrap:wrap;align-items:center"><button class="btn" onclick="propFormOpen=!propFormOpen;show('propietarios')">${propFormOpen?'✕ Cerrar':'➕ Nuevo propietario'}</button>${importBtn('propietarios')}</div>`:''}
-    ${canEdit&&propFormOpen?`<div class="panel" style="max-width:720px"><form class="box" onsubmit="return createProp(event)" style="max-width:none">
-      <div class="row"><div><label>Nombre propietario</label><input id="oN" required></div><div><label>Propiedad</label><input id="oProp"></div></div>
-      <div class="row"><div><label>Concepto</label><input id="oCon"></div><div><label>Sociedad</label><input id="oSoc"></div></div>
-      <div class="row"><div><label>RUC</label><input id="oR"></div><div><label>Email</label><input id="oE" type="email"></div></div>
-      <div class="row"><div><label>Teléfono</label><input id="oT"></div><div><label>Banco</label><input id="oB"></div></div>
-      <div class="row"><div><label>Tipo de cuenta</label><input id="oTC" placeholder="Ahorro / Corriente"></div><div><label>Nº de cuenta</label><input id="oNC"></div></div>
-      <div><button class="btn" type="submit">Guardar</button></div></form></div>`:''}
-    <div class="panel"><div style="overflow-x:auto"><table><thead><tr>${canEdit?'<th></th>':''}<th>Nombre propietario</th><th>Propiedad</th><th>Concepto</th><th>Sociedad</th><th>RUC</th><th>Email</th><th>Teléfono</th><th>Banco</th><th>Tipo de cuenta</th><th>Nº de cuenta</th></tr></thead><tbody>${rows||'<tr><td colspan="11" style="color:var(--suave)">Aún no hay propietarios.</td></tr>'}</tbody></table></div></div>`;
+    ${canEdit?`<div style="margin-bottom:14px;display:flex;gap:8px;flex-wrap:wrap;align-items:center"><button class="btn" onclick="propNew()">${propFormOpen?'✕ Cerrar':'➕ Nuevo propietario'}</button>${importBtn('propietarios')}</div>`:''}
+    ${canEdit&&propFormOpen?`<div class="panel" style="max-width:720px"><h2>${propEditId?'✏️ Editar propietario':'➕ Nuevo propietario'}</h2><form class="box" onsubmit="return saveProp(event)" style="max-width:none">
+      <div class="row"><div><label>Nombre propietario</label><input id="oN" required value="${esc(propDraft.nombre||'')}"></div><div><label>Propiedad</label><input id="oProp" value="${esc(propDraft.propiedad||'')}"></div></div>
+      <div class="row"><div><label>Concepto</label><input id="oCon" value="${esc(propDraft.concepto||'')}"></div><div><label>Sociedad</label><input id="oSoc" value="${esc(propDraft.sociedad||'')}"></div></div>
+      <div class="row"><div><label>RUC</label><input id="oR" value="${esc(propDraft.ruc||'')}"></div><div><label>Email</label><input id="oE" type="email" value="${esc(propDraft.email||'')}"></div></div>
+      <div class="row"><div><label>Teléfono</label><input id="oT" value="${esc(propDraft.tel||'')}"></div><div><label>Banco</label><input id="oB" value="${esc(propDraft.banco||'')}"></div></div>
+      <div class="row"><div><label>Tipo de cuenta</label><input id="oTC" placeholder="Ahorro / Corriente" value="${esc(propDraft.tipo_cuenta||'')}"></div><div><label>Nº de cuenta</label><input id="oNC" value="${esc(propDraft.num_cuenta||'')}"></div></div>
+      <div><button class="btn" type="submit">Guardar</button> <button class="btn ghost" type="button" onclick="propFormOpen=false;propEditId=null;show('propietarios')">Cancelar</button></div></form></div>`:''}
+    ${tblSearch('propBody')}
+    <div class="panel"><div style="overflow-x:auto"><table class="tbl-compact"><thead><tr><th>Nombre propietario</th><th>Propiedad</th><th>Concepto</th><th>Sociedad</th><th>RUC</th><th>Email</th><th>Teléfono</th><th>Banco</th><th>Tipo de cuenta</th><th>Nº de cuenta</th>${canEdit?'<th></th>':''}</tr></thead><tbody id="propBody">${rows||'<tr><td colspan="11" style="color:var(--suave)">Aún no hay propietarios.</td></tr>'}</tbody></table></div></div>`;
 }
-async function createProp(e){e.preventDefault();
+async function saveProp(e){e.preventDefault();
   const row={nombre:val('oN'),propiedad:val('oProp'),concepto:val('oCon'),sociedad:val('oSoc'),ruc:val('oR'),email:val('oE'),tel:val('oT'),banco:val('oB'),tipo_cuenta:val('oTC'),num_cuenta:val('oNC')};
   if(!row.nombre)return false;
-  const{error}=await sb.from('propietarios').insert(row);
+  const{error}=propEditId?await sb.from('propietarios').update(row).eq('id',propEditId):await sb.from('propietarios').insert(row);
   if(error){alert('Error: '+error.message);return false;}
-  propFormOpen=false;show('propietarios');return false;
+  propFormOpen=false;propEditId=null;propDraft={};show('propietarios');return false;
 }
 
 /* ---------------- SUMINISTROS ---------------- */
@@ -1710,7 +1747,7 @@ async function pageSuministros(){
   if(error){document.getElementById('main').innerHTML='<div class="panel">Error: '+error.message+'</div>';return;}
   const conTitular=supTab!=='agua';
   const refLbl=supTab==='electricidad'?'Nº NIS':(supTab==='agua'?'Nº IDAAN':'Nº de suscriptor');
-  const rows=(data||[]).map(r=>`<tr><td><b>${esc(r.referencia||'')}</b></td>${conTitular?`<td>${esc(r.titular||'')}</td>`:''}<td>${esc(r.compania||'')}</td><td>${esc(r.propiedad||'')}</td>
+  const rows=(data||[]).map(r=>`<tr data-s="${dataS([r.referencia,r.titular,r.compania,r.propiedad])}"><td><b>${esc(r.referencia||'')}</b></td>${conTitular?`<td>${esc(r.titular||'')}</td>`:''}<td>${esc(r.compania||'')}</td><td>${esc(r.propiedad||'')}</td>
     ${canEdit?`<td><button class="btn ghost" style="padding:4px 9px" onclick="delRow('suministros',${r.id},'suministros')">🗑️</button></td>`:''}</tr>`).join('');
   document.getElementById('main').innerHTML=`
     <div class="page-title">Suministros por activo</div><div class="page-sub">Referencias de los contratos de cada propiedad</div>
@@ -1720,8 +1757,9 @@ async function pageSuministros(){
       <label>${refLbl}</label><input id="sR">${conTitular?'<label>A nombre de</label><input id="sT">':''}
       <label>Compañía</label><input id="sC"><label>Propiedad</label><input id="sP">
       <div><button class="btn" type="submit">Guardar</button></div></form></div>`:''}
+    ${tblSearch('supBody')}
     <div class="panel"><table><thead><tr><th>${refLbl}</th>${conTitular?'<th>A nombre de</th>':''}<th>Compañía</th><th>Propiedad</th>${canEdit?'<th></th>':''}</tr></thead>
-      <tbody>${rows||'<tr><td colspan="5" style="color:var(--suave)">Sin registros en esta categoría.</td></tr>'}</tbody></table></div>`;
+      <tbody id="supBody">${rows||'<tr><td colspan="5" style="color:var(--suave)">Sin registros en esta categoría.</td></tr>'}</tbody></table></div>`;
 }
 async function createSup(e){e.preventDefault();
   const row={tipo:supTab,referencia:val('sR'),titular:supTab!=='agua'?val('sT'):null,compania:val('sC'),propiedad:val('sP')};
