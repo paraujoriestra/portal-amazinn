@@ -282,6 +282,14 @@
   .tbl-compact td{padding:6px 9px;white-space:nowrap}
   .tbl-compact td b{font-weight:600}
   .tbl-compact .badge{font-size:10px;padding:1px 7px}
+  /* Matriz de permisos */
+  .perm-tbl th,.perm-tbl td{text-align:center;white-space:nowrap}
+  .perm-tbl th:first-child,.perm-tbl td:first-child{text-align:left}
+  .perm-tbl td.perm-area{padding-left:26px;color:var(--texto);white-space:normal}
+  .perm-sec td{background:var(--azul-claro);font-size:13px}
+  .perm-yes{color:#2c8a4a;font-weight:800}
+  .perm-no{color:#d9534f;font-weight:700}
+  body.dark .perm-sec td{background:#2a2823}
   .con-row{display:flex;align-items:center;gap:11px;padding:11px 4px;border-bottom:1px solid var(--gris)}
   .con-row:last-child{border-bottom:none}
   .con-dot{width:10px;height:10px;border-radius:50%;background:var(--gris2);flex:0 0 auto}
@@ -954,6 +962,7 @@ const NAV=[
   {id:'kpis',ic:'📊',t:'Tablero de KPIs', roles:['direccion','admin']},
   {id:'auditoria',ic:'🔒',t:'Auditoría', roles:['admin']},
   {grp:'Gestión', roles:['direccion','admin']},
+  {id:'permisos',ic:'🔐',t:'Permisos y accesos', roles:['direccion','admin']},
   {id:'aprobaciones',ic:'✅',t:'Aprobaciones', roles:['direccion','admin']},
   {id:'registros',ic:'🆕',t:'Registros pendientes', roles:['admin']},
   {id:'admin',ic:'⚙️',t:'Administración', roles:['admin']},
@@ -1186,6 +1195,7 @@ function show(id){
   else if(id==='onboarding'){ m.innerHTML=pageOnboarding(); }
   else if(id==='asignaciones'){ ld('<div class="page-title">Limpieza · Asignaciones</div><div class="page-sub">Cargando…</div>'); pageAsignaciones(); }
   else if(id==='limpTutoriales'){ m.innerHTML=pageLimpTutoriales(); }
+  else if(id==='permisos'){ m.innerHTML=pagePermisos(); }
 }
 
 /* ---------------- INICIO ---------------- */
@@ -3105,6 +3115,43 @@ const LIMP_TUTS=[['🛏️','Preparación de habitación','Montaje de cama y ame
 function pageLimpTutoriales(){
   return `<div class="page-title">Limpieza · Tutoriales</div><div class="page-sub">Vídeos y guías para el equipo de limpieza</div>
     <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:16px">${LIMP_TUTS.map(t=>`<div class="panel" style="margin:0;padding:0;overflow:hidden"><div style="height:118px;background:linear-gradient(135deg,var(--azul),var(--azul2,#1b3a5b));display:flex;align-items:center;justify-content:center;font-size:38px">${t[0]}</div><div style="padding:14px"><b>${t[1]}</b><p style="font-size:13px;color:var(--suave);margin-top:5px">${t[2]}</p><button class="btn ghost" style="padding:6px 12px;margin-top:8px" onclick="alert('Vídeo de demostración')">▶ Ver vídeo</button></div></div>`).join('')}</div>`;
+}
+
+/* ---------------- PERMISOS Y ACCESOS (matriz de visibilidad del menú) ---------------- */
+const PERM_ROLES=[['empleado','Empleado'],['responsable','Responsable'],['direccion','Dirección'],['admin','Administrador'],['propietario','Propietario']];
+let permDept='';
+function permFullGroups(){ const groups=[]; let cur=null; NAV.forEach(it=>{ if(it.grp){cur={name:it.grp,meta:it,items:[]};groups.push(cur);} else if(cur) cur.items.push(it); }); return groups.filter(g=>g.items.length); }
+function permPass(it,role,dept){
+  const isOwnerR=role==='propietario', isAdminR=(role==='admin'||role==='propietario');
+  const er=role==='propietario'?'admin':role;
+  if(it.owner && !isOwnerR) return false;
+  if(it.roles && !it.roles.includes(er)) return false;
+  if(it.depts && !it.depts.includes(dept) && !isAdminR) return false;
+  return true;
+}
+function permItemVis(meta,it,role,dept){ return permPass(meta,role,dept) && permPass(it,role,dept); }
+function pagePermisos(){
+  const groups=permFullGroups();
+  const dep=permDept||'';
+  const deptOpts=['—',...DEPTS];
+  const cell=v=> v?'<span class="perm-yes">✓</span>':'<span class="perm-no">✗</span>';
+  const rows=groups.map(g=>{
+    const secVis=PERM_ROLES.map(([r])=> g.items.some(it=>permItemVis(g.meta,it,r,dep)));
+    const head=`<tr class="perm-sec"><td><b>${GRP_ICON[g.name]||''} ${esc(g.name)}</b></td>${secVis.map(v=>`<td>${v?'<span class="perm-yes">✓</span>':'<span class="perm-no">·</span>'}</td>`).join('')}</tr>`;
+    const its=g.items.map(it=>`<tr><td class="perm-area">${it.ic?it.ic+' ':''}${esc(it.t)}</td>${PERM_ROLES.map(([r])=>`<td>${cell(permItemVis(g.meta,it,r,dep))}</td>`).join('')}</tr>`).join('');
+    return head+its;
+  }).join('');
+  return `<div class="page-title">Permisos y accesos</div>
+   <div class="page-sub">Qué secciones y áreas del menú ve cada rol. Las áreas que dependen del departamento cambian según el departamento seleccionado.</div>
+   <div class="panel" style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin-bottom:14px">
+     <label style="font-weight:600;font-size:13px">🏢 Departamento <span style="color:var(--suave);font-weight:400">(para áreas restringidas por departamento)</span>:</label>
+     <select onchange="permDept=(this.value==='—'?'':this.value);show('permisos')" style="padding:8px 11px;border:1px solid var(--gris2);border-radius:8px;font-family:inherit">${deptOpts.map(d=>`<option ${((d==='—'&&!dep)||d===dep)?'selected':''}>${esc(d)}</option>`).join('')}</select>
+   </div>
+   <div class="panel"><div style="overflow-x:auto"><table class="tbl-compact perm-tbl">
+     <thead><tr><th>Sección / Área</th>${PERM_ROLES.map(([_,l])=>`<th>${l}</th>`).join('')}</tr></thead>
+     <tbody>${rows}</tbody></table></div>
+     <p style="font-size:12px;color:var(--suave);margin-top:14px;line-height:1.6">✓ = visible · ✗ = oculto. <b>Propietario</b> y <b>Administrador</b> ven todo. El <b>Área</b> y el <b>Equipo</b> no cambian qué secciones aparecen en el menú; afectan al <b>contenido</b> dentro de cada sección (comunicados, horarios y eventos se filtran por área/departamento/equipo).</p>
+   </div>`;
 }
 
 /* utilidades */
