@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Amazinn Places · Portal interno</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;800;900&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
@@ -1558,6 +1559,45 @@ async function orgDropRoot(e){ e.preventDefault(); e.currentTarget.classList.rem
 async function orgDropAside(e){ e.preventDefault(); e.stopPropagation(); e.currentTarget.classList.remove('org-over'); const id=orgDragId; if(!id)return;
   const{error}=await sb.from('profiles').update({fuera_org:true,jefe_id:null}).eq('id',id); if(error){alert('No se pudo guardar: '+error.message);return;} orgDragId=null; pageOrganigrama(); }
 
+/* ---------------- IMPORTAR EXCEL (Dirección/Admin/Propietario) ---------------- */
+const IMPORT_COLS={ proveedores:['nombre','ruc','email','tel','cat','nota'], suministros:['tipo','referencia','titular','compania','propiedad'] };
+function importBtn(tabla){ if(!isDireccion()) return ''; return `<label class="btn ghost" style="cursor:pointer">📥 Importar Excel<input type="file" accept=".xlsx,.xls,.csv" style="display:none" onchange="importExcel('${tabla}',this)"></label><a href="#" style="font-size:12px;color:var(--acento)" onclick="plantillaExcel('${tabla}');return false">descargar plantilla</a>`; }
+function normKey(k){ return (k==null?'':''+k).trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,''); }
+function rowGet(map,...names){ for(const n of names){ const v=map[normKey(n)]; if(v!==undefined&&v!=='') return (''+v).trim(); } return ''; }
+function mapRow(tabla,r){
+  const map={}; Object.keys(r).forEach(k=>map[normKey(k)]=r[k]);
+  if(tabla==='proveedores'){
+    const nombre=rowGet(map,'nombre','proveedor','empresa'); if(!nombre) return null;
+    return { nombre, ruc:rowGet(map,'ruc'), email:rowGet(map,'email','correo'), tel:rowGet(map,'tel','telefono'), cat:rowGet(map,'cat','categoria'), nota:rowGet(map,'nota','notas','observaciones') };
+  }
+  const tipo=rowGet(map,'tipo'); const ref=rowGet(map,'referencia','ref','nis','idaan','suscriptor');
+  if(!tipo&&!ref) return null;
+  return { tipo:tipo||'otro', referencia:ref, titular:rowGet(map,'titular','a nombre de'), compania:rowGet(map,'compania','empresa','suministrador'), propiedad:rowGet(map,'propiedad','apartamento','casa','unidad') };
+}
+function plantillaExcel(tabla){
+  if(typeof XLSX==='undefined'){ alert('No se pudo cargar el lector de Excel. Revisa tu conexión.'); return; }
+  const cols=IMPORT_COLS[tabla]; const ws=XLSX.utils.aoa_to_sheet([cols]);
+  const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'Plantilla'); XLSX.writeFile(wb,'plantilla_'+tabla+'.xlsx');
+}
+async function importExcel(tabla,input){
+  const f=input.files[0]; input.value=''; if(!f) return;
+  if(!isDireccion()){ alert('Solo Dirección, Administrador y Propietario pueden importar.'); return; }
+  if(typeof XLSX==='undefined'){ alert('No se pudo cargar el lector de Excel. Revisa tu conexión e inténtalo de nuevo.'); return; }
+  try{
+    const buf=await f.arrayBuffer();
+    const wb=XLSX.read(buf,{type:'array'});
+    const ws=wb.Sheets[wb.SheetNames[0]];
+    const rows=XLSX.utils.sheet_to_json(ws,{defval:''});
+    if(!rows.length){ alert('El archivo no tiene filas de datos.'); return; }
+    const mapped=rows.map(r=>mapRow(tabla,r)).filter(Boolean);
+    if(!mapped.length){ alert('No se reconocieron las columnas. Descarga la plantilla y usa esos encabezados.'); return; }
+    if(!confirm('Se importarán '+mapped.length+' fila(s) a '+tabla+'. ¿Continuar?')) return;
+    const{error}=await sb.from(tabla).insert(mapped);
+    if(error){ alert('Error al importar: '+error.message); return; }
+    toast('✓ '+mapped.length+' registro(s) importados'); show(tabla);
+  }catch(e){ alert('No se pudo leer el Excel: '+(e&&e.message?e.message:e)); }
+}
+
 /* ---------------- PROVEEDORES ---------------- */
 let provFormOpen=false;
 async function pageProveedores(){
@@ -1572,7 +1612,7 @@ async function pageProveedores(){
     ${canEdit?`<td><button class="btn ghost" style="padding:4px 9px" onclick="delRow('proveedores',${p.id},'proveedores')">🗑️</button></td>`:''}</tr>`).join('');
   document.getElementById('main').innerHTML=`
     <div class="page-title">Proveedores</div><div class="page-sub">Directorio de proveedores${canEdit?' · puedes añadir':''}</div>
-    ${canEdit?`<div style="margin-bottom:14px"><button class="btn" onclick="provFormOpen=!provFormOpen;show('proveedores')">${provFormOpen?'✕ Cerrar':'➕ Nuevo proveedor'}</button></div>`:''}
+    ${canEdit?`<div style="margin-bottom:14px;display:flex;gap:8px;flex-wrap:wrap;align-items:center"><button class="btn" onclick="provFormOpen=!provFormOpen;show('proveedores')">${provFormOpen?'✕ Cerrar':'➕ Nuevo proveedor'}</button>${importBtn('proveedores')}</div>`:''}
     ${canEdit&&provFormOpen?`<div class="panel" style="max-width:680px"><form class="box" onsubmit="return createProv(event)" style="max-width:none">
       <div class="row"><div><label>Nombre</label><input id="pN" required></div><div><label>RUC</label><input id="pR"></div></div>
       <div class="row"><div><label>Email</label><input id="pE" type="email"></div><div><label>Teléfono</label><input id="pT"></div></div>
@@ -1603,7 +1643,7 @@ async function pageSuministros(){
   document.getElementById('main').innerHTML=`
     <div class="page-title">Suministros por activo</div><div class="page-sub">Referencias de los contratos de cada propiedad</div>
     <div class="tabs">${tabs.map(t=>`<button class="${supTab===t[0]?'on':''}" onclick="setSupTab('${t[0]}')">${t[1]}</button>`).join('')}</div>
-    ${canEdit?`<div style="margin-bottom:14px"><button class="btn ghost" onclick="supFormOpen=!supFormOpen;show('suministros')">${supFormOpen?'✕ Cerrar':'➕ Añadir registro'}</button></div>`:''}
+    ${canEdit?`<div style="margin-bottom:14px;display:flex;gap:8px;flex-wrap:wrap;align-items:center"><button class="btn ghost" onclick="supFormOpen=!supFormOpen;show('suministros')">${supFormOpen?'✕ Cerrar':'➕ Añadir registro'}</button>${importBtn('suministros')}</div>`:''}
     ${canEdit&&supFormOpen?`<div class="panel" style="max-width:560px"><form class="box" onsubmit="return createSup(event)" style="max-width:none">
       <label>${refLbl}</label><input id="sR">${conTitular?'<label>A nombre de</label><input id="sT">':''}
       <label>Compañía</label><input id="sC"><label>Propiedad</label><input id="sP">
