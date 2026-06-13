@@ -3160,7 +3160,7 @@ async function permGuardar(){
   const adds=[...permState].filter(x=>!permSaved.has(x));   // nuevos ocultos
   const dels=[...permSaved].filter(x=>!permState.has(x));   // vueltos a visible
   try{
-    if(adds.length){ const {error}=await sb.from('accesos').upsert(adds.map(id=>({dept,role,item_id:id,visible:false})),{onConflict:'dept,role,item_id'}); if(error) throw error; }
+    if(adds.length){ const {error}=await sb.from('accesos').upsert(adds.map(id=>({dept:dep,role,item_id:id,visible:false})),{onConflict:'dept,role,item_id'}); if(error) throw error; }
     for(const id of dels){ const {error}=await sb.from('accesos').delete().eq('dept',dep).eq('role',role).eq('item_id',id); if(error) throw error; }
   }catch(e){ alert('Error al guardar: '+(e.message||e)); return; }
   permSaved=new Set(permState);
