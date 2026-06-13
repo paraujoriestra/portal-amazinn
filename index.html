@@ -965,7 +965,7 @@ const NAV=[
   {id:'kpis',ic:'📊',t:'Tablero de KPIs', roles:['direccion','admin']},
   {id:'auditoria',ic:'🔒',t:'Auditoría', roles:['admin']},
   {grp:'Gestión', roles:['direccion','admin']},
-  {id:'permisos',ic:'🔐',t:'Permisos y accesos', roles:['direccion','admin']},
+  {id:'permisos',ic:'🔐',t:'Permisos y accesos', roles:['admin']},
   {id:'aprobaciones',ic:'✅',t:'Aprobaciones', roles:['direccion','admin']},
   {id:'registros',ic:'🆕',t:'Registros pendientes', roles:['admin']},
   {id:'admin',ic:'⚙️',t:'Administración', roles:['admin']},
@@ -3138,51 +3138,71 @@ function permPass(it,role,dept){
   return true;
 }
 function permItemVis(meta,it,role,dept){ return permPass(meta,role,dept) && permPass(it,role,dept); }
+let permArea='', permRole='';
+function permDeptos(){ // departamentos (filtrados por área si CAT.deptos tiene área)
+  if(CAT.deptos && CAT.deptos.length) return CAT.deptos.filter(d=>!permArea||d.area===permArea).map(d=>d.nombre);
+  return DEPTS;
+}
 async function pagePermisos(){
-  const canEdit=isAdmin();                 // admin o propietario pueden editar
-  const groups=permFullGroups();
-  const dep=permDept||'';
-  const deptOpts=['—',...DEPTS];
-  // overrides guardados para este departamento
+  const ROLES_SEL=[['empleado','Empleado'],['responsable','Responsable'],['direccion','Dirección'],['admin','Administrador']];
+  const areas=(CAT.areas&&CAT.areas.length)?CAT.areas:[]; const deptos=permDeptos();
+  // si el departamento elegido ya no está en el área, lo limpiamos
+  if(permDept && !deptos.includes(permDept)) permDept='';
+  const selectors=`<div class="panel" style="display:flex;gap:14px;flex-wrap:wrap;align-items:flex-end;margin-bottom:14px">
+    <div><label style="display:block;font-size:12px;font-weight:600;color:var(--suave);margin-bottom:4px">Área</label>
+      <select onchange="permArea=this.value;permDept='';show('permisos')" style="padding:8px 11px;border:1px solid var(--gris2);border-radius:8px;font-family:inherit;min-width:150px"><option value="">Todas</option>${areas.map(a=>`<option ${a===permArea?'selected':''}>${esc(a)}</option>`).join('')}</select></div>
+    <div><label style="display:block;font-size:12px;font-weight:600;color:var(--suave);margin-bottom:4px">Departamento</label>
+      <select onchange="permDept=this.value;show('permisos')" style="padding:8px 11px;border:1px solid var(--gris2);border-radius:8px;font-family:inherit;min-width:170px"><option value="">— elegir —</option>${deptos.map(d=>`<option ${d===permDept?'selected':''}>${esc(d)}</option>`).join('')}</select></div>
+    <div><label style="display:block;font-size:12px;font-weight:600;color:var(--suave);margin-bottom:4px">Rol</label>
+      <select onchange="permRole=this.value;show('permisos')" style="padding:8px 11px;border:1px solid var(--gris2);border-radius:8px;font-family:inherit;min-width:150px"><option value="">— elegir —</option>${ROLES_SEL.map(([v,l])=>`<option value="${v}" ${v===permRole?'selected':''}>${l}</option>`).join('')}</select></div>
+  </div>`;
+  const titulo=`<div class="page-title">Permisos y accesos</div><div class="page-sub">Elige <b>área, departamento y rol</b> y marca o desmarca qué secciones y áreas puede ver. Solo afecta a esa combinación. El <b>Propietario</b> siempre ve todo.</div>`;
+  if(!permDept || !permRole){
+    document.getElementById('main').innerHTML=titulo+selectors+`<div class="panel" style="color:var(--suave)">Selecciona un <b>departamento</b> y un <b>rol</b> para ver y configurar sus accesos.</div>`;
+    return;
+  }
+  const dep=permDept, role=permRole;
   const map={};
-  try{ const {data}=await sb.from('accesos').select('role,item_id,visible').eq('dept',dep);
-    (data||[]).forEach(r=>{ map[r.role+'|'+r.item_id]=r.visible; }); }
-  catch(e){ document.getElementById('main').innerHTML='<div class="page-title">Permisos y accesos</div><div class="panel">No se pudo cargar. ¿Ejecutaste <b>supabase_accesos.sql</b> en Supabase?<br><small style="color:var(--suave)">'+esc(e.message||e)+'</small></div>'; return; }
-  const denied=(role,id)=> map[role+'|'+id]===false;
-  const cellEdit=(meta,it,role)=>{
-    const def=permItemVis(meta,it,role,dep);
-    if(!def) return '<span class="perm-lock" title="No disponible para este rol">·</span>';   // no se puede conceder (regla de rol)
-    const eff=!denied(role,it.id);
-    if(canEdit && role!=='propietario'){
-      return `<input type="checkbox" class="perm-chk" ${eff?'checked':''} onchange="permToggle('${role}','${it.id}',this.checked)">`;
-    }
-    return eff?'<span class="perm-yes">✓</span>':'<span class="perm-no">✗</span>';
-  };
+  try{ const {data}=await sb.from('accesos').select('item_id,visible').eq('dept',dep).eq('role',role);
+    (data||[]).forEach(r=>{ map[r.item_id]=r.visible; }); }
+  catch(e){ document.getElementById('main').innerHTML=titulo+`<div class="panel">No se pudo cargar. ¿Ejecutaste <b>supabase_accesos.sql</b> en Supabase?<br><small style="color:var(--suave)">'+esc(e.message||e)+'</small></div>`; return; }
+  const denied=id=> map[id]===false;
+  const groups=permFullGroups();
   const rows=groups.map(g=>{
-    const secVis=PERM_ROLES.map(([r])=> g.items.some(it=> permItemVis(g.meta,it,r,dep) && !denied(r,it.id)));
-    const head=`<tr class="perm-sec"><td><b>${GRP_ICON[g.name]||''} ${esc(g.name)}</b></td>${secVis.map(v=>`<td>${v?'<span class="perm-yes">✓</span>':'<span class="perm-lock">·</span>'}</td>`).join('')}</tr>`;
-    const its=g.items.map(it=>`<tr><td class="perm-area">${it.ic?it.ic+' ':''}${esc(it.t)}</td>${PERM_ROLES.map(([r])=>`<td>${cellEdit(g.meta,it,r)}</td>`).join('')}</tr>`).join('');
+    const vis=g.items.filter(it=>permItemVis(g.meta,it,role,dep));         // áreas que ese rol puede tener
+    const allOn=vis.length>0 && vis.every(it=>!denied(it.id));
+    const secChk=vis.length? `<input type="checkbox" class="perm-chk" ${allOn?'checked':''} onchange="permToggleSection('${g.name.replace(/'/g,"\\'")}',this.checked)" title="Toda la sección">` : '<span class="perm-lock">·</span>';
+    const head=`<tr class="perm-sec"><td><b>${GRP_ICON[g.name]||''} ${esc(g.name)}</b></td><td>${secChk}</td></tr>`;
+    const its=g.items.map(it=>{
+      const def=permItemVis(g.meta,it,role,dep);
+      const ctrl=def? `<input type="checkbox" class="perm-chk" ${!denied(it.id)?'checked':''} onchange="permToggle('${it.id}',this.checked)">` : '<span class="perm-lock" title="No disponible para este rol">·</span>';
+      return `<tr><td class="perm-area">${it.ic?it.ic+' ':''}${esc(it.t)}</td><td>${ctrl}</td></tr>`;
+    }).join('');
     return head+its;
   }).join('');
-  document.getElementById('main').innerHTML=`<div class="page-title">Permisos y accesos</div>
-   <div class="page-sub">${canEdit?'Marca o desmarca qué secciones y áreas ve cada rol en el departamento seleccionado. Los cambios se aplican al instante.':'Qué secciones y áreas del menú ve cada rol.'}</div>
-   <div class="panel" style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin-bottom:14px">
-     <label style="font-weight:600;font-size:13px">🏢 Departamento:</label>
-     <select onchange="permDept=(this.value==='—'?'':this.value);show('permisos')" style="padding:8px 11px;border:1px solid var(--gris2);border-radius:8px;font-family:inherit">${deptOpts.map(d=>`<option ${((d==='—'&&!dep)||d===dep)?'selected':''}>${esc(d)}</option>`).join('')}</select>
-     <span style="font-size:12px;color:var(--suave)">La configuración es por <b>departamento + rol</b>.</span>
-   </div>
-   <div class="panel"><div style="overflow-x:auto"><table class="tbl-compact perm-tbl">
-     <thead><tr><th>Sección / Área</th>${PERM_ROLES.map(([_,l])=>`<th>${l}</th>`).join('')}</tr></thead>
-     <tbody>${rows}</tbody></table></div>
-     <p style="font-size:12px;color:var(--suave);margin-top:14px;line-height:1.6">${canEdit?'Casilla marcada = visible · desmarcada = oculto. ':''}“·” = no disponible para ese rol (no se puede conceder desde aquí). El <b>Propietario</b> siempre ve todo. El <b>Área</b> y el <b>Equipo</b> no cambian qué secciones aparecen en el menú; afectan al <b>contenido</b> dentro de cada sección.</p>
+  const roleLbl=(ROLES_SEL.find(r=>r[0]===role)||[role,role])[1];
+  document.getElementById('main').innerHTML=titulo+selectors+
+   `<div class="panel"><h2 style="margin-top:0">Accesos de: <span style="color:var(--azul)">${esc(permArea||'Todas las áreas')} · ${esc(dep)} · ${esc(roleLbl)}</span></h2>
+     <div style="overflow-x:auto"><table class="tbl-compact perm-tbl perm-single">
+     <thead><tr><th>Sección / Área</th><th>Visible</th></tr></thead><tbody>${rows}</tbody></table></div>
+     <p style="font-size:12px;color:var(--suave);margin-top:14px;line-height:1.6">Casilla en la fila de una <b>sección</b> = activa/oculta toda la sección. “·” = no disponible para ese rol. Recuerda: el usuario afectado verá el cambio al volver a entrar.</p>
    </div>`;
 }
-async function permToggle(role,itemId,allow){
-  const dep=permDept||'';
+async function permToggle(itemId,allow){
+  const dep=permDept, role=permRole; if(!dep||!role) return;
   if(allow){ const {error}=await sb.from('accesos').delete().eq('dept',dep).eq('role',role).eq('item_id',itemId); if(error){alert('Error: '+error.message);} }
   else { const {error}=await sb.from('accesos').upsert({dept,role,item_id:itemId,visible:false},{onConflict:'dept,role,item_id'}); if(error){alert('Error: '+error.message);} }
-  await loadAccesos(); buildNav();          // refleja el cambio en mi propio menú si me afecta
-  show('permisos');
+  await loadAccesos(); buildNav(); show('permisos');
+}
+async function permToggleSection(name,allow){
+  const dep=permDept, role=permRole; if(!dep||!role) return;
+  const g=permFullGroups().find(x=>x.name===name); if(!g) return;
+  const its=g.items.filter(it=>permItemVis(g.meta,it,role,dep));
+  for(const it of its){
+    if(allow){ await sb.from('accesos').delete().eq('dept',dep).eq('role',role).eq('item_id',it.id); }
+    else { await sb.from('accesos').upsert({dept,role,item_id:it.id,visible:false},{onConflict:'dept,role,item_id'}); }
+  }
+  await loadAccesos(); buildNav(); show('permisos');
 }
 
 /* utilidades */
