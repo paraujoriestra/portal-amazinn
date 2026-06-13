@@ -319,6 +319,17 @@
   .org-tree{overflow:auto;padding:6px 0 20px}
   .org-zoombar{display:flex;gap:6px;align-items:center;margin-bottom:12px}
   .org-zoombar .btn{padding:6px 12px;font-size:13px}
+  /* Co-líderes */
+  .org-nodew{position:relative;display:inline-block}
+  .org-co-add{position:absolute;top:-9px;right:-9px;width:22px;height:22px;border-radius:50%;border:1px solid var(--gris2);background:#fff;color:var(--azul);font-size:14px;line-height:1;cursor:pointer;opacity:0;transition:.15s;box-shadow:var(--sombra);z-index:4}
+  .org-nodew:hover .org-co-add{opacity:1}
+  .org-couple{display:inline-flex;gap:12px;align-items:flex-start;padding:9px;border:1px dashed var(--azul);border-radius:14px;background:rgba(31,78,121,.05)}
+  .org-co-wrap{position:relative;display:inline-block}
+  .org-co-x{position:absolute;top:-9px;right:-9px;width:20px;height:20px;border-radius:50%;border:1px solid #e3b7b1;background:#fff;color:#c0392b;font-size:11px;line-height:1;cursor:pointer;opacity:0;transition:.15s;z-index:4}
+  .org-co-wrap:hover .org-co-x{opacity:1}
+  .oco-ov{display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:80;align-items:center;justify-content:center}
+  .oco-box{background:#fff;border-radius:14px;padding:22px;width:360px;max-width:92vw;box-shadow:0 20px 50px rgba(0,0,0,.3)}
+  .oco-box h3{font-size:17px}
   .org-tree ul{position:relative;padding-top:22px;display:flex;justify-content:center;gap:6px;margin:0;list-style:none}
   .org-tree > ul{padding-top:0}
   .org-tree li{list-style:none;text-align:center;position:relative;padding:22px 8px 0}
@@ -1825,7 +1836,7 @@ const ORG_AREAS={'Dirección':'#6b7280','Comercial':'#1F4E79','Operaciones':'#d3
 const ORG_PALETTE=['#2980b9','#27ae60','#e67e22','#8e44ad','#16a085','#c0392b','#d35400','#34495e','#1F4E79'];
 function areaColor(a){ if(!a) return '#6b7280'; if(ORG_AREAS[a]) return ORG_AREAS[a]; let h=0; for(let i=0;i<a.length;i++)h=(h*31+a.charCodeAt(i))>>>0; return ORG_PALETTE[h%ORG_PALETTE.length]; }
 async function pageOrganigrama(){
-  const{data}=await sb.from('profiles').select('id,nombre,dept,area,posicion,role,color,foto,jefe_id,fuera_org,org_titulo,last_seen').eq('estado','aprobado');
+  const{data}=await sb.from('profiles').select('id,nombre,dept,area,posicion,role,color,foto,jefe_id,fuera_org,org_titulo,last_seen,colider_id').eq('estado','aprobado');
   ORG_PEOPLE=data||[];
   renderOrg();
 }
@@ -1841,7 +1852,13 @@ function renderOrg(){
   const enOrg=ppl.filter(p=>!p.fuera_org);
   const ids=new Set(enOrg.map(p=>p.id));
   const children={};
-  enOrg.forEach(p=>{const k=(p.jefe_id&&ids.has(p.jefe_id))?p.jefe_id:'__root__';(children[k]=children[k]||[]).push(p);});
+  const primaryId=id=>{const x=orgById(id); return (x&&x.colider_id&&ids.has(x.colider_id))?x.colider_id:id;};
+  const coOf=id=>enOrg.filter(p=>p.colider_id===id);
+  enOrg.forEach(p=>{
+    if(p.colider_id && ids.has(p.colider_id)) return;   // co-líder secundario: se dibuja junto a su pareja
+    const k=(p.jefe_id&&ids.has(p.jefe_id))?primaryId(p.jefe_id):'__root__';
+    (children[k]=children[k]||[]).push(p);
+  });
   const sub=p=>esc(p.org_titulo||p.posicion||roleNice(p.role));
   const tagTxt=p=>{const a=p.area||'',d=p.dept||'';return d?(a?a+' · '+d:d):a;};
   const card=(p,extra)=>{const col=areaColor(p.area);const dep=p.dept||p.area||'';
@@ -1850,7 +1867,13 @@ function renderOrg(){
   function node(p){
     const kids=(children[p.id]||[]);
     const drop=canEdit?`ondragover="orgOver(event)" ondragleave="orgLeave(event)" ondrop="orgDrop(event,'${p.id}')"`:'';
-    return `<li>${card(p,drop)}${kids.length?`<ul>${kids.map(node).join('')}</ul>`:''}</li>`;
+    const addBtn=canEdit?`<button class="org-co-add" onclick="orgAddColider('${p.id}')" title="Añadir co-líder (mismo nivel, mismo equipo)">＋</button>`:'';
+    const pcard=`<div class="org-nodew">${card(p,drop)}${addBtn}</div>`;
+    const cos=coOf(p.id);
+    const head=cos.length
+      ? `<div class="org-couple">${pcard}${cos.map(c=>`<div class="org-co-wrap">${card(c)}${canEdit?`<button class="org-co-x" onclick="orgUnColider('${c.id}')" title="Quitar co-líder">✕</button>`:''}</div>`).join('')}</div>`
+      : pcard;
+    return `<li>${head}${kids.length?`<ul>${kids.map(node).join('')}</ul>`:''}</li>`;
   }
   const roots=(children['__root__']||[]);
   const rootZone=canEdit?`<div class="org-rootzone" ondragover="orgOver(event)" ondragleave="orgLeave(event)" ondrop="orgDropRoot(event)">⬆ Suelta aquí para dejar a alguien en el nivel superior (sin jefe)</div>`:'';
@@ -1890,7 +1913,16 @@ window.addEventListener('resize',()=>{ if(curPage==='organigrama') orgFit(); });
 function orgDragStart(e,id){ orgDragId=id; e.dataTransfer.effectAllowed='move'; e.dataTransfer.setData('text/plain',id); }
 function orgOver(e){ e.preventDefault(); e.dataTransfer.dropEffect='move'; e.currentTarget.classList.add('org-over'); }
 function orgLeave(e){ e.currentTarget.classList.remove('org-over'); }
-async function orgSetJefe(id,jefe){ const{error}=await sb.from('profiles').update({jefe_id:jefe,fuera_org:false}).eq('id',id); if(error){alert('No se pudo guardar: '+error.message);return;} orgDragId=null; pageOrganigrama(); }
+async function orgSetJefe(id,jefe){ const{error}=await sb.from('profiles').update({jefe_id:jefe,fuera_org:false,colider_id:null}).eq('id',id); if(error){alert('No se pudo guardar: '+error.message);return;} orgDragId=null; pageOrganigrama(); }
+function orgAddColider(pid){
+  const cands=ORG_PEOPLE.filter(p=>p.id!==pid && p.colider_id!==pid && p.role!=='propietario');
+  let ov=document.getElementById('orgCoOverlay'); if(!ov){ ov=document.createElement('div'); ov.id='orgCoOverlay'; ov.className='oco-ov'; ov.onclick=function(e){ if(e.target===ov) orgCoClose(); }; document.body.appendChild(ov); }
+  ov.innerHTML=`<div class="oco-box"><h3 style="margin:0 0 8px">Añadir co-líder</h3><p style="font-size:13px;color:var(--suave);margin:0 0 12px">Se colocará al mismo nivel y compartirá el equipo que cuelga debajo.</p><select id="ocoSel" style="width:100%;padding:9px 11px;border:1px solid var(--gris2);border-radius:8px;font-family:inherit;margin-bottom:14px">${cands.map(c=>`<option value="${c.id}">${esc(c.nombre)} · ${esc(c.dept||c.area||'')}</option>`).join('')||'<option value="">No hay candidatos</option>'}</select><div style="display:flex;gap:8px;justify-content:flex-end"><button class="btn ghost" onclick="orgCoClose()">Cancelar</button><button class="btn" onclick="orgCoConfirm('${pid}')">Emparejar</button></div></div>`;
+  ov.style.display='flex';
+}
+function orgCoClose(){ const ov=document.getElementById('orgCoOverlay'); if(ov) ov.style.display='none'; }
+async function orgCoConfirm(pid){ const sel=document.getElementById('ocoSel'); const xid=sel&&sel.value; orgCoClose(); if(!xid)return; const{error}=await sb.from('profiles').update({colider_id:pid,jefe_id:null,fuera_org:false}).eq('id',xid); if(error){alert('No se pudo: '+error.message);return;} pageOrganigrama(); }
+async function orgUnColider(xid){ const{error}=await sb.from('profiles').update({colider_id:null}).eq('id',xid); if(error){alert('No se pudo: '+error.message);return;} pageOrganigrama(); }
 async function orgDrop(e,targetId){
   e.preventDefault(); e.stopPropagation(); e.currentTarget.classList.remove('org-over');
   const id=orgDragId; if(!id||id===targetId) return;
@@ -1899,7 +1931,7 @@ async function orgDrop(e,targetId){
 }
 async function orgDropRoot(e){ e.preventDefault(); e.currentTarget.classList.remove('org-over'); const id=orgDragId; if(!id)return; await orgSetJefe(id,null); }
 async function orgDropAside(e){ e.preventDefault(); e.stopPropagation(); e.currentTarget.classList.remove('org-over'); const id=orgDragId; if(!id)return;
-  const{error}=await sb.from('profiles').update({fuera_org:true,jefe_id:null}).eq('id',id); if(error){alert('No se pudo guardar: '+error.message);return;} orgDragId=null; pageOrganigrama(); }
+  const{error}=await sb.from('profiles').update({fuera_org:true,jefe_id:null,colider_id:null}).eq('id',id); if(error){alert('No se pudo guardar: '+error.message);return;} orgDragId=null; pageOrganigrama(); }
 
 /* ---------------- IMPORTAR EXCEL (Dirección/Admin/Propietario) ---------------- */
 const IMPORT_COLS={ proveedores:['Nombre proveedor','Tipología','Concepto','RUC','Email','Teléfono','Banco','Tipo de cuenta','Nº de cuenta'], propietarios:['Nombre propietario','Propiedad','Concepto','Sociedad','RUC','Email','Teléfono','Banco','Tipo de cuenta','Nº de cuenta'], suministros:['tipo','referencia','medidor','titular','compania','propiedad','nota'] };
@@ -2462,20 +2494,14 @@ function regFoto(id){
 let userEditId=null, userFormOpen=false;
 async function pageAdmin(){
   const{data}=await sb.from('profiles').select('*').order('dept');
-  const us=data||[];
+  const us=data||[]; ADMIN_US=us;
   const rl=r=>roleNice(r);
   const rows=us.map(u=>{
     const esOwner=u.role==='propietario';
     const badge=esOwner?'b-owner':u.role==='admin'?'b-red':u.role==='direccion'?'b-blue':u.role==='responsable'?'b-amber':'b-grey';
-    let accion;
-    if(esOwner && u.id!==ME.id){
-      accion='<span style="font-size:12px;color:var(--suave)">🔒 Protegido</span>';
-    } else {
-      accion=`<button class="btn ghost" style="padding:4px 9px" onclick='userEdit(${JSON.stringify(u).replace(/'/g,"&#39;")})'>✏️ Editar</button>`;
-      if(isOwner() && u.id!==ME.id && !esOwner){
-        accion+=` <button class="btn ghost" style="padding:4px 9px;color:#c0392b;border-color:#e3b7b1" onclick="deleteUser('${u.id}','${(u.nombre||'').replace(/'/g,"\\'")}')" title="Eliminar usuario">🗑</button>`;
-      }
-    }
+    const accion=(esOwner && u.id!==ME.id)
+      ? '<span style="font-size:12px;color:var(--suave)">🔒 Protegido</span>'
+      : `<button class="kebab" onclick="adminRowMenu(event,'${u.id}')" title="Opciones">⋮</button>`;
     return `<tr><td>${av(u.nombre,u.color,30,u.foto)}</td><td><b>${esc(u.nombre||'')}</b>${u.id===ME.id?' <span class="badge b-grey">tú</span>':''}${esOwner?' 👑':''}<br><small style="color:var(--suave)">${esc(u.email||'')}</small></td>
     <td>${esc(u.dept||'—')}${u.area?`<br><small style="color:var(--suave)">${esc(u.area)}</small>`:''}${u.equipo?`<br><span class="badge b-grey" style="font-size:10px">👥 ${esc(u.equipo)}</span>`:''}</td>
     <td>${esc(u.posicion||'—')}</td><td><span class="badge ${badge}">${esc(rl(u.role))}</span></td><td>${u.vac||0}</td>
@@ -2485,10 +2511,22 @@ async function pageAdmin(){
     ${userFormOpen?userForm():''}
     <div class="panel"><table><thead><tr><th>Foto</th><th>Nombre / email</th><th>Departamento / área</th><th>Posición</th><th>Rol</th><th>Vac.</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`;
 }
-let userDraft={};
+let userDraft={}, ADMIN_US=[];
 function userEdit(u){userEditId=u.id;userDraft=u;userFormOpen=true;show('admin');}
-async function deleteUser(id,nombre){
+function userEditById(id){ const u=(ADMIN_US||[]).find(x=>x.id===id); if(u) userEdit(u); }
+function adminRowMenu(e,id){ e.stopPropagation();
+  let m=document.getElementById('rowMenuPop'); if(!m){ m=document.createElement('div'); m.id='rowMenuPop'; m.className='rowmenu-pop'; document.body.appendChild(m); }
+  const u=(ADMIN_US||[]).find(x=>x.id===id)||{};
+  let html=`<button onclick="closeRowMenu();userEditById('${id}')">✏️ Editar</button>`;
+  if(isOwner() && id!==ME.id && u.role!=='propietario') html+=`<button onclick="closeRowMenu();deleteUser('${id}')">🗑️ Eliminar</button>`;
+  m.innerHTML=html;
+  const r=e.currentTarget.getBoundingClientRect(); m.style.display='flex';
+  m.style.top=(r.bottom+window.scrollY+4)+'px'; m.style.left=(Math.max(8,Math.min(r.left,window.innerWidth-168))+window.scrollX)+'px';
+  setTimeout(()=>document.addEventListener('click',closeRowMenu),0);
+}
+async function deleteUser(id){
   if(!isOwner()){ alert('Solo el Propietario puede eliminar usuarios.'); return; }
+  const u=(ADMIN_US||[]).find(x=>x.id===id)||{}; const nombre=u.nombre||'este usuario';
   if(!confirm(`¿Eliminar a ${nombre} de forma permanente?\n\nSe borrará su cuenta de acceso y su perfil. No podrá volver a entrar. Esta acción no se puede deshacer.`)) return;
   const { error } = await sb.rpc('eliminar_usuario',{ target:id });
   if(error){ alert('No se pudo eliminar: '+error.message); return; }
