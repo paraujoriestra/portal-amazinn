@@ -324,7 +324,9 @@
   .org-nodew{position:relative;display:inline-block}
   .org-co-add{position:absolute;top:-9px;right:-9px;width:22px;height:22px;border-radius:50%;border:1px solid var(--gris2);background:#fff;color:var(--azul);font-size:14px;line-height:1;cursor:pointer;opacity:0;transition:.15s;box-shadow:var(--sombra);z-index:4}
   .org-nodew:hover .org-co-add{opacity:1}
-  .org-couple{display:inline-flex;gap:12px;align-items:flex-start;padding:9px;border:1px dashed var(--azul);border-radius:14px;background:rgba(31,78,121,.05)}
+  .org-couple{display:inline-flex;gap:14px;align-items:flex-start;padding:9px;border:1px dashed var(--azul);border-radius:14px;background:rgba(31,78,121,.05)}
+  .org-coltree{display:inline-flex;flex-direction:column;align-items:center}
+  .org-coltree>ul{padding-top:18px}
   .org-co-wrap{position:relative;display:inline-block}
   .org-co-x{position:absolute;top:-9px;right:-9px;width:20px;height:20px;border-radius:50%;border:1px solid #e3b7b1;background:#fff;color:#c0392b;font-size:11px;line-height:1;cursor:pointer;opacity:0;transition:.15s;z-index:4}
   .org-co-wrap:hover .org-co-x{opacity:1}
@@ -403,7 +405,7 @@
   .oa-hint{font-size:11px;color:var(--suave);margin-top:8px;line-height:1.4}
   @media(max-width:760px){.org-top{flex-direction:column}.org-aside{width:100%;box-sizing:border-box}}
   /* Fuera del organigrama · tira pequeña arriba */
-  .org-fuera{display:flex;align-items:center;flex-wrap:wrap;gap:8px;padding:9px 13px;border:1px dashed var(--gris2);border-radius:12px;background:var(--gris);margin-bottom:16px}
+  .org-fuera{display:flex;align-items:center;flex-wrap:wrap;gap:8px;padding:9px 13px;border:1px dashed var(--gris2);border-radius:12px;background:var(--gris);margin:18px 0 6px}
   .org-fuera.org-over{outline:2px dashed var(--acento);background:#fff}
   .of-title{font-weight:700;color:var(--suave);font-size:10.5px;text-transform:uppercase;letter-spacing:.6px;margin-right:4px}
   .of-hint{color:var(--suave);font-size:11px;margin-left:auto}
@@ -1854,11 +1856,10 @@ function renderOrg(){
   const enOrg=ppl.filter(p=>!p.fuera_org);
   const ids=new Set(enOrg.map(p=>p.id));
   const children={};
-  const primaryId=id=>{const x=orgById(id); return (x&&x.colider_id&&ids.has(x.colider_id))?x.colider_id:id;};
   const coOf=id=>enOrg.filter(p=>p.colider_id===id);
   enOrg.forEach(p=>{
     if(p.colider_id && ids.has(p.colider_id)) return;   // co-líder secundario: se dibuja junto a su pareja
-    const k=(p.jefe_id&&ids.has(p.jefe_id))?primaryId(p.jefe_id):'__root__';
+    const k=(p.jefe_id&&ids.has(p.jefe_id))?p.jefe_id:'__root__';   // hijos cuelgan de su jefe REAL
     (children[k]=children[k]||[]).push(p);
   });
   const sub=p=>esc(p.org_titulo||p.posicion||roleNice(p.role));
@@ -1870,15 +1871,23 @@ function renderOrg(){
     return `<div class="org-node${canEdit?' drag':''}" data-id="${p.id}" style="border-top:4px solid ${col};background:${bg}${ring}" ${canEdit?`draggable="true" ondragstart="orgDragStart(event,'${p.id}')"`:''} ${extra||''}>
       ${avP(p.nombre,p.color,34,p.foto,p.last_seen)}<div class="on-info"><b>${esc(p.nombre||'—')}</b><small>${sub(p)}</small>${dep?`<span class="onode-tag" style="background:${col};color:#fff">${esc(dep)}</span>`:''}${p.org_equipo?`<span class="onode-team" style="background:${tc}">${esc(p.org_equipo)}</span>`:''}</div></div>`;};
   function node(p){
-    const kids=(children[p.id]||[]);
-    const drop=canEdit?`ondragover="orgOver(event)" ondragleave="orgLeave(event)" ondrop="orgDrop(event,'${p.id}')"`:'';
-    const addBtn=canEdit?`<button class="org-co-add" onclick="orgAddColider('${p.id}')" title="Añadir co-líder (mismo nivel, mismo equipo)">＋</button>`:'';
-    const pcard=`<div class="org-nodew">${card(p,drop)}${addBtn}</div>`;
     const cos=coOf(p.id);
-    const head=cos.length
-      ? `<div class="org-couple">${pcard}${cos.map(c=>`<div class="org-co-wrap">${card(c)}${canEdit?`<button class="org-co-x" onclick="orgUnColider('${c.id}')" title="Quitar co-líder">✕</button>`:''}</div>`).join('')}</div>`
-      : pcard;
-    return `<li>${head}${kids.length?`<ul>${kids.map(node).join('')}</ul>`:''}</li>`;
+    const addBtn=canEdit?`<button class="org-co-add" onclick="orgAddColider('${p.id}')" title="Añadir co-líder al mismo nivel">＋</button>`:'';
+    if(!cos.length){
+      const kids=children[p.id]||[];
+      const drop=canEdit?`ondragover="orgOver(event)" ondragleave="orgLeave(event)" ondrop="orgDrop(event,'${p.id}')"`:'';
+      const pcard=`<div class="org-nodew">${card(p,drop)}${addBtn}</div>`;
+      return `<li>${pcard}${kids.length?`<ul>${kids.map(node).join('')}</ul>`:''}</li>`;
+    }
+    const branch=(m,primary)=>{
+      const md=canEdit?`ondragover="orgOver(event)" ondragleave="orgLeave(event)" ondrop="orgDrop(event,'${m.id}')"`:'';
+      const mk=children[m.id]||[];
+      const top=primary
+        ? `<div class="org-nodew">${card(m,md)}${addBtn}</div>`
+        : `<div class="org-co-wrap">${card(m,md)}${canEdit?`<button class="org-co-x" onclick="orgUnColider('${m.id}')" title="Quitar co-líder">✕</button>`:''}</div>`;
+      return `<div class="org-coltree">${top}${mk.length?`<ul>${mk.map(node).join('')}</ul>`:''}</div>`;
+    };
+    return `<li><div class="org-couple">${branch(p,true)}${cos.map(c=>branch(c,false)).join('')}</div></li>`;
   }
   const roots=(children['__root__']||[]);
   const rootZone=canEdit?`<div class="org-rootzone" ondragover="orgOver(event)" ondragleave="orgLeave(event)" ondrop="orgDropRoot(event)">⬆ Suelta aquí para dejar a alguien en el nivel superior (sin jefe)</div>`:'';
@@ -1894,9 +1903,9 @@ function renderOrg(){
   document.getElementById('main').innerHTML=`<div class="page-title">Organigrama</div>
     <div class="page-sub">${canEdit?'Arrastra a cada persona sobre su responsable para reorganizar. El color y la etiqueta indican su área y departamento.':'Estructura del equipo · el color y la etiqueta indican el área y el departamento'}</div>
     ${legend}
-    ${fuera}
     <div class="org-zoombar"><button class="btn ghost" onclick="orgZoomBy(-0.1)" title="Reducir">− </button><button class="btn ghost" onclick="orgZoomFit()">Ajustar</button><button class="btn ghost" onclick="orgZoomBy(0.1)" title="Ampliar">＋</button><span id="orgZoomPct" style="font-size:12px;color:var(--suave)"></span>${canEdit?'<button class="btn ghost" style="margin-left:auto" onclick="orgTeamsOpen()">👥 Equipos visuales</button>':''}</div>
-    <div class="org-main">${rootZone}<div class="org-tree">${roots.length?`<div class="org-scale"><ul>${roots.map(node).join('')}</ul></div>`:'<div class="panel">Aún no hay personas en el organigrama.</div>'}</div></div>`;
+    <div class="org-main">${rootZone}<div class="org-tree">${roots.length?`<div class="org-scale"><ul>${roots.map(node).join('')}</ul></div>`:'<div class="panel">Aún no hay personas en el organigrama.</div>'}</div></div>
+    ${fuera}`;
   requestAnimationFrame(orgFit); setTimeout(orgFit,80);
 }
 function orgShrink(el,base,min){ if(!el)return; el.style.fontSize=base+'px'; let fs=base; let guard=40; while(el.scrollWidth>el.clientWidth+0.5 && fs>min && guard-->0){ fs-=0.5; el.style.fontSize=fs+'px'; } }
