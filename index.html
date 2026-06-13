@@ -625,6 +625,20 @@
   .chat-win .ch{background:var(--azul);color:#fff;padding:13px 16px;font-weight:700;display:flex;align-items:center;gap:9px;font-size:15px}
   .chat-win .ch small{font-weight:400;color:#cfe0f2;font-size:11px;display:block}
   .chat-win .ch .x{margin-left:auto;cursor:pointer;font-size:20px}
+  /* Badge de mensajes sin leer sobre el botón flotante */
+  .fab-badge{position:absolute;top:-3px;right:-3px;background:var(--rojo,#d4564b);color:#fff;font-size:11px;font-weight:700;min-width:20px;height:20px;border-radius:11px;display:flex;align-items:center;justify-content:center;padding:0 5px;border:2px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.25)}
+  .chat-fab{position:relative}
+  /* Widget de mensajería (flotante) */
+  .msgw-body{flex:1;min-height:0;display:flex;flex-direction:column;overflow:hidden;background:#fff}
+  #msgwList .mc{cursor:pointer}
+  .msgw-conv-h{display:flex;align-items:center;gap:9px;padding:11px 14px;border-bottom:1px solid var(--gris2)}
+  .msgw-conv-h b{font-size:14px}.msgw-conv-h small{margin-left:auto;font-size:11px}
+  .msgw-back{cursor:pointer;font-size:20px;color:var(--azul);line-height:1}
+  .msgw-thread{flex:1;min-height:0;overflow-y:auto;padding:12px 14px;background:var(--gris);display:flex;flex-direction:column;gap:8px}
+  .msgw-in{display:flex;gap:8px;padding:10px;border-top:1px solid var(--gris2);align-items:center}
+  .msgw-in input{flex:1;padding:9px 12px;border:1px solid var(--gris2);border-radius:20px;font-family:inherit;font-size:13.5px;outline:none}
+  .msgw-in input:focus{border-color:var(--azul)}
+  .msgw-in button{border:none;background:var(--azul);color:#fff;width:38px;height:38px;border-radius:50%;cursor:pointer;font-size:15px}
   .chat-body{flex:1;overflow-y:auto;padding:14px;background:var(--gris);display:flex;flex-direction:column;gap:10px}
   .bub{max-width:86%;padding:10px 13px;border-radius:13px;font-size:13.5px;line-height:1.5}
   .bub.bot{background:#fff;border:1px solid var(--gris2);align-self:flex-start;border-bottom-left-radius:3px}
@@ -815,7 +829,7 @@
   </div>
 </div>
 
-<button id="chatFab" class="chat-fab" onclick="toggleChat()">💬</button>
+<button id="chatFab" class="chat-fab" onclick="toggleChat()">💬<span id="fabBadge" class="fab-badge" style="display:none">0</span></button>
 <div id="chatWin" class="chat-win"></div>
 
 <script>
@@ -1175,7 +1189,7 @@ function renderNavBadges(){
     if(sum>0){ if(!b){ b=document.createElement('span'); b.className='nav-badge'; nameEl.appendChild(b); } b.textContent=sum>99?'99+':sum; } else if(b) b.remove();
     head.classList.toggle('has-badge', sum>0); });
 }
-async function loadMsgUnread(){ const{count}=await sb.from('mensajes').select('id',{count:'exact',head:true}).eq('para_id',ME.id).eq('leido',false); setBadge('mensajeria',count||0); }
+async function loadMsgUnread(){ const{count}=await sb.from('mensajes').select('id',{count:'exact',head:true}).eq('para_id',ME.id).eq('leido',false); const n=count||0; setBadge('mensajeria',n); const fb=document.getElementById('fabBadge'); if(fb){ fb.textContent=n>99?'99+':n; fb.style.display=n>0?'flex':'none'; } if(msgwOpen && !msgwWith) msgwRenderList((document.getElementById('msgwSearch')||{}).value||''); }
 async function loadPendingCount(){ if(!isAdmin()){ setBadge('registros',0); return; } const{count}=await sb.from('profiles').select('id',{count:'exact',head:true}).eq('estado','pendiente'); setBadge('registros',count||0); }
 async function loadComUnread(){
   try{ const{data:coms}=await sb.from('comunicados').select('id,dirigido,area,equipo');
@@ -1561,7 +1575,8 @@ function horToggleTurno(id,on){ id=Number(id); if(on){ if(!horW.turnos.includes(
 function horSetHora(id,which,v){ horW.horas=horW.horas||{}; horW.horas[id]=horW.horas[id]||{ini:'',fin:''}; horW.horas[id][which]=v; }
 function horHora(id){ const h=(horW.horas||{})[id]; if(h) return h; const t=turnoTipo(id); return {ini:(t&&t.hora_ini)||'',fin:(t&&t.hora_fin)||''}; }
 async function horGenerar(){ if(!horW.desde||!horW.hasta){alert('Elige las fechas (desde y hasta).');return;} if(horW.hasta<horW.desde){alert('La fecha final no puede ser anterior a la inicial.');return;} if(!horW.turnos.length){alert('Selecciona al menos un tipo de turno.');return;}
-  horW.gen=true; const b=document.getElementById('horGridBox'); if(!b){ show('horarios'); return; } b.innerHTML='<div class="panel" style="color:var(--suave)">Generando cuadrícula…</div>'; b.innerHTML=await horGrid(); }
+  horW.gen=true; const steps=document.getElementById('horWizardSteps'); if(steps) steps.style.display='none';
+  const b=document.getElementById('horGridBox'); if(!b){ show('horarios'); return; } b.innerHTML='<div class="panel" style="color:var(--suave)">Generando cuadrícula…</div>'; b.innerHTML=await horGrid(); window.scrollTo({top:0,behavior:'smooth'}); }
 function horDays(a,b){ const out=[]; let d=new Date(a+'T00:00:00'), end=new Date(b+'T00:00:00'); if(isNaN(d)||isNaN(end)||end<d) return out; let g=0; while(d<=end && g++<92){ out.push(new Date(d)); d.setDate(d.getDate()+1); } return out; }
 function horAddTurnoForm(){ const box=document.getElementById('horNewTurno'); if(!box) return; box.innerHTML=box.innerHTML?'':`<div style="background:var(--gris);border-radius:9px;padding:12px;margin-top:10px;display:grid;gap:8px;max-width:420px">
     <input id="ntN" placeholder="Nombre del turno (ej: Madrugada)"><div class="row"><input id="ntI" placeholder="Hora inicio (09:00)"><input id="ntF" placeholder="Hora fin (17:00)"></div>
@@ -1597,12 +1612,12 @@ async function horCrear(){
     <div style="text-align:right;margin-top:2px"><button class="btn" onclick="horGenerar()">Generar cuadrícula →</button></div>
   </div>`;
   const grid = horW.gen ? await horGrid() : '';
-  return form+`<div id="horGridBox">${grid}</div>`;
+  return `<div id="horWizardSteps"${horW.gen?' style="display:none"':''}>${form}</div><div id="horGridBox">${grid}</div>`;
 }
 function horDeptOptionsHTML(){ const dep=CAT.deptos.filter(d=>!horW.area||d.area===horW.area);
   return `<option value="">Todos${horW.area?' los de '+esc(horW.area):''}</option>${dep.map(d=>`<option ${horW.dept===d.nombre?'selected':''}>${esc(d.nombre)}</option>`).join('')}`; }
 function horAreaChange(v){ horW.area=v; horW.dept=''; const ds=document.getElementById('horDeptSel'); if(ds) ds.innerHTML=horDeptOptionsHTML(); horClearGrid(); }
-function horClearGrid(){ horW.gen=false; const b=document.getElementById('horGridBox'); if(b) b.innerHTML=''; }
+function horClearGrid(){ horW.gen=false; const steps=document.getElementById('horWizardSteps'); if(steps) steps.style.display=''; const b=document.getElementById('horGridBox'); if(b) b.innerHTML=''; }
 async function horGrid(){
   let q=sb.from('profiles').select('id,nombre,dept,area,equipo').eq('estado','aprobado');
   if(horW.area) q=q.eq('area',horW.area);
@@ -2720,7 +2735,74 @@ async function pageAuditoria(){
 /* ---------------- WALLY (asistente) ---------------- */
 let chatOpen=false, chatMsgs=[];
 const SUGS=['Mi horario','¿Hay comunicados?','Teléfono de un proveedor','¿Cuándo son los cumpleaños?','¿Cómo pido vacaciones?'];
-function toggleChat(){chatOpen=!chatOpen;const w=document.getElementById('chatWin');if(chatOpen){buildChat();w.style.display='flex';}else w.style.display='none';}
+/* ===== Widget de MENSAJERÍA en el botón flotante (sustituye al asistente) ===== */
+let msgwOpen=false, msgwWith=null, msgwName='';
+async function toggleChat(){
+  msgwOpen=!msgwOpen;
+  const w=document.getElementById('chatWin');
+  if(!msgwOpen){ w.style.display='none'; if(window._msgwPoll){clearInterval(window._msgwPoll);window._msgwPoll=null;} return; }
+  w.style.display='flex';
+  w.innerHTML=`<div class="ch">💬 <div>Mensajería<small>Chat con tu equipo</small></div><span class="x" onclick="toggleChat()">✕</span></div><div class="msgw-body" id="msgwBody"><div style="padding:26px;text-align:center;color:var(--suave)">Cargando…</div></div>`;
+  await msgwLoad(); msgwWith=null; msgwRender();
+  if(window._msgwPoll) clearInterval(window._msgwPoll);
+  window._msgwPoll=setInterval(msgwPoll,3000);
+}
+async function msgwLoad(){
+  const {data:profs}=await sb.from('profiles').select('id,nombre,color,foto,last_seen').neq('id',ME.id).order('nombre');
+  MSG_CONTACTS=profs||[];
+  const {data:msgs}=await sb.from('mensajes').select('*').order('created_at'); MSG_ALL=msgs||[];
+}
+function msgwRender(){
+  const b=document.getElementById('msgwBody'); if(!b) return;
+  if(!msgwWith){
+    b.innerHTML=`<div style="padding:8px 10px;border-bottom:1px solid var(--gris2)"><input id="msgwSearch" placeholder="🔍 Buscar persona o palabra…" oninput="msgwRenderList(this.value)" style="width:100%;padding:8px 12px;border:1px solid var(--gris2);border-radius:20px;font-family:inherit;font-size:13px;outline:none"></div><div id="msgwList" style="overflow-y:auto;flex:1">${msgwListHTML('')}</div>`;
+  } else {
+    const c=MSG_CONTACTS.find(x=>x.id===msgwWith); const cOn=c&&isOnline(c.last_seen);
+    const thread=MSG_ALL.filter(m=>(m.de_id===ME.id&&m.para_id===msgwWith)||(m.de_id===msgwWith&&m.para_id===ME.id));
+    chatLastId=thread.length?Math.max(...thread.map(m=>m.id)):0;
+    b.innerHTML=`<div class="msgw-conv-h"><span class="msgw-back" onclick="msgwBack()">←</span><b>${esc(msgwName)}</b>${c?`<small style="color:${cOn?'#1f9d55':'var(--suave)'};font-weight:${cOn?'700':'400'}">${cOn?'En línea':'últ. '+haceTiempo(c.last_seen)}</small>`:''}</div>
+      <div class="msgw-thread" id="msgwThread">${thread.map(bubbleHTML).join('')||'<div style="color:var(--suave);text-align:center;font-size:13px;padding:18px">Aún no hay mensajes. ¡Escribe el primero!</div>'}</div>
+      <div class="msgw-in"><input id="msgwIn" placeholder="Escribe un mensaje…" onkeydown="if(event.key==='Enter')msgwSend()"><button onclick="msgwSend()">➤</button></div>`;
+    setTimeout(()=>{const t=document.getElementById('msgwThread');if(t)t.scrollTop=t.scrollHeight;},20);
+    MSG_ALL.forEach(m=>{ if(m.de_id===msgwWith&&m.para_id===ME.id) m.leido=true; });
+    sb.from('mensajes').update({leido:true}).eq('para_id',ME.id).eq('de_id',msgwWith).eq('leido',false).then(()=>loadMsgUnread());
+  }
+}
+function msgwRenderList(term){ const l=document.getElementById('msgwList'); if(l) l.innerHTML=msgwListHTML(term); }
+function msgwListHTML(term){
+  term=(term||'').trim().toLowerCase();
+  const ord=MSG_CONTACTS.map(c=>{const conv=MSG_ALL.filter(m=>(m.de_id===ME.id&&m.para_id===c.id)||(m.de_id===c.id&&m.para_id===ME.id));const last=[...conv].reverse()[0];return {c,t:last?new Date(last.created_at).getTime():0};}).sort((a,b)=>b.t-a.t||(a.c.nombre||'').localeCompare(b.c.nombre||'')).map(x=>x.c);
+  const rows=ord.map(c=>{
+    const conv=MSG_ALL.filter(m=>(m.de_id===ME.id&&m.para_id===c.id)||(m.de_id===c.id&&m.para_id===ME.id));
+    const last=[...conv].reverse()[0];
+    const noLeidos=conv.filter(m=>m.de_id===c.id&&m.para_id===ME.id&&!m.leido).length;
+    if(term && !(c.nombre||'').toLowerCase().includes(term) && !conv.find(m=>(m.texto||'').toLowerCase().includes(term))) return '';
+    const sub=last?(last.texto?esc(last.texto):(last.adj_path?'📎 archivo':'—')):'Sin mensajes aún';
+    return `<div class="mc" onclick="msgwOpenConv('${c.id}','${(c.nombre||'').replace(/'/g,"\\'")}')">${avP(c.nombre,c.color,34,c.foto,c.last_seen)}<div style="overflow:hidden;flex:1"><b style="display:block;font-size:13.5px">${esc(c.nombre)}</b><small style="color:var(--suave);display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:200px">${sub}</small></div>${noLeidos?`<span class="mc-dot">${noLeidos>99?'99+':noLeidos}</span>`:''}</div>`;
+  }).filter(Boolean).join('');
+  return rows||`<div style="padding:16px;color:var(--suave);font-size:13px">${term?'Sin resultados para "'+esc(term)+'"':'No hay otros usuarios todavía.'}</div>`;
+}
+function msgwOpenConv(id,name){ msgwWith=id; msgwName=name; msgwRender(); }
+function msgwBack(){ msgwWith=null; msgwLoad().then(msgwRender); }
+async function msgwSend(){
+  const i=document.getElementById('msgwIn'); const t=(i.value||'').trim(); if(!t||!msgwWith) return;
+  i.value=''; i.focus();
+  const {data,error}=await sb.from('mensajes').insert({de_id:ME.id,para_id:msgwWith,de_nombre:PROFILE.nombre,para_nombre:msgwName,texto:t,leido:false}).select().single();
+  if(error){ alert('Error: '+error.message); i.value=t; return; }
+  MSG_ALL.push(data); chatLastId=Math.max(chatLastId,data.id);
+  const th=document.getElementById('msgwThread'); if(th){ const tmp=document.createElement('div'); tmp.innerHTML=bubbleHTML(data); if(tmp.firstElementChild){th.appendChild(tmp.firstElementChild);th.scrollTop=th.scrollHeight;} }
+}
+async function msgwPoll(){
+  if(!msgwOpen||!msgwWith) return;
+  const {data}=await sb.from('mensajes').select('*').gt('id',chatLastId).or(`and(de_id.eq.${ME.id},para_id.eq.${msgwWith}),and(de_id.eq.${msgwWith},para_id.eq.${ME.id})`).order('created_at');
+  if(data&&data.length){
+    let rec=false; const th=document.getElementById('msgwThread');
+    for(const m of data){ MSG_ALL.push(m); chatLastId=Math.max(chatLastId,m.id); if(th){const tmp=document.createElement('div');tmp.innerHTML=bubbleHTML(m);if(tmp.firstElementChild)th.appendChild(tmp.firstElementChild);} if(m.de_id===msgwWith) rec=true; }
+    if(th) th.scrollTop=th.scrollHeight;
+    if(rec){ await sb.from('mensajes').update({leido:true}).eq('para_id',ME.id).eq('de_id',msgwWith).eq('leido',false); loadMsgUnread(); }
+  }
+}
+function toggleChatOLD(){chatOpen=!chatOpen;const w=document.getElementById('chatWin');if(chatOpen){buildChat();w.style.display='flex';}else w.style.display='none';}
 function buildChat(){document.getElementById('chatWin').innerHTML=`<div class="ch">🤖 <div>Wally<small>Asistente de Amazinn Places</small></div><span class="x" onclick="toggleChat()">✕</span></div>
   <div class="chat-body" id="chatBody"></div><div class="chat-sug">${SUGS.map(s=>`<button onclick="askWally('${s.replace(/'/g,"\\'")}')">${s}</button>`).join('')}</div>
   <div class="chat-in"><input id="chatIn" placeholder="Escribe tu pregunta…" onkeydown="if(event.key==='Enter')sendWally()"><button onclick="sendWally()">➤</button></div>`;renderChat();}
