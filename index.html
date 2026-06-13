@@ -316,8 +316,9 @@
   /* ---- Organigrama (árbol) ---- */
   .org-rootzone{border:2px dashed var(--gris2);border-radius:10px;padding:11px;text-align:center;color:var(--suave);font-size:13px;margin-bottom:16px}
   .org-rootzone.org-over{outline:2px dashed var(--acento);background:var(--gris)}
-  .org-tree{overflow:auto;padding:6px 0 20px}
-  .org-zoombar{display:flex;gap:6px;align-items:center;margin-bottom:12px}
+  .org-tree{overflow:auto;padding:6px 0 20px;cursor:grab}
+  .org-tree.grabbing{cursor:grabbing}
+  .org-zoombar{display:flex;gap:6px;align-items:center;margin-bottom:12px;flex-wrap:wrap}
   .org-zoombar .btn{padding:6px 12px;font-size:13px}
   /* Co-líderes */
   .org-nodew{position:relative;display:inline-block}
@@ -330,6 +331,7 @@
   .oco-ov{display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:80;align-items:center;justify-content:center}
   .oco-box{background:#fff;border-radius:14px;padding:22px;width:360px;max-width:92vw;box-shadow:0 20px 50px rgba(0,0,0,.3)}
   .oco-box h3{font-size:17px}
+  .onode-team{display:inline-block;max-width:100%;overflow:hidden;white-space:nowrap;margin-top:4px;font-size:9.5px;font-weight:700;letter-spacing:.3px;text-transform:uppercase;padding:2px 8px;border-radius:6px;color:#fff}
   .org-tree ul{position:relative;padding-top:22px;display:flex;justify-content:center;gap:6px;margin:0;list-style:none}
   .org-tree > ul{padding-top:0}
   .org-tree li{list-style:none;text-align:center;position:relative;padding:22px 8px 0}
@@ -1836,7 +1838,7 @@ const ORG_AREAS={'Dirección':'#6b7280','Comercial':'#1F4E79','Operaciones':'#d3
 const ORG_PALETTE=['#2980b9','#27ae60','#e67e22','#8e44ad','#16a085','#c0392b','#d35400','#34495e','#1F4E79'];
 function areaColor(a){ if(!a) return '#6b7280'; if(ORG_AREAS[a]) return ORG_AREAS[a]; let h=0; for(let i=0;i<a.length;i++)h=(h*31+a.charCodeAt(i))>>>0; return ORG_PALETTE[h%ORG_PALETTE.length]; }
 async function pageOrganigrama(){
-  const{data}=await sb.from('profiles').select('id,nombre,dept,area,posicion,role,color,foto,jefe_id,fuera_org,org_titulo,last_seen,colider_id').eq('estado','aprobado');
+  const{data}=await sb.from('profiles').select('id,nombre,dept,area,posicion,role,color,foto,jefe_id,fuera_org,org_titulo,last_seen,colider_id,org_equipo').eq('estado','aprobado');
   ORG_PEOPLE=data||[];
   renderOrg();
 }
@@ -1862,8 +1864,11 @@ function renderOrg(){
   const sub=p=>esc(p.org_titulo||p.posicion||roleNice(p.role));
   const tagTxt=p=>{const a=p.area||'',d=p.dept||'';return d?(a?a+' · '+d:d):a;};
   const card=(p,extra)=>{const col=areaColor(p.area);const dep=p.dept||p.area||'';
-    return `<div class="org-node${canEdit?' drag':''}" data-id="${p.id}" style="border-top:4px solid ${col};background:${col}14" ${canEdit?`draggable="true" ondragstart="orgDragStart(event,'${p.id}')"`:''} ${extra||''}>
-      ${avP(p.nombre,p.color,34,p.foto,p.last_seen)}<div class="on-info"><b>${esc(p.nombre||'—')}</b><small>${sub(p)}</small>${dep?`<span class="onode-tag" style="background:${col};color:#fff">${esc(dep)}</span>`:''}</div></div>`;};
+    const tc=p.org_equipo?teamColor(p.org_equipo):null;
+    const bg=tc?tc+'24':col+'14';
+    const ring=tc?`;box-shadow:0 0 0 2px ${tc}`:'';
+    return `<div class="org-node${canEdit?' drag':''}" data-id="${p.id}" style="border-top:4px solid ${col};background:${bg}${ring}" ${canEdit?`draggable="true" ondragstart="orgDragStart(event,'${p.id}')"`:''} ${extra||''}>
+      ${avP(p.nombre,p.color,34,p.foto,p.last_seen)}<div class="on-info"><b>${esc(p.nombre||'—')}</b><small>${sub(p)}</small>${dep?`<span class="onode-tag" style="background:${col};color:#fff">${esc(dep)}</span>`:''}${p.org_equipo?`<span class="onode-team" style="background:${tc}">${esc(p.org_equipo)}</span>`:''}</div></div>`;};
   function node(p){
     const kids=(children[p.id]||[]);
     const drop=canEdit?`ondragover="orgOver(event)" ondragleave="orgLeave(event)" ondrop="orgDrop(event,'${p.id}')"`:'';
@@ -1880,16 +1885,17 @@ function renderOrg(){
   const mini=p=>`<span class="org-mini${canEdit?' drag':''}" data-id="${p.id}" ${canEdit?`draggable="true" ondragstart="orgDragStart(event,'${p.id}')"`:''} style="border-left:3px solid ${areaColor(p.area)}">${avP(p.nombre,p.color,22,p.foto,p.last_seen)}<b>${esc(p.nombre||'—')}</b></span>`;
   const fuera=(aparte.length||canEdit)?`<div class="org-fuera${canEdit?' drop':''}" ${canEdit?'ondragover="orgOver(event)" ondragleave="orgLeave(event)" ondrop="orgDropAside(event)"':''}>
       <span class="of-title">Fuera del organigrama</span>
-      ${aparte.map(mini).join('')||'<span class="of-empty">Nadie</span>'}
+      ${aparte.map(p=>card(p)).join('')||'<span class="of-empty">Nadie</span>'}
       ${canEdit?'<span class="of-hint">arrastra aquí a quien quede fuera</span>':''}
     </div>`:'';
   const areasUsadas=[...new Set(ppl.map(p=>p.area).filter(Boolean))];
-  const legend=areasUsadas.length?`<div class="oleg-wrap">${areasUsadas.map(a=>`<span class="oleg"><i style="background:${areaColor(a)}"></i>${esc(a)}</span>`).join('')}</div>`:'';
+  const teamsUsadas=[...new Set(ppl.map(p=>p.org_equipo).filter(Boolean))];
+  const legend=(areasUsadas.length||teamsUsadas.length)?`<div class="oleg-wrap">${areasUsadas.map(a=>`<span class="oleg"><i style="background:${areaColor(a)}"></i>${esc(a)}</span>`).join('')}${teamsUsadas.map(t=>`<span class="oleg"><i style="background:${teamColor(t)};border-radius:50%"></i>${esc(t)}</span>`).join('')}</div>`:'';
   document.getElementById('main').innerHTML=`<div class="page-title">Organigrama</div>
     <div class="page-sub">${canEdit?'Arrastra a cada persona sobre su responsable para reorganizar. El color y la etiqueta indican su área y departamento.':'Estructura del equipo · el color y la etiqueta indican el área y el departamento'}</div>
     ${legend}
     ${fuera}
-    <div class="org-zoombar"><button class="btn ghost" onclick="orgZoomBy(-0.1)" title="Reducir">− </button><button class="btn ghost" onclick="orgZoomFit()">Ajustar</button><button class="btn ghost" onclick="orgZoomBy(0.1)" title="Ampliar">＋</button><span id="orgZoomPct" style="font-size:12px;color:var(--suave)"></span></div>
+    <div class="org-zoombar"><button class="btn ghost" onclick="orgZoomBy(-0.1)" title="Reducir">− </button><button class="btn ghost" onclick="orgZoomFit()">Ajustar</button><button class="btn ghost" onclick="orgZoomBy(0.1)" title="Ampliar">＋</button><span id="orgZoomPct" style="font-size:12px;color:var(--suave)"></span>${canEdit?'<button class="btn ghost" style="margin-left:auto" onclick="orgTeamsOpen()">👥 Equipos visuales</button>':''}</div>
     <div class="org-main">${rootZone}<div class="org-tree">${roots.length?`<div class="org-scale"><ul>${roots.map(node).join('')}</ul></div>`:'<div class="panel">Aún no hay personas en el organigrama.</div>'}</div></div>`;
   requestAnimationFrame(orgFit); setTimeout(orgFit,80);
 }
@@ -1910,6 +1916,42 @@ function orgFit(){
 function orgZoomFit(){ orgZoom=null; orgFit(); }
 function orgZoomBy(d){ orgZoom=Math.max(0.4,Math.min(2,((orgZoom!=null?orgZoom:orgFitScale)+d))); orgFit(); }
 window.addEventListener('resize',()=>{ if(curPage==='organigrama') orgFit(); });
+/* Arrastrar con el ratón para moverse por el organigrama (pan), sin chocar con las fichas */
+if(!window._orgPanBound){ window._orgPanBound=true; let down=false,sx,sy,sl,st,cur=null;
+  document.addEventListener('mousedown',e=>{ const el=e.target.closest('.org-tree'); if(!el) return; if(e.target.closest('.org-node,.org-mini,button,a,input,select,details,summary,.org-co-add,.org-co-x')) return; cur=el;down=true;sx=e.clientX;sy=e.clientY;sl=el.scrollLeft;st=el.scrollTop;el.classList.add('grabbing');e.preventDefault(); });
+  document.addEventListener('mousemove',e=>{ if(!down||!cur)return; cur.scrollLeft=sl-(e.clientX-sx); cur.scrollTop=st-(e.clientY-sy); });
+  document.addEventListener('mouseup',()=>{ if(cur)cur.classList.remove('grabbing'); down=false;cur=null; });
+}
+/* Equipos visuales del organigrama (color de fondo) */
+const ORG_TEAM_PALETTE=['#1f7a6b','#9b5de5','#f15bb5','#0277bd','#e07a16','#3a7bd5','#c1121f','#5f7d3a'];
+function teamColor(name){ if(!name) return '#6b7280'; let h=0; for(let i=0;i<name.length;i++)h=(h*31+name.charCodeAt(i))>>>0; return ORG_TEAM_PALETTE[h%ORG_TEAM_PALETTE.length]; }
+let orgTeamWork=[], orgTeamAssign={};
+function orgTeamsOpen(){
+  const people=ORG_PEOPLE.filter(p=>!p.fuera_org);
+  orgTeamWork=[...new Set(ORG_PEOPLE.map(p=>p.org_equipo).filter(Boolean))];
+  orgTeamAssign={}; people.forEach(p=>orgTeamAssign[p.id]=p.org_equipo||'');
+  orgTeamsRender();
+}
+function orgTeamsRender(){
+  let ov=document.getElementById('orgCoOverlay'); if(!ov){ ov=document.createElement('div'); ov.id='orgCoOverlay'; ov.className='oco-ov'; ov.onclick=function(e){ if(e.target===ov) orgCoClose(); }; document.body.appendChild(ov); }
+  const people=ORG_PEOPLE.filter(p=>!p.fuera_org);
+  const opts=t=>`<option value="">(sin equipo)</option>`+orgTeamWork.map(n=>`<option value="${esc(n)}" ${t===n?'selected':''}>${esc(n)}</option>`).join('');
+  ov.innerHTML=`<div class="oco-box" style="width:480px;max-height:82vh;overflow:auto">
+    <h3 style="margin:0 0 6px">Equipos visuales</h3>
+    <p style="font-size:13px;color:var(--suave);margin:0 0 12px">Crea equipos y asígnalos a las personas. Cada equipo se ve con un color de fondo distinto en el organigrama.</p>
+    <div style="display:flex;gap:8px;margin-bottom:10px"><input id="otNew" placeholder="Nuevo equipo (ej. Oficina Central)" onkeydown="if(event.key==='Enter'){event.preventDefault();orgTeamCreate();}" style="flex:1;padding:8px 11px;border:1px solid var(--gris2);border-radius:8px;font-family:inherit"><button class="btn" onclick="orgTeamCreate()">Crear</button></div>
+    <div style="margin-bottom:12px;display:flex;flex-wrap:wrap;gap:6px">${orgTeamWork.map(n=>`<span class="badge" style="background:${teamColor(n)};color:#fff">${esc(n)}</span>`).join('')||'<span style="color:var(--suave);font-size:13px">Aún no hay equipos</span>'}</div>
+    <table class="tbl-compact" style="width:100%"><tbody>${people.map(p=>`<tr><td><b>${esc(p.nombre)}</b><br><small style="color:var(--suave)">${esc(p.dept||p.area||'')}</small></td><td style="text-align:right"><select onchange="orgTeamAssign['${p.id}']=this.value" style="padding:6px 9px;border:1px solid var(--gris2);border-radius:8px;font-family:inherit">${opts(orgTeamAssign[p.id])}</select></td></tr>`).join('')}</tbody></table>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px"><button class="btn ghost" onclick="orgCoClose()">Cancelar</button><button class="btn" onclick="orgTeamsSave()">Guardar</button></div>
+  </div>`;
+  ov.style.display='flex';
+}
+function orgTeamCreate(){ const i=document.getElementById('otNew'); const n=(i?i.value:'').trim(); if(!n)return; if(!orgTeamWork.includes(n))orgTeamWork.push(n); orgTeamsRender(); }
+async function orgTeamsSave(){
+  const ups=[]; for(const id in orgTeamAssign){ const p=ORG_PEOPLE.find(x=>x.id===id); if(p && (p.org_equipo||'')!==(orgTeamAssign[id]||'')) ups.push({id,val:orgTeamAssign[id]||null}); }
+  for(const u of ups){ const{error}=await sb.from('profiles').update({org_equipo:u.val}).eq('id',u.id); if(error){alert('No se pudo guardar: '+error.message);return;} }
+  orgCoClose(); pageOrganigrama();
+}
 function orgDragStart(e,id){ orgDragId=id; e.dataTransfer.effectAllowed='move'; e.dataTransfer.setData('text/plain',id); }
 function orgOver(e){ e.preventDefault(); e.dataTransfer.dropEffect='move'; e.currentTarget.classList.add('org-over'); }
 function orgLeave(e){ e.currentTarget.classList.remove('org-over'); }
