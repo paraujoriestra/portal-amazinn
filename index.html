@@ -316,7 +316,9 @@
   /* ---- Organigrama (árbol) ---- */
   .org-rootzone{border:2px dashed var(--gris2);border-radius:10px;padding:11px;text-align:center;color:var(--suave);font-size:13px;margin-bottom:16px}
   .org-rootzone.org-over{outline:2px dashed var(--acento);background:var(--gris)}
-  .org-tree{overflow:hidden;padding:6px 0 20px}
+  .org-tree{overflow:auto;padding:6px 0 20px}
+  .org-zoombar{display:flex;gap:6px;align-items:center;margin-bottom:12px}
+  .org-zoombar .btn{padding:6px 12px;font-size:13px}
   .org-tree ul{position:relative;padding-top:22px;display:flex;justify-content:center;gap:6px;margin:0;list-style:none}
   .org-tree > ul{padding-top:0}
   .org-tree li{list-style:none;text-align:center;position:relative;padding:22px 8px 0}
@@ -1842,9 +1844,9 @@ function renderOrg(){
   enOrg.forEach(p=>{const k=(p.jefe_id&&ids.has(p.jefe_id))?p.jefe_id:'__root__';(children[k]=children[k]||[]).push(p);});
   const sub=p=>esc(p.org_titulo||p.posicion||roleNice(p.role));
   const tagTxt=p=>{const a=p.area||'',d=p.dept||'';return d?(a?a+' · '+d:d):a;};
-  const card=(p,extra)=>{const col=areaColor(p.area);const t=tagTxt(p);
-    return `<div class="org-node${canEdit?' drag':''}" data-id="${p.id}" style="border-top:3px solid ${col}" ${canEdit?`draggable="true" ondragstart="orgDragStart(event,'${p.id}')"`:''} ${extra||''}>
-      ${avP(p.nombre,p.color,34,p.foto,p.last_seen)}<div class="on-info"><b>${esc(p.nombre||'—')}</b><small>${sub(p)}</small>${t?`<span class="onode-tag" style="background:${col}1a;color:${col}">${esc(t)}</span>`:''}</div></div>`;};
+  const card=(p,extra)=>{const col=areaColor(p.area);const dep=p.dept||p.area||'';
+    return `<div class="org-node${canEdit?' drag':''}" data-id="${p.id}" style="border-top:4px solid ${col};background:${col}14" ${canEdit?`draggable="true" ondragstart="orgDragStart(event,'${p.id}')"`:''} ${extra||''}>
+      ${avP(p.nombre,p.color,34,p.foto,p.last_seen)}<div class="on-info"><b>${esc(p.nombre||'—')}</b><small>${sub(p)}</small>${dep?`<span class="onode-tag" style="background:${col};color:#fff">${esc(dep)}</span>`:''}</div></div>`;};
   function node(p){
     const kids=(children[p.id]||[]);
     const drop=canEdit?`ondragover="orgOver(event)" ondragleave="orgLeave(event)" ondrop="orgDrop(event,'${p.id}')"`:'';
@@ -1864,21 +1866,26 @@ function renderOrg(){
     <div class="page-sub">${canEdit?'Arrastra a cada persona sobre su responsable para reorganizar. El color y la etiqueta indican su área y departamento.':'Estructura del equipo · el color y la etiqueta indican el área y el departamento'}</div>
     ${legend}
     ${fuera}
+    <div class="org-zoombar"><button class="btn ghost" onclick="orgZoomBy(-0.1)" title="Reducir">− </button><button class="btn ghost" onclick="orgZoomFit()">Ajustar</button><button class="btn ghost" onclick="orgZoomBy(0.1)" title="Ampliar">＋</button><span id="orgZoomPct" style="font-size:12px;color:var(--suave)"></span></div>
     <div class="org-main">${rootZone}<div class="org-tree">${roots.length?`<div class="org-scale"><ul>${roots.map(node).join('')}</ul></div>`:'<div class="panel">Aún no hay personas en el organigrama.</div>'}</div></div>`;
   requestAnimationFrame(orgFit); setTimeout(orgFit,80);
 }
 function orgShrink(el,base,min){ if(!el)return; el.style.fontSize=base+'px'; let fs=base; let guard=40; while(el.scrollWidth>el.clientWidth+0.5 && fs>min && guard-->0){ fs-=0.5; el.style.fontSize=fs+'px'; } }
 function orgFitText(){ document.querySelectorAll('.org-node').forEach(nd=>{ orgShrink(nd.querySelector('b'),13,8); orgShrink(nd.querySelector('small'),11,7.5); orgShrink(nd.querySelector('.onode-tag'),10,7); }); }
+let orgZoom=null, orgFitScale=1;
 function orgFit(){
-  orgFitText();
   const wrap=document.querySelector('.org-tree'); if(!wrap) return;
   const inner=wrap.querySelector('.org-scale'); if(!inner) return;
-  inner.style.transform='none'; wrap.style.height='auto';
-  const natW=inner.offsetWidth, natH=inner.offsetHeight, avail=wrap.clientWidth;
-  const scale=Math.min(1,(avail-2)/natW);
-  inner.style.transform = scale<1 ? 'scale('+scale+')' : 'none';
-  wrap.style.height = Math.ceil(natH*scale+4)+'px';
+  inner.style.transform='none'; inner.style.zoom=1; wrap.style.height='auto';
+  orgFitText();
+  const natW=inner.offsetWidth, avail=wrap.clientWidth;
+  orgFitScale=Math.min(1,(avail-2)/natW);
+  const s=(orgZoom!=null)?orgZoom:orgFitScale;
+  inner.style.zoom=s;
+  const pc=document.getElementById('orgZoomPct'); if(pc) pc.textContent=Math.round(s*100)+'%';
 }
+function orgZoomFit(){ orgZoom=null; orgFit(); }
+function orgZoomBy(d){ orgZoom=Math.max(0.4,Math.min(2,((orgZoom!=null?orgZoom:orgFitScale)+d))); orgFit(); }
 window.addEventListener('resize',()=>{ if(curPage==='organigrama') orgFit(); });
 function orgDragStart(e,id){ orgDragId=id; e.dataTransfer.effectAllowed='move'; e.dataTransfer.setData('text/plain',id); }
 function orgOver(e){ e.preventDefault(); e.dataTransfer.dropEffect='move'; e.currentTarget.classList.add('org-over'); }
