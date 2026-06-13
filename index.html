@@ -749,7 +749,10 @@
       <button type="submit" id="liBtn">Entrar</button>
     </form>
     <div class="login-err" id="liErr"></div>
-    <div style="margin-top:14px;font-size:13px"><a href="#" id="liToggle" onclick="toggleSignup();return false">¿Primera vez? Crear cuenta</a></div>
+    <div style="margin-top:14px;font-size:13px;display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px">
+      <a href="#" id="liToggle" onclick="toggleSignup();return false">¿Primera vez? Crear cuenta</a>
+      <a href="#" id="liForgot" onclick="pinForgot();return false">¿Olvidaste tu PIN?</a>
+    </div>
   </div>
 </div>
 
@@ -824,6 +827,7 @@ let sb=null, ME=null, PROFILE=null, curPage='';
 // ¿Está configurado?
 if(SUPABASE_URL.startsWith("http") && SUPABASE_ANON_KEY && !SUPABASE_ANON_KEY.startsWith("PEGA")){
   sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  sb.auth.onAuthStateChange((event)=>{ if(event==='PASSWORD_RECOVERY') showPinRecovery(); });
   initSession();
 } else {
   document.getElementById('login').style.display='none';
@@ -919,6 +923,45 @@ function loginMsg(icon,titulo,texto){
 }
 function showThanks(){ loginMsg('✅','¡Muchas gracias!','Tu registro se ha enviado correctamente.<br>Pronto confirmarán tu acceso. Te avisaremos cuando puedas entrar.'); }
 function showRejected(){ loginMsg('🚫','Acceso no aprobado','Tu solicitud de registro no fue aprobada.<br>Si crees que es un error, contacta con tu responsable.'); }
+async function pinForgot(){
+  let email=(document.getElementById('liEmail').value||'').trim();
+  if(!email){ email=(prompt('Escribe tu email para enviarte el restablecimiento del PIN:')||'').trim(); }
+  if(!email){ return; }
+  const errEl=document.getElementById('liErr');
+  const { error } = await sb.auth.resetPasswordForEmail(email, { redirectTo: location.origin + location.pathname });
+  if(error){ errEl.style.color='var(--rojo)'; errEl.textContent='No se pudo enviar: '+error.message; return; }
+  errEl.style.color='#2c8a4a';
+  errEl.innerHTML='✓ Te enviamos un correo a <b>'+esc(email)+'</b>. Ábrelo y pulsa el enlace para poner un PIN nuevo.';
+}
+function showPinRecovery(){
+  document.getElementById('app').style.display='none';
+  const lc=document.querySelector('#login .login-card');
+  if(lc) lc.innerHTML=`<img src="${LOGO}" style="height:54px;margin:0 auto 12px;display:block">
+    <h2 style="text-align:center;margin:0 0 4px">Nuevo PIN de acceso</h2>
+    <p style="text-align:center;color:var(--suave);font-size:13.5px;margin:0 0 14px">Elige tu nuevo PIN de 6 dígitos.</p>
+    <form onsubmit="return pinRecoverySave(event)">
+      <label>Nuevo PIN (6 dígitos)</label>
+      <input id="rcPin" type="password" inputmode="numeric" maxlength="6" required placeholder="••••••" oninput="this.value=this.value.replace(/\\D/g,'').slice(0,6)">
+      <label>Repite el PIN</label>
+      <input id="rcPin2" type="password" inputmode="numeric" maxlength="6" required placeholder="••••••" oninput="this.value=this.value.replace(/\\D/g,'').slice(0,6)">
+      <button type="submit" style="margin-top:10px">Guardar nuevo PIN</button>
+    </form>
+    <div class="login-err" id="rcErr"></div>`;
+  document.getElementById('login').style.display='flex';
+}
+async function pinRecoverySave(e){
+  e.preventDefault();
+  const p1=document.getElementById('rcPin').value, p2=document.getElementById('rcPin2').value;
+  const err=document.getElementById('rcErr'); err.style.color='var(--rojo)';
+  if(!/^\d{6}$/.test(p1)){ err.textContent='El PIN debe tener exactamente 6 dígitos.'; return false; }
+  if(/^(\d)\1{5}$/.test(p1)){ err.textContent='El PIN no puede tener los 6 dígitos iguales.'; return false; }
+  if(p1!==p2){ err.textContent='Los dos PIN no coinciden.'; return false; }
+  const { error } = await sb.auth.updateUser({ password:p1 });
+  if(error){ err.textContent='No se pudo actualizar: '+error.message; return false; }
+  await sb.auth.signOut();
+  loginMsg('✅','PIN actualizado','Tu nuevo PIN se ha guardado.<br>Ya puedes entrar con él.');
+  return false;
+}
 
 /* ---------------- NAVEGACIÓN ---------------- */
 const NAV=[
@@ -1690,7 +1733,28 @@ function pagePerfil(){
         </div>
       </div>
     </div>
-    <div style="font-size:12.5px;color:var(--suave);max-width:620px">${isAdmin()?'Puedes cambiar tu foto. El resto de datos':'Tus datos (foto, rol, departamento, vacaciones)'} los gestiona el administrador.</div>`;
+    <div style="font-size:12.5px;color:var(--suave);max-width:620px">${isAdmin()?'Puedes cambiar tu foto. El resto de datos':'Tus datos (foto, rol, departamento, vacaciones)'} los gestiona el administrador.</div>
+    <div class="panel" style="max-width:620px;margin-top:18px"><h2 style="margin-top:0">🔑 Cambiar mi PIN</h2>
+      <form class="box" onsubmit="return cambiarMiPin(event)" style="max-width:none">
+        <div class="row">
+          <div><label>Nuevo PIN (6 dígitos)</label><input id="cpPin" type="password" inputmode="numeric" maxlength="6" placeholder="••••••" oninput="this.value=this.value.replace(/\\D/g,'').slice(0,6)"></div>
+          <div><label>Repite el PIN</label><input id="cpPin2" type="password" inputmode="numeric" maxlength="6" placeholder="••••••" oninput="this.value=this.value.replace(/\\D/g,'').slice(0,6)"></div>
+        </div>
+        <div><button class="btn" type="submit">Guardar nuevo PIN</button> <span id="cpMsg" style="font-size:13px;margin-left:8px"></span></div>
+      </form></div>`;
+}
+async function cambiarMiPin(e){
+  e.preventDefault();
+  const p1=document.getElementById('cpPin').value, p2=document.getElementById('cpPin2').value;
+  const msg=document.getElementById('cpMsg'); msg.style.color='var(--rojo)';
+  if(!/^\d{6}$/.test(p1)){ msg.textContent='El PIN debe tener 6 dígitos.'; return false; }
+  if(/^(\d)\1{5}$/.test(p1)){ msg.textContent='No puede tener los 6 dígitos iguales.'; return false; }
+  if(p1!==p2){ msg.textContent='Los dos PIN no coinciden.'; return false; }
+  const { error } = await sb.auth.updateUser({ password:p1 });
+  if(error){ msg.textContent='Error: '+error.message; return false; }
+  msg.style.color='#2c8a4a'; msg.textContent='✓ PIN actualizado.';
+  document.getElementById('cpPin').value=''; document.getElementById('cpPin2').value='';
+  return false;
 }
 async function cambiarMiFoto(input){const f=input.files[0];if(!f)return;const foto=await fileToAvatar(f);const{error}=await sb.from('profiles').update({foto}).eq('id',ME.id);if(error){alert('Error: '+error.message);return;}PROFILE.foto=foto;const avEl=document.getElementById('av');avEl.textContent='';avEl.style.background=`#eee url('${foto}') center/cover no-repeat`;show('perfil');toast('✓ Foto actualizada');}
 let ORG_PEOPLE=[], orgDragId=null;
