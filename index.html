@@ -783,6 +783,9 @@
   nav.side a.active{background:var(--azul) !important;color:#fff !important;border-left:none !important;font-weight:600}
   nav.side a.active .ic, nav.side a.active .nic *{stroke:#fff;color:#fff}
   .nav-badge{background:var(--rojo) !important}
+  nav.side a.nav-locked{opacity:.5;cursor:not-allowed}
+  nav.side a.nav-locked:hover{background:transparent !important;color:#39424f !important}
+  .nav-soon{margin-left:auto;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;background:var(--gris2);color:var(--suave);border-radius:6px;padding:2px 6px}
   #login{background:linear-gradient(135deg,#1f4e79 0%,#163a5c 60%,#0f2a45 100%) !important}
   .login-card{border-radius:18px !important}
   table.sched thead th, table.cal th{background:var(--azul) !important;color:#fff}
@@ -1046,7 +1049,7 @@ const NAV=[
   {grp:'General'},
   {id:'inicio',ic:'🏠',t:'Inicio'},
   {id:'horarios',ic:'📅',t:'Mis horarios'},
-  {id:'fichaje',ic:'⏱️',t:'Fichaje'},
+  {id:'fichaje',ic:'⏱️',t:'Fichaje', lockRoles:['empleado','responsable']},
   {id:'comunicados',ic:'📢',t:'Comunicados'},
   {id:'mensajeria',ic:'💌',t:'Mensajería'},
   {id:'calendario',ic:'🗓️',t:'Calendario'},
@@ -1056,7 +1059,7 @@ const NAV=[
   {id:'docs',ic:'📁',t:'Documentación'},
   {id:'onboarding',ic:'🚀',t:'Onboarding'},
   {id:'sugerencias',ic:'💡',t:'Sugerencias'},
-  {id:'kudos',ic:'🏅',t:'Reconocimientos'},
+  {id:'kudos',ic:'🏅',t:'Reconocimientos', roles:['responsable','direccion','admin']},
   {id:'cumple',ic:'🎂',t:'Cumpleaños'},
   {grp:'Recursos'},
   {id:'perfil',ic:'👤',t:'Mi perfil'},
@@ -1272,7 +1275,12 @@ function buildNav(){
     head.onclick=()=>{ if(navOpen.has(g.name)){navOpen.clear();} else {navOpen.clear();navOpen.add(g.name);} buildNav(); };
     nav.appendChild(head);
     const box=document.createElement('div'); box.className='grp-items'+(open?'':' closed');
-    g.items.forEach(it=>{const a=document.createElement('a');a.dataset.id=it.id;a.title=it.t;a.innerHTML=`<span class="nicw">${navIcon(it.id)}</span><span class="label">${it.t}</span>`;a.onclick=()=>show(it.id);box.appendChild(a);});
+    g.items.forEach(it=>{const a=document.createElement('a');a.dataset.id=it.id;a.title=it.t;
+      const locked=it.lockRoles&&it.lockRoles.includes(PROFILE.role);
+      a.innerHTML=`<span class="nicw">${navIcon(it.id)}</span><span class="label">${it.t}</span>${locked?'<span class="nav-soon">Pronto</span>':''}`;
+      if(locked){ a.classList.add('nav-locked'); a.onclick=(e)=>{ e.preventDefault(); toast('La sección de Fichaje estará disponible próximamente.'); }; }
+      else a.onclick=()=>show(it.id);
+      box.appendChild(a);});
     nav.appendChild(box);
   });
   highlightNav();
@@ -1298,7 +1306,7 @@ function show(id){
   else if(id==='conexiones'){ ld('<div class="page-title">Conexiones</div><div class="page-sub">Cargando…</div>'); pageConexiones(); }
   else if(id==='suministros'){ ld('<div class="page-title">Suministros</div><div class="page-sub">Cargando…</div>'); pageSuministros(); }
   else if(id==='sugerencias'){ ld('<div class="page-title">Sugerencias</div><div class="page-sub">Cargando…</div>'); pageSugerencias(); }
-  else if(id==='fichaje'){ ld('<div class="page-title">Fichaje</div><div class="page-sub">Cargando…</div>'); pageFichaje(); }
+  else if(id==='fichaje'){ if(['empleado','responsable'].includes(PROFILE.role)){ m.innerHTML='<div class="page-title">Fichaje</div><div class="panel" style="color:var(--suave)">🔒 La sección de Fichaje estará disponible próximamente.</div>'; return; } ld('<div class="page-title">Fichaje</div><div class="page-sub">Cargando…</div>'); pageFichaje(); }
   else if(id==='vacaciones'){ ld('<div class="page-title">Vacaciones</div><div class="page-sub">Cargando…</div>'); pageSolicitud('vacaciones'); }
   else if(id==='bajas'){ ld('<div class="page-title">Notificar baja</div><div class="page-sub">Cargando…</div>'); pageSolicitud('baja'); }
   else if(id==='aprobaciones'){ ld('<div class="page-title">Aprobaciones</div><div class="page-sub">Cargando…</div>'); pageAprobaciones(); }
@@ -1318,7 +1326,7 @@ function show(id){
   else if(id==='tutoriales'){ m.innerHTML=pageTutoriales(); }
   else if(id==='depto'){ m.innerHTML=pageDepto(); }
   else if(id==='mensajeria'){ ld('<div class="page-title">Mensajería</div><div class="page-sub">Cargando…</div>'); pageMensajeria(); }
-  else if(id==='kudos'){ ld('<div class="page-title">Reconocimientos</div><div class="page-sub">Cargando…</div>'); pageKudos(); }
+  else if(id==='kudos'){ if(PROFILE.role==='empleado'){ m.innerHTML='<div class="page-title">Reconocimientos</div><div class="panel" style="color:var(--suave)">Esta sección está disponible para responsables y superiores.</div>'; return; } ld('<div class="page-title">Reconocimientos</div><div class="page-sub">Cargando…</div>'); pageKudos(); }
   else if(id==='incidencias'){ ld('<div class="page-title">Incidencias</div><div class="page-sub">Cargando…</div>'); pageIncidencias(); }
   else if(id==='videos'){ ld('<div class="page-title">Videos explicativos</div><div class="page-sub">Cargando…</div>'); pageVideos(); }
   else if(id==='onboarding'){ m.innerHTML=pageOnboarding(); }
@@ -1420,7 +1428,7 @@ function comCardHTML(c){
   const autor = CC.pr.find(u=>u.id===c.autor_id);
   const aCol = autor?autor.color:null, aFoto = autor?autor.foto:null, aCargo = autor&&autor.cargo?autor.cargo:'';
   const canDel = isAdmin() || c.autor_id===ME.id;
-  const delBtn = canDel?`<button class="btn-del" onclick="deleteCom(${c.id})" title="Eliminar comunicado">🗑 Eliminar</button>`:'';
+  const delBtn = canDel?`<button class="kebab" onclick="comRowMenu(event,${c.id})" title="Opciones">⋮</button>`:'';
   const mis = CC.adj.filter(a=>a.comunicado_id===c.id);
   const ico=t=>!t?'📎':(/pdf/.test(t)?'📄':(/image/.test(t)?'🖼️':(/word|document/.test(t)?'📝':(/sheet|excel/.test(t)?'📊':'📎'))));
   const adjHTML = mis.length?`<div class="cc-adj">${mis.map(a=>`<a class="att" href="${a.url}" target="_blank" rel="noopener" download="${esc(a.nombre)}">${ico(a.tipo)} ${esc(a.nombre)}</a>`).join('')}</div>`:'';
@@ -1496,38 +1504,47 @@ function renderComu(){
 function comSetFilter(f){comFilter=f; renderComu();}
 function comSetQuery(v){comQuery=v; const el=document.getElementById('comInboxList'); if(el) el.innerHTML=comInboxItemsHTML();}
 function comSelect(id){comSel=id; renderComu();}
-let comFormOpen=false;
-function toggleComForm(){
-  comFormOpen=!comFormOpen;
-  document.getElementById('comFormBox').innerHTML = comFormOpen ? `
-    <div class="panel" style="max-width:760px"><h2>✍️ Nuevo comunicado</h2>
+let comFormOpen=false, comEditId=null;
+function comFormHTML(c){ c=c||{};
+  const niv=n=>`<option value="${n}" ${(c.nivel||'info')===n?'selected':''}>`;
+  return `<div class="panel" style="max-width:760px"><h2>${c.id?'✏️ Editar comunicado':'✍️ Nuevo comunicado'}</h2>
       <form class="box" onsubmit="return createCom(event)" style="max-width:none">
-        <label>Título</label><input id="cTit" required>
+        <label>Título</label><input id="cTit" required value="${esc(c.titulo||'')}">
         <label style="font-weight:700;color:var(--azul)">Dirigido a (alcance)</label>
-        ${scopeSelects({a:'cArea',d:'cDir',e:'cEq'},{})}
+        ${scopeSelects({a:'cArea',d:'cDir',e:'cEq'},{area:c.area,dirigido:c.dirigido,equipo:c.equipo})}
         <div style="font-size:12px;color:var(--suave);margin:-4px 0 12px">Déjalo en "Todas / Todos / Cualquiera" para toda la empresa, o acota por área, departamento y/o equipo.</div>
-        <label>Nivel</label><select id="cNiv" style="max-width:260px"><option value="info">Informativo</option><option value="imp">Importante</option><option value="urg">Urgente</option></select>
-        <label>Contenido</label><textarea id="cCpo" rows="5" required></textarea>
+        <label>Nivel</label><select id="cNiv" style="max-width:260px">${niv('info')}Informativo</option>${niv('imp')}Importante</option>${niv('urg')}Urgente</option></select>
+        <label>Contenido</label><textarea id="cCpo" rows="5" required>${esc(c.cuerpo||'')}</textarea>
         <label>📅 Asociar a una fecha del calendario (opcional)</label>
-        <input id="cFecha" type="date">
+        <input id="cFecha" type="date" value="${esc(c.fecha_evento||'')}">
         <div style="font-size:12px;color:var(--suave);margin:-4px 0 12px">Si pones una fecha, el comunicado aparecerá en el Calendario como evento y se podrá abrir desde ahí.</div>
-        <label>Documentos adjuntos (opcional)</label>
-        <input id="cAdj" type="file" multiple>
-        <div style="font-size:12px;color:var(--suave);margin:-4px 0 12px">Puedes adjuntar PDF, imágenes u otros archivos. Máx. 25 MB por archivo.</div>
-        <div><button class="btn" type="submit">📢 Publicar</button>
-          <button class="btn ghost" type="button" style="margin-left:8px" onclick="toggleComForm()">Cancelar</button></div>
-      </form></div>` : '';
+        ${c.id?'':`<label>Documentos adjuntos (opcional)</label><input id="cAdj" type="file" multiple><div style="font-size:12px;color:var(--suave);margin:-4px 0 12px">Puedes adjuntar PDF, imágenes u otros archivos. Máx. 25 MB por archivo.</div>`}
+        <div><button class="btn" type="submit">${c.id?'💾 Guardar cambios':'📢 Publicar'}</button>
+          <button class="btn ghost" type="button" style="margin-left:8px" onclick="comCancelForm()">Cancelar</button></div>
+      </form></div>`;
 }
+function toggleComForm(){ comFormOpen=!comFormOpen; comEditId=null; const b=document.getElementById('comFormBox'); if(b) b.innerHTML = comFormOpen ? comFormHTML(null) : ''; }
+function comEdit(id){ const c=CC.coms.find(x=>x.id===id); if(!c) return; comEditId=id; comFormOpen=true; const b=document.getElementById('comFormBox'); if(b){ b.innerHTML=comFormHTML(c); b.scrollIntoView({behavior:'smooth',block:'start'}); } }
+function comCancelForm(){ comFormOpen=false; comEditId=null; const b=document.getElementById('comFormBox'); if(b) b.innerHTML=''; }
+function comRowMenu(e,id){ e.stopPropagation(); let m=document.getElementById('rowMenuPop'); if(!m){ m=document.createElement('div'); m.id='rowMenuPop'; m.className='rowmenu-pop'; document.body.appendChild(m); } m.innerHTML=`<button onclick="closeRowMenu();comEdit(${id})">✏️ Editar</button><button onclick="closeRowMenu();deleteCom(${id})">🗑️ Eliminar</button>`; const r=e.currentTarget.getBoundingClientRect(); m.style.display='flex'; m.style.top=(r.bottom+window.scrollY+4)+'px'; m.style.left=(Math.max(8,Math.min(r.left,window.innerWidth-168))+window.scrollX)+'px'; setTimeout(()=>document.addEventListener('click',closeRowMenu),0); }
 async function createCom(e){
   e.preventDefault();
-  const row={ titulo:document.getElementById('cTit').value.trim(), cuerpo:document.getElementById('cCpo').value.trim(),
+  const base={ titulo:document.getElementById('cTit').value.trim(), cuerpo:document.getElementById('cCpo').value.trim(),
     nivel:document.getElementById('cNiv').value,
     dirigido:document.getElementById('cDir').value||'*',
     area:(document.getElementById('cArea').value||null),
     equipo:(document.getElementById('cEq').value||null),
-    fecha_evento:(document.getElementById('cFecha').value||null),
-    autor_id:ME.id, autor_nombre:PROFILE.nombre };
+    fecha_evento:(document.getElementById('cFecha').value||null) };
   const btn = e.target.querySelector('button[type=submit]');
+  if(comEditId){
+    if(btn){ btn.disabled=true; btn.textContent='⏳ Guardando...'; }
+    const { error } = await sb.from('comunicados').update(base).eq('id',comEditId);
+    if(error){ alert('No se pudo guardar: '+error.message); if(btn){btn.disabled=false;btn.textContent='💾 Guardar cambios';} return false; }
+    await notifyTeam(base.dirigido, '✏️', `${PROFILE.nombre} modificó el comunicado: "${base.titulo}". Revísalo de nuevo.`, 'comunicados');
+    comEditId=null; comFormOpen=false; pageComunicados();
+    return false;
+  }
+  const row=Object.assign({}, base, { autor_id:ME.id, autor_nombre:PROFILE.nombre });
   if(btn){ btn.disabled=true; btn.textContent='⏳ Publicando...'; }
   const { data:ins, error } = await sb.from('comunicados').insert(row).select('id').single();
   if(error){ alert('No se pudo publicar: '+error.message); if(btn){btn.disabled=false;btn.textContent='📢 Publicar';} return false; }
