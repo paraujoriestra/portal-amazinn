@@ -3139,70 +3139,84 @@ function permPass(it,role,dept){
 }
 function permItemVis(meta,it,role,dept){ return permPass(meta,role,dept) && permPass(it,role,dept); }
 let permArea='', permRole='';
+let permState=null, permSaved=null, permCtx=null;   // estado en memoria (cambios pendientes)
 function permDeptos(){ // departamentos (filtrados por área si CAT.deptos tiene área)
   if(CAT.deptos && CAT.deptos.length) return CAT.deptos.filter(d=>!permArea||d.area===permArea).map(d=>d.nombre);
   return DEPTS;
 }
+function setsEqual(a,b){ if(a.size!==b.size) return false; for(const x of a) if(!b.has(x)) return false; return true; }
+function permHasChanges(){ return permState&&permSaved&&!setsEqual(permState,permSaved); }
+function permGuardCheck(){ if(permHasChanges()) return confirm('Tienes cambios sin guardar. ¿Descartarlos?'); return true; }
+function permSetArea(v){ if(!permGuardCheck()){show('permisos');return;} permArea=v; permDept=''; permCtx=null; show('permisos'); }
+function permSetDept(v){ if(!permGuardCheck()){show('permisos');return;} permDept=v; permCtx=null; show('permisos'); }
+function permSetRole(v){ if(!permGuardCheck()){show('permisos');return;} permRole=v; permCtx=null; show('permisos'); }
+function permItemSet(id,allow){ if(allow) permState.delete(id); else permState.add(id); show('permisos'); }
+function permSecSet(name,allow){ const g=permFullGroups().find(x=>x.name===name); if(!g) return;
+  g.items.filter(it=>permItemVis(g.meta,it,permRole,permDept)).forEach(it=>{ if(allow) permState.delete(it.id); else permState.add(it.id); }); show('permisos'); }
+function permDescartar(){ if(permSaved) permState=new Set(permSaved); show('permisos'); }
+async function permGuardar(){
+  if(!permHasChanges()) return;
+  const dep=permDept, role=permRole;
+  const adds=[...permState].filter(x=>!permSaved.has(x));   // nuevos ocultos
+  const dels=[...permSaved].filter(x=>!permState.has(x));   // vueltos a visible
+  try{
+    if(adds.length){ const {error}=await sb.from('accesos').upsert(adds.map(id=>({dept,role,item_id:id,visible:false})),{onConflict:'dept,role,item_id'}); if(error) throw error; }
+    for(const id of dels){ const {error}=await sb.from('accesos').delete().eq('dept',dep).eq('role',role).eq('item_id',id); if(error) throw error; }
+  }catch(e){ alert('Error al guardar: '+(e.message||e)); return; }
+  permSaved=new Set(permState);
+  await loadAccesos(); buildNav();
+  alert('✓ Cambios guardados. El usuario afectado los verá al volver a entrar.');
+  show('permisos');
+}
 async function pagePermisos(){
   const ROLES_SEL=[['empleado','Empleado'],['responsable','Responsable'],['direccion','Dirección'],['admin','Administrador']];
   const areas=(CAT.areas&&CAT.areas.length)?CAT.areas:[]; const deptos=permDeptos();
-  // si el departamento elegido ya no está en el área, lo limpiamos
   if(permDept && !deptos.includes(permDept)) permDept='';
   const selectors=`<div class="panel" style="display:flex;gap:14px;flex-wrap:wrap;align-items:flex-end;margin-bottom:14px">
     <div><label style="display:block;font-size:12px;font-weight:600;color:var(--suave);margin-bottom:4px">Área</label>
-      <select onchange="permArea=this.value;permDept='';show('permisos')" style="padding:8px 11px;border:1px solid var(--gris2);border-radius:8px;font-family:inherit;min-width:150px"><option value="">Todas</option>${areas.map(a=>`<option ${a===permArea?'selected':''}>${esc(a)}</option>`).join('')}</select></div>
+      <select onchange="permSetArea(this.value)" style="padding:8px 11px;border:1px solid var(--gris2);border-radius:8px;font-family:inherit;min-width:150px"><option value="">Todas</option>${areas.map(a=>`<option ${a===permArea?'selected':''}>${esc(a)}</option>`).join('')}</select></div>
     <div><label style="display:block;font-size:12px;font-weight:600;color:var(--suave);margin-bottom:4px">Departamento</label>
-      <select onchange="permDept=this.value;show('permisos')" style="padding:8px 11px;border:1px solid var(--gris2);border-radius:8px;font-family:inherit;min-width:170px"><option value="">— elegir —</option>${deptos.map(d=>`<option ${d===permDept?'selected':''}>${esc(d)}</option>`).join('')}</select></div>
+      <select onchange="permSetDept(this.value)" style="padding:8px 11px;border:1px solid var(--gris2);border-radius:8px;font-family:inherit;min-width:170px"><option value="">— elegir —</option>${deptos.map(d=>`<option ${d===permDept?'selected':''}>${esc(d)}</option>`).join('')}</select></div>
     <div><label style="display:block;font-size:12px;font-weight:600;color:var(--suave);margin-bottom:4px">Rol</label>
-      <select onchange="permRole=this.value;show('permisos')" style="padding:8px 11px;border:1px solid var(--gris2);border-radius:8px;font-family:inherit;min-width:150px"><option value="">— elegir —</option>${ROLES_SEL.map(([v,l])=>`<option value="${v}" ${v===permRole?'selected':''}>${l}</option>`).join('')}</select></div>
+      <select onchange="permSetRole(this.value)" style="padding:8px 11px;border:1px solid var(--gris2);border-radius:8px;font-family:inherit;min-width:150px"><option value="">— elegir —</option>${ROLES_SEL.map(([v,l])=>`<option value="${v}" ${v===permRole?'selected':''}>${l}</option>`).join('')}</select></div>
   </div>`;
-  const titulo=`<div class="page-title">Permisos y accesos</div><div class="page-sub">Elige <b>área, departamento y rol</b> y marca o desmarca qué secciones y áreas puede ver. Solo afecta a esa combinación. El <b>Propietario</b> siempre ve todo.</div>`;
+  const titulo=`<div class="page-title">Permisos y accesos</div><div class="page-sub">Elige <b>área, departamento y rol</b>, ajusta los accesos y pulsa <b>Guardar</b>. Solo afecta a esa combinación. El <b>Propietario</b> siempre ve todo.</div>`;
   if(!permDept || !permRole){
     document.getElementById('main').innerHTML=titulo+selectors+`<div class="panel" style="color:var(--suave)">Selecciona un <b>departamento</b> y un <b>rol</b> para ver y configurar sus accesos.</div>`;
     return;
   }
-  const dep=permDept, role=permRole;
-  const map={};
-  try{ const {data}=await sb.from('accesos').select('item_id,visible').eq('dept',dep).eq('role',role);
-    (data||[]).forEach(r=>{ map[r.item_id]=r.visible; }); }
-  catch(e){ document.getElementById('main').innerHTML=titulo+`<div class="panel">No se pudo cargar. ¿Ejecutaste <b>supabase_accesos.sql</b> en Supabase?<br><small style="color:var(--suave)">'+esc(e.message||e)+'</small></div>`; return; }
-  const denied=id=> map[id]===false;
-  const groups=permFullGroups();
-  const rows=groups.map(g=>{
-    const vis=g.items.filter(it=>permItemVis(g.meta,it,role,dep));         // áreas que ese rol puede tener
+  const dep=permDept, role=permRole, combo=dep+'|'+role;
+  if(permCtx!==combo){   // cargar de la BD solo al cambiar de combinación (conserva cambios pendientes)
+    try{ const {data}=await sb.from('accesos').select('item_id,visible').eq('dept',dep).eq('role',role);
+      const den=new Set((data||[]).filter(r=>r.visible===false).map(r=>r.item_id));
+      permState=new Set(den); permSaved=new Set(den); permCtx=combo;
+    }catch(e){ document.getElementById('main').innerHTML=titulo+`<div class="panel">No se pudo cargar. ¿Ejecutaste <b>supabase_accesos.sql</b> en Supabase?<br><small style="color:var(--suave)">${esc(e.message||e)}</small></div>`; return; }
+  }
+  const denied=id=> permState.has(id);
+  const rows=permFullGroups().map(g=>{
+    const vis=g.items.filter(it=>permItemVis(g.meta,it,role,dep));
     const allOn=vis.length>0 && vis.every(it=>!denied(it.id));
-    const secChk=vis.length? `<input type="checkbox" class="perm-chk" ${allOn?'checked':''} onchange="permToggleSection('${g.name.replace(/'/g,"\\'")}',this.checked)" title="Toda la sección">` : '<span class="perm-lock">·</span>';
+    const secChk=vis.length? `<input type="checkbox" class="perm-chk" ${allOn?'checked':''} onchange="permSecSet('${g.name.replace(/'/g,"\\'")}',this.checked)" title="Toda la sección">` : '<span class="perm-lock">·</span>';
     const head=`<tr class="perm-sec"><td><b>${GRP_ICON[g.name]||''} ${esc(g.name)}</b></td><td>${secChk}</td></tr>`;
     const its=g.items.map(it=>{
       const def=permItemVis(g.meta,it,role,dep);
-      const ctrl=def? `<input type="checkbox" class="perm-chk" ${!denied(it.id)?'checked':''} onchange="permToggle('${it.id}',this.checked)">` : '<span class="perm-lock" title="No disponible para este rol">·</span>';
+      const ctrl=def? `<input type="checkbox" class="perm-chk" ${!denied(it.id)?'checked':''} onchange="permItemSet('${it.id}',this.checked)">` : '<span class="perm-lock" title="No disponible para este rol">·</span>';
       return `<tr><td class="perm-area">${it.ic?it.ic+' ':''}${esc(it.t)}</td><td>${ctrl}</td></tr>`;
     }).join('');
     return head+its;
   }).join('');
   const roleLbl=(ROLES_SEL.find(r=>r[0]===role)||[role,role])[1];
+  const dirty=permHasChanges();
+  const saveBar=`<div style="position:sticky;bottom:0;background:var(--gris);border:1px solid var(--gris2);border-radius:10px;padding:10px 14px;margin-top:14px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+     <button class="btn" onclick="permGuardar()" ${dirty?'':'disabled style=\"opacity:.5;cursor:default\"'}>💾 Guardar cambios</button>
+     ${dirty?`<button class="btn ghost" onclick="permDescartar()">Descartar</button><span style="color:#c47f17;font-size:12.5px;font-weight:600">● Tienes cambios sin guardar</span>`:`<span style="color:var(--suave);font-size:12.5px">Todo guardado.</span>`}</div>`;
   document.getElementById('main').innerHTML=titulo+selectors+
    `<div class="panel"><h2 style="margin-top:0">Accesos de: <span style="color:var(--azul)">${esc(permArea||'Todas las áreas')} · ${esc(dep)} · ${esc(roleLbl)}</span></h2>
      <div style="overflow-x:auto"><table class="tbl-compact perm-tbl perm-single">
      <thead><tr><th>Sección / Área</th><th>Visible</th></tr></thead><tbody>${rows}</tbody></table></div>
-     <p style="font-size:12px;color:var(--suave);margin-top:14px;line-height:1.6">Casilla en la fila de una <b>sección</b> = activa/oculta toda la sección. “·” = no disponible para ese rol. Recuerda: el usuario afectado verá el cambio al volver a entrar.</p>
+     <p style="font-size:12px;color:var(--suave);margin-top:14px;line-height:1.6">Casilla en la fila de una <b>sección</b> = activa/oculta toda la sección. “·” = no disponible para ese rol.</p>
+     ${saveBar}
    </div>`;
-}
-async function permToggle(itemId,allow){
-  const dep=permDept, role=permRole; if(!dep||!role) return;
-  if(allow){ const {error}=await sb.from('accesos').delete().eq('dept',dep).eq('role',role).eq('item_id',itemId); if(error){alert('Error: '+error.message);} }
-  else { const {error}=await sb.from('accesos').upsert({dept,role,item_id:itemId,visible:false},{onConflict:'dept,role,item_id'}); if(error){alert('Error: '+error.message);} }
-  await loadAccesos(); buildNav(); show('permisos');
-}
-async function permToggleSection(name,allow){
-  const dep=permDept, role=permRole; if(!dep||!role) return;
-  const g=permFullGroups().find(x=>x.name===name); if(!g) return;
-  const its=g.items.filter(it=>permItemVis(g.meta,it,role,dep));
-  for(const it of its){
-    if(allow){ await sb.from('accesos').delete().eq('dept',dep).eq('role',role).eq('item_id',it.id); }
-    else { await sb.from('accesos').upsert({dept,role,item_id:it.id,visible:false},{onConflict:'dept,role,item_id'}); }
-  }
-  await loadAccesos(); buildNav(); show('permisos');
 }
 
 /* utilidades */
