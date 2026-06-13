@@ -387,6 +387,15 @@
   .oa-empty{color:var(--suave);font-size:13px}
   .oa-hint{font-size:11px;color:var(--suave);margin-top:8px;line-height:1.4}
   @media(max-width:760px){.org-top{flex-direction:column}.org-aside{width:100%;box-sizing:border-box}}
+  /* Fuera del organigrama · tira pequeña arriba */
+  .org-fuera{display:flex;align-items:center;flex-wrap:wrap;gap:8px;padding:9px 13px;border:1px dashed var(--gris2);border-radius:12px;background:var(--gris);margin-bottom:16px}
+  .org-fuera.org-over{outline:2px dashed var(--acento);background:#fff}
+  .of-title{font-weight:700;color:var(--suave);font-size:10.5px;text-transform:uppercase;letter-spacing:.6px;margin-right:4px}
+  .of-hint{color:var(--suave);font-size:11px;margin-left:auto}
+  .of-empty{color:var(--suave);font-size:12.5px}
+  .org-mini{display:inline-flex;align-items:center;gap:7px;background:#fff;border:1px solid var(--gris2);border-radius:22px;padding:3px 12px 3px 4px;box-shadow:var(--sombra)}
+  .org-mini b{font-size:12.5px;font-weight:600}
+  .org-mini.drag{cursor:grab}
   /* ---- Recortador de foto de perfil ---- */
   .crop-ov{position:fixed;inset:0;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;z-index:9999}
   .crop-box{background:#fff;border-radius:14px;padding:22px;max-width:330px;box-shadow:0 20px 60px rgba(0,0,0,.3)}
@@ -629,7 +638,9 @@
   .fab-badge{position:absolute;top:-3px;right:-3px;background:var(--rojo,#d4564b);color:#fff;font-size:11px;font-weight:700;min-width:20px;height:20px;border-radius:11px;display:flex;align-items:center;justify-content:center;padding:0 5px;border:2px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.25)}
   /* Widget de mensajería (flotante) */
   .msgw-body{flex:1;min-height:0;display:flex;flex-direction:column;overflow:hidden;background:#fff}
-  #msgwList .mc{cursor:pointer}
+  #msgwList .mc{padding:10px 12px;border-bottom:1px solid var(--gris);cursor:pointer;display:flex;gap:10px;align-items:center;font-size:13.5px}
+  #msgwList .mc:hover{background:var(--azul-claro)}
+  #msgwList .mc b{font-size:13.5px}
   .msgw-conv-h{display:flex;align-items:center;gap:9px;padding:11px 14px;border-bottom:1px solid var(--gris2)}
   .msgw-conv-h b{font-size:14px}.msgw-conv-h small{margin-left:auto;font-size:11px}
   .msgw-back{cursor:pointer;font-size:20px;color:var(--azul);line-height:1}
@@ -1841,20 +1852,19 @@ function renderOrg(){
   }
   const roots=(children['__root__']||[]);
   const rootZone=canEdit?`<div class="org-rootzone" ondragover="orgOver(event)" ondragleave="orgLeave(event)" ondrop="orgDropRoot(event)">⬆ Suelta aquí para dejar a alguien en el nivel superior (sin jefe)</div>`:'';
-  const aside=`<div class="org-aside${canEdit?' drop':''}" ${canEdit?'ondragover="orgOver(event)" ondragleave="orgLeave(event)" ondrop="orgDropAside(event)"':''}>
-      <div class="oa-title">Fuera del organigrama</div>
-      ${aparte.map(p=>card(p)).join('')||'<div class="oa-empty">—</div>'}
-      ${canEdit?'<div class="oa-hint">Arrastra aquí a quien quede fuera del organigrama (sin líneas).</div>':''}
-    </div>`;
+  const mini=p=>`<span class="org-mini${canEdit?' drag':''}" data-id="${p.id}" ${canEdit?`draggable="true" ondragstart="orgDragStart(event,'${p.id}')"`:''} style="border-left:3px solid ${areaColor(p.area)}">${avP(p.nombre,p.color,22,p.foto,p.last_seen)}<b>${esc(p.nombre||'—')}</b></span>`;
+  const fuera=(aparte.length||canEdit)?`<div class="org-fuera${canEdit?' drop':''}" ${canEdit?'ondragover="orgOver(event)" ondragleave="orgLeave(event)" ondrop="orgDropAside(event)"':''}>
+      <span class="of-title">Fuera del organigrama</span>
+      ${aparte.map(mini).join('')||'<span class="of-empty">Nadie</span>'}
+      ${canEdit?'<span class="of-hint">arrastra aquí a quien quede fuera</span>':''}
+    </div>`:'';
   const areasUsadas=[...new Set(ppl.map(p=>p.area).filter(Boolean))];
   const legend=areasUsadas.length?`<div class="oleg-wrap">${areasUsadas.map(a=>`<span class="oleg"><i style="background:${areaColor(a)}"></i>${esc(a)}</span>`).join('')}</div>`:'';
   document.getElementById('main').innerHTML=`<div class="page-title">Organigrama</div>
     <div class="page-sub">${canEdit?'Arrastra a cada persona sobre su responsable para reorganizar. El color y la etiqueta indican su área y departamento.':'Estructura del equipo · el color y la etiqueta indican el área y el departamento'}</div>
     ${legend}
-    <div class="org-top">
-      <div class="org-main">${rootZone}<div class="org-tree">${roots.length?`<div class="org-scale"><ul>${roots.map(node).join('')}</ul></div>`:'<div class="panel">Aún no hay personas en el organigrama.</div>'}</div></div>
-      ${aside}
-    </div>`;
+    ${fuera}
+    <div class="org-main">${rootZone}<div class="org-tree">${roots.length?`<div class="org-scale"><ul>${roots.map(node).join('')}</ul></div>`:'<div class="panel">Aún no hay personas en el organigrama.</div>'}</div></div>`;
   requestAnimationFrame(orgFit); setTimeout(orgFit,80);
 }
 function orgShrink(el,base,min){ if(!el)return; el.style.fontSize=base+'px'; let fs=base; let guard=40; while(el.scrollWidth>el.clientWidth+0.5 && fs>min && guard-->0){ fs-=0.5; el.style.fontSize=fs+'px'; } }
@@ -2761,7 +2771,7 @@ function msgwRender(){
     chatLastId=thread.length?Math.max(...thread.map(m=>m.id)):0;
     b.innerHTML=`<div class="msgw-conv-h"><span class="msgw-back" onclick="msgwBack()">←</span><b>${esc(msgwName)}</b>${c?`<small style="color:${cOn?'#1f9d55':'var(--suave)'};font-weight:${cOn?'700':'400'}">${cOn?'En línea':'últ. '+haceTiempo(c.last_seen)}</small>`:''}</div>
       <div class="msgw-thread" id="msgwThread">${thread.map(bubbleHTML).join('')||'<div style="color:var(--suave);text-align:center;font-size:13px;padding:18px">Aún no hay mensajes. ¡Escribe el primero!</div>'}</div>
-      <div class="msgw-in"><input id="msgwIn" placeholder="Escribe un mensaje…" onkeydown="if(event.key==='Enter')msgwSend()"><button onclick="msgwSend()">➤</button></div>`;
+      <div class="msgw-in"><div class="emoji-wrap"><button type="button" class="emoji-btn" onclick="msgwToggleEmoji(event)" title="Emojis">😊</button><div id="msgwEmojiPanel" class="emoji-panel"></div></div><label class="emoji-btn" style="cursor:pointer" title="Adjuntar archivo">📎<input type="file" id="msgwFile" style="display:none" onchange="msgwAttach(this)"></label><input id="msgwIn" placeholder="Escribe un mensaje…" onkeydown="if(event.key==='Enter')msgwSend()"><button onclick="msgwSend()">➤</button></div>`;
     setTimeout(()=>{const t=document.getElementById('msgwThread');if(t)t.scrollTop=t.scrollHeight;},20);
     MSG_ALL.forEach(m=>{ if(m.de_id===msgwWith&&m.para_id===ME.id) m.leido=true; });
     sb.from('mensajes').update({leido:true}).eq('para_id',ME.id).eq('de_id',msgwWith).eq('leido',false).then(()=>loadMsgUnread());
@@ -2801,6 +2811,16 @@ async function msgwPoll(){
     if(rec){ await sb.from('mensajes').update({leido:true}).eq('para_id',ME.id).eq('de_id',msgwWith).eq('leido',false); loadMsgUnread(); }
   }
 }
+function msgwToggleEmoji(e){ if(e)e.stopPropagation(); const p=document.getElementById('msgwEmojiPanel'); if(!p)return; if(p.classList.contains('open')){p.classList.remove('open');return;} p.innerHTML=EMOJIS.map(x=>`<button type="button" onclick="msgwAddEmoji(event,'${x}')">${x}</button>`).join(''); p.classList.add('open'); setTimeout(()=>document.addEventListener('click',msgwCloseEmoji),0); }
+function msgwCloseEmoji(){const p=document.getElementById('msgwEmojiPanel');if(p)p.classList.remove('open');document.removeEventListener('click',msgwCloseEmoji);}
+function msgwAddEmoji(e,x){if(e)e.stopPropagation();const i=document.getElementById('msgwIn');if(!i)return;i.value=(i.value||'')+x;i.focus();}
+async function msgwAttach(input){ const f=input.files[0]; input.value=''; if(!f||!msgwWith) return; if(f.size>25*1024*1024){alert('Máximo 25 MB por archivo.');return;}
+  const path=ME.id+'/'+msgwWith+'/'+Date.now()+'_'+f.name.replace(/[^\w.\-]/g,'_'); const up=await sb.storage.from('mensajes').upload(path,f); if(up.error){alert('No se pudo subir: '+up.error.message);return;}
+  const i=document.getElementById('msgwIn'); const txt=(i?i.value:'').trim(); if(i)i.value='';
+  const {data,error}=await sb.from('mensajes').insert({de_id:ME.id,para_id:msgwWith,de_nombre:PROFILE.nombre,para_nombre:msgwName,texto:txt,adj_path:path,adj_nombre:f.name,adj_tipo:f.type,leido:false}).select().single();
+  if(error){alert('Error: '+error.message);return;}
+  MSG_ALL.push(data); chatLastId=Math.max(chatLastId,data.id);
+  const th=document.getElementById('msgwThread'); if(th){const tmp=document.createElement('div');tmp.innerHTML=bubbleHTML(data);if(tmp.firstElementChild){th.appendChild(tmp.firstElementChild);th.scrollTop=th.scrollHeight;}} }
 function toggleChatOLD(){chatOpen=!chatOpen;const w=document.getElementById('chatWin');if(chatOpen){buildChat();w.style.display='flex';}else w.style.display='none';}
 function buildChat(){document.getElementById('chatWin').innerHTML=`<div class="ch">🤖 <div>Wally<small>Asistente de Amazinn Places</small></div><span class="x" onclick="toggleChat()">✕</span></div>
   <div class="chat-body" id="chatBody"></div><div class="chat-sug">${SUGS.map(s=>`<button onclick="askWally('${s.replace(/'/g,"\\'")}')">${s}</button>`).join('')}</div>
