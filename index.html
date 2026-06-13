@@ -289,6 +289,8 @@
   .perm-sec td{background:var(--azul-claro);font-size:13px}
   .perm-yes{color:#2c8a4a;font-weight:800}
   .perm-no{color:#d9534f;font-weight:700}
+  .perm-lock{color:#c9c2b4}
+  .perm-chk{width:18px;height:18px;cursor:pointer;accent-color:#2c8a4a}
   body.dark .perm-sec td{background:#2a2823}
   .con-row{display:flex;align-items:center;gap:11px;padding:11px 4px;border-bottom:1px solid var(--gris)}
   .con-row:last-child{border-bottom:none}
@@ -883,6 +885,7 @@ async function enterApp(user){
     return;
   }
   await loadCatalogos();
+  await loadAccesos();
   document.getElementById('login').style.display='none';
   document.getElementById('app').style.display='block';
   document.getElementById('uname').textContent = PROFILE.nombre || user.email;
@@ -988,6 +991,10 @@ function isoD(x){return `${x.getFullYear()}-${String(x.getMonth()+1).padStart(2,
 function lblD(x){const ds=['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'],ms=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];return `${ds[x.getDay()]} ${x.getDate()} ${ms[x.getMonth()]}`;}
 function isWk(x){return x.getDay()===0||x.getDay()===6;}
 let horTab='mi', horOtherDept=null, horEditDept=null;
+let ACCESS_DENY=new Set();  // ids de áreas ocultas para el usuario actual (config. de Permisos)
+async function loadAccesos(){ ACCESS_DENY=new Set(); if(isOwner()) return;   // el propietario siempre ve todo
+  try{ const {data}=await sb.from('accesos').select('item_id,visible').eq('dept',PROFILE.dept||'').eq('role',PROFILE.role);
+    (data||[]).forEach(r=>{ if(r.visible===false) ACCESS_DENY.add(r.item_id); }); }catch(e){} }
 function navGroups(){
   const groups=[]; let cur=null;
   NAV.forEach(it=>{
@@ -995,6 +1002,7 @@ function navGroups(){
     const er = PROFILE.role==='propietario' ? 'admin' : PROFILE.role;
     if(it.roles && !it.roles.includes(er)) return;
     if(it.depts && !it.depts.includes(PROFILE.dept) && !isAdmin()) return;
+    if(it.id && !isOwner() && ACCESS_DENY.has(it.id)) return;   // oculto por configuración de Permisos
     if(it.grp){ cur={name:it.grp,items:[]}; groups.push(cur); }
     else if(cur){ cur.items.push(it); }
   });
@@ -1195,7 +1203,7 @@ function show(id){
   else if(id==='onboarding'){ m.innerHTML=pageOnboarding(); }
   else if(id==='asignaciones'){ ld('<div class="page-title">Limpieza · Asignaciones</div><div class="page-sub">Cargando…</div>'); pageAsignaciones(); }
   else if(id==='limpTutoriales'){ m.innerHTML=pageLimpTutoriales(); }
-  else if(id==='permisos'){ m.innerHTML=pagePermisos(); }
+  else if(id==='permisos'){ ld('<div class="page-title">Permisos y accesos</div><div class="page-sub">Cargando…</div>'); pagePermisos(); }
 }
 
 /* ---------------- INICIO ---------------- */
@@ -3130,28 +3138,51 @@ function permPass(it,role,dept){
   return true;
 }
 function permItemVis(meta,it,role,dept){ return permPass(meta,role,dept) && permPass(it,role,dept); }
-function pagePermisos(){
+async function pagePermisos(){
+  const canEdit=isAdmin();                 // admin o propietario pueden editar
   const groups=permFullGroups();
   const dep=permDept||'';
   const deptOpts=['—',...DEPTS];
-  const cell=v=> v?'<span class="perm-yes">✓</span>':'<span class="perm-no">✗</span>';
+  // overrides guardados para este departamento
+  const map={};
+  try{ const {data}=await sb.from('accesos').select('role,item_id,visible').eq('dept',dep);
+    (data||[]).forEach(r=>{ map[r.role+'|'+r.item_id]=r.visible; }); }
+  catch(e){ document.getElementById('main').innerHTML='<div class="page-title">Permisos y accesos</div><div class="panel">No se pudo cargar. ¿Ejecutaste <b>supabase_accesos.sql</b> en Supabase?<br><small style="color:var(--suave)">'+esc(e.message||e)+'</small></div>'; return; }
+  const denied=(role,id)=> map[role+'|'+id]===false;
+  const cellEdit=(meta,it,role)=>{
+    const def=permItemVis(meta,it,role,dep);
+    if(!def) return '<span class="perm-lock" title="No disponible para este rol">·</span>';   // no se puede conceder (regla de rol)
+    const eff=!denied(role,it.id);
+    if(canEdit && role!=='propietario'){
+      return `<input type="checkbox" class="perm-chk" ${eff?'checked':''} onchange="permToggle('${role}','${it.id}',this.checked)">`;
+    }
+    return eff?'<span class="perm-yes">✓</span>':'<span class="perm-no">✗</span>';
+  };
   const rows=groups.map(g=>{
-    const secVis=PERM_ROLES.map(([r])=> g.items.some(it=>permItemVis(g.meta,it,r,dep)));
-    const head=`<tr class="perm-sec"><td><b>${GRP_ICON[g.name]||''} ${esc(g.name)}</b></td>${secVis.map(v=>`<td>${v?'<span class="perm-yes">✓</span>':'<span class="perm-no">·</span>'}</td>`).join('')}</tr>`;
-    const its=g.items.map(it=>`<tr><td class="perm-area">${it.ic?it.ic+' ':''}${esc(it.t)}</td>${PERM_ROLES.map(([r])=>`<td>${cell(permItemVis(g.meta,it,r,dep))}</td>`).join('')}</tr>`).join('');
+    const secVis=PERM_ROLES.map(([r])=> g.items.some(it=> permItemVis(g.meta,it,r,dep) && !denied(r,it.id)));
+    const head=`<tr class="perm-sec"><td><b>${GRP_ICON[g.name]||''} ${esc(g.name)}</b></td>${secVis.map(v=>`<td>${v?'<span class="perm-yes">✓</span>':'<span class="perm-lock">·</span>'}</td>`).join('')}</tr>`;
+    const its=g.items.map(it=>`<tr><td class="perm-area">${it.ic?it.ic+' ':''}${esc(it.t)}</td>${PERM_ROLES.map(([r])=>`<td>${cellEdit(g.meta,it,r)}</td>`).join('')}</tr>`).join('');
     return head+its;
   }).join('');
-  return `<div class="page-title">Permisos y accesos</div>
-   <div class="page-sub">Qué secciones y áreas del menú ve cada rol. Las áreas que dependen del departamento cambian según el departamento seleccionado.</div>
+  document.getElementById('main').innerHTML=`<div class="page-title">Permisos y accesos</div>
+   <div class="page-sub">${canEdit?'Marca o desmarca qué secciones y áreas ve cada rol en el departamento seleccionado. Los cambios se aplican al instante.':'Qué secciones y áreas del menú ve cada rol.'}</div>
    <div class="panel" style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin-bottom:14px">
-     <label style="font-weight:600;font-size:13px">🏢 Departamento <span style="color:var(--suave);font-weight:400">(para áreas restringidas por departamento)</span>:</label>
+     <label style="font-weight:600;font-size:13px">🏢 Departamento:</label>
      <select onchange="permDept=(this.value==='—'?'':this.value);show('permisos')" style="padding:8px 11px;border:1px solid var(--gris2);border-radius:8px;font-family:inherit">${deptOpts.map(d=>`<option ${((d==='—'&&!dep)||d===dep)?'selected':''}>${esc(d)}</option>`).join('')}</select>
+     <span style="font-size:12px;color:var(--suave)">La configuración es por <b>departamento + rol</b>.</span>
    </div>
    <div class="panel"><div style="overflow-x:auto"><table class="tbl-compact perm-tbl">
      <thead><tr><th>Sección / Área</th>${PERM_ROLES.map(([_,l])=>`<th>${l}</th>`).join('')}</tr></thead>
      <tbody>${rows}</tbody></table></div>
-     <p style="font-size:12px;color:var(--suave);margin-top:14px;line-height:1.6">✓ = visible · ✗ = oculto. <b>Propietario</b> y <b>Administrador</b> ven todo. El <b>Área</b> y el <b>Equipo</b> no cambian qué secciones aparecen en el menú; afectan al <b>contenido</b> dentro de cada sección (comunicados, horarios y eventos se filtran por área/departamento/equipo).</p>
+     <p style="font-size:12px;color:var(--suave);margin-top:14px;line-height:1.6">${canEdit?'Casilla marcada = visible · desmarcada = oculto. ':''}“·” = no disponible para ese rol (no se puede conceder desde aquí). El <b>Propietario</b> siempre ve todo. El <b>Área</b> y el <b>Equipo</b> no cambian qué secciones aparecen en el menú; afectan al <b>contenido</b> dentro de cada sección.</p>
    </div>`;
+}
+async function permToggle(role,itemId,allow){
+  const dep=permDept||'';
+  if(allow){ const {error}=await sb.from('accesos').delete().eq('dept',dep).eq('role',role).eq('item_id',itemId); if(error){alert('Error: '+error.message);} }
+  else { const {error}=await sb.from('accesos').upsert({dept,role,item_id:itemId,visible:false},{onConflict:'dept,role,item_id'}); if(error){alert('Error: '+error.message);} }
+  await loadAccesos(); buildNav();          // refleja el cambio en mi propio menú si me afecta
+  show('permisos');
 }
 
 /* utilidades */
