@@ -8,7 +8,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;800;900&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;800;900&family=Inter:wght@400;500;600;700&family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
   :root{
     --azul:#1c1b18; --azul2:#3a342a; --azul-claro:#f1e9da; --acento:#b08d57;
@@ -712,6 +712,42 @@
     body.nav-pinned nav.side{width:252px;box-shadow:none}
     body.nav-pinned main{margin-left:252px}
   }
+
+  /* =====================================================================
+     TEMA CORPORATIVO (azul marca + Poppins) — solo estética, sin cambios de lógica
+     ===================================================================== */
+  :root{
+    --azul:#1f4e79; --azul2:#163a5c; --azul-claro:#eaf0f6; --acento:#2a9d8f;
+    --gris:#f4f6f9; --gris2:#e6e9ef; --texto:#1d2733; --suave:#6b7480;
+    --rojo:#d4564b; --amarillo:#cf8a16;
+    --sombra:0 1px 2px rgba(20,40,70,.04),0 6px 18px rgba(20,40,70,.06);
+  }
+  body{font-family:'Poppins',system-ui,-apple-system,sans-serif !important;background:var(--gris)}
+  .page-title,.panel h2,.com-card .h b,.org .node b,.login-card .sub,.card .big{font-family:'Poppins',sans-serif !important}
+  .page-title{color:var(--azul) !important;border-bottom:none !important;padding-bottom:0 !important;font-weight:700}
+  a{color:var(--azul)}
+  .panel,.card{border-radius:16px !important;border:1px solid var(--gris2) !important;box-shadow:var(--sombra) !important;background:#fff}
+  .btn{border-radius:10px !important;background:var(--azul);color:#fff;font-weight:600;letter-spacing:0}
+  .btn:hover{background:var(--azul2);color:#fff}
+  .btn.ghost{background:#fff;color:var(--azul);border:1px solid var(--gris2)}
+  .btn.ghost:hover{background:var(--gris);border-color:var(--azul);color:var(--azul)}
+  .badge{border-radius:20px !important}
+  header.top{background:#fff;border-top:3px solid var(--azul) !important}
+  nav.side{background:#fff !important}
+  nav.side .grp-items{background:transparent !important}
+  nav.side .grp-tog:hover{background:var(--gris) !important}
+  nav.side a{border-left:none !important;border-radius:11px !important;margin:1px 8px;color:#39424f !important}
+  nav.side a:hover{background:var(--gris) !important;color:var(--azul) !important}
+  nav.side a.active{background:var(--azul) !important;color:#fff !important;border-left:none !important;font-weight:600}
+  nav.side a.active .ic, nav.side a.active .nic *{stroke:#fff;color:#fff}
+  .nav-badge{background:var(--rojo) !important}
+  #login{background:linear-gradient(135deg,#1f4e79 0%,#163a5c 60%,#0f2a45 100%) !important}
+  .login-card{border-radius:18px !important}
+  table.sched thead th, table.cal th{background:var(--azul) !important;color:#fff}
+  .b-blue{background:var(--azul-claro);color:var(--azul)} .b-green{background:#e7f4f0;color:#1f7a6b}
+  .b-red{background:#fbeae8;color:var(--rojo)} .b-amber{background:#fbf2e0;color:var(--amarillo)} .b-grey{background:#eef1f5;color:var(--suave)}
+  body.dark{--azul:#cfe0f2;--azul-claro:#22324a}
+  body.dark nav.side a.active{background:#1f4e79 !important;color:#fff !important}
 </style>
 </head>
 <body>
