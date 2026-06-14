@@ -1082,6 +1082,7 @@ const NAV=[
   {id:'limpTutoriales',ic:'🎥',t:'Tutoriales', lockRoles:['empleado','responsable']},
   {grp:'Mantenimiento'},
   {id:'incidencias',ic:'🛠️',t:'Incidencias'},
+  {id:'preventivo',ic:'🗓️',t:'Mantenimiento preventivo', depts:['Mantenimiento']},
   {id:'videos',ic:'🎥',t:'Videos explicativos', lockRoles:['empleado','responsable']},
   {grp:'Atención al cliente', depts:['Atención al cliente']},
   {id:'mensajes',ic:'💬',t:'Mensajes y plantillas', depts:['Atención al cliente']},
@@ -1342,6 +1343,7 @@ function show(id){
   else if(id==='mensajeria'){ ld('<div class="page-title">Mensajería</div><div class="page-sub">Cargando…</div>'); pageMensajeria(); }
   else if(id==='kudos'){ if(PROFILE.role==='empleado'){ m.innerHTML='<div class="page-title">Reconocimientos</div><div class="panel" style="color:var(--suave)">Esta sección está disponible para responsables y superiores.</div>'; return; } ld('<div class="page-title">Reconocimientos</div><div class="page-sub">Cargando…</div>'); pageKudos(); }
   else if(id==='incidencias'){ ld('<div class="page-title">Incidencias</div><div class="page-sub">Cargando…</div>'); pageIncidencias(); }
+  else if(id==='preventivo'){ ld('<div class="page-title">Mantenimiento preventivo</div><div class="page-sub">Cargando…</div>'); pagePreventivo(); }
   else if(id==='videos'){ ld('<div class="page-title">Videos explicativos</div><div class="page-sub">Cargando…</div>'); pageVideos(); }
   else if(id==='onboarding'){ m.innerHTML=pageOnboarding(); }
   else if(id==='asignaciones'){ ld('<div class="page-title">Limpieza · Asignaciones</div><div class="page-sub">Cargando…</div>'); pageAsignaciones(); }
@@ -3275,7 +3277,7 @@ function incEnsureStyle(){ if(document.getElementById('incStyle'))return; const 
   .inc-card.done{opacity:.6;filter:grayscale(.4)}
   .inc-card.done:hover{opacity:1;filter:none}
   @keyframes incAlarm{0%,100%{box-shadow:0 0 0 0 rgba(211,51,51,.0);border-color:var(--gris2);background:#fff}50%{box-shadow:0 0 16px 4px rgba(211,51,51,.6);border-color:#d33;background:#fff4f3}}
-  .inc-card.urg-alta:not(.done){animation:incAlarm .9s ease-in-out infinite}
+  .inc-card.urg-alta:not(.done),.inc-card.prev-due:not(.done){animation:incAlarm .9s ease-in-out infinite}
   @keyframes urgBlink{0%,100%{opacity:1}50%{opacity:.25}}
   .badge.urg-alarm{animation:urgBlink .7s steps(1,end) infinite}
   .inc-lb{position:fixed;inset:0;background:rgba(0,0,0,.86);display:flex;align-items:center;justify-content:center;z-index:9999;padding:30px;cursor:zoom-out}
@@ -3299,14 +3301,13 @@ async function pageIncidencias(){
   const inc=await sb.from('mant_incidencias').select('*').order('created_at',{ascending:false});
   if(inc.error){ document.getElementById('main').innerHTML=`<div class="page-title">Incidencias y mantenimiento</div><div class="panel">No se pudo cargar. ¿Ejecutaste <b>supabase_mantenimiento.sql</b> en Supabase?<br><small style="color:var(--suave)">${esc(inc.error.message)}</small></div>`; return; }
   INC=inc.data||[];
-  const [ed,un,fo,stf,pv]=await Promise.all([
+  const [ed,un,fo,stf]=await Promise.all([
     sb.from('mant_edificios').select('*').order('orden').order('nombre'),
     sb.from('mant_unidades').select('*').order('orden').order('nombre'),
     sb.from('mant_fotos').select('*').order('id'),
     sb.from('profiles').select('id,nombre,org_equipo,equipo,dept').eq('dept','Mantenimiento').eq('estado','aprobado'),
-    sb.from('mant_preventivo').select('*').order('proximo'),
   ]);
-  MANT_EDIF=ed.data||[]; MANT_UNI=un.data||[]; MANT_STAFF=stf.data||[]; MANT_PREV=pv.data||[];
+  MANT_EDIF=ed.data||[]; MANT_UNI=un.data||[]; MANT_STAFF=stf.data||[];
   MANT_STAFF.forEach(s=>{ s.team=s.org_equipo||s.equipo||''; });
   MANT_TEAMS=[...new Set(MANT_STAFF.map(s=>s.team).filter(Boolean))];
   INC_FOTOS={}; (fo.data||[]).forEach(f=>{(INC_FOTOS[f.incidencia_id]=INC_FOTOS[f.incidencia_id]||[]).push(f);});
@@ -3316,13 +3317,11 @@ async function pageIncidencias(){
     <button class="asg-tab ${incTab==='bandeja'?'on':''}" onclick="setIncTab('bandeja')">📥 Bandeja</button>
     <button class="asg-tab ${incTab==='curso'?'on':''}" onclick="setIncTab('curso')">🛠️ En curso${enCurso?` (${enCurso})`:''}</button>
     <button class="asg-tab ${incTab==='historial'?'on':''}" onclick="setIncTab('historial')">📜 Historial</button>
-    ${canManage?`<button class="asg-tab ${incTab==='prev'?'on':''}" onclick="setIncTab('prev')">🗓️ Preventivo</button>`:''}
     ${canManage?`<button class="asg-tab ${incTab==='panel'?'on':''}" onclick="setIncTab('panel')">📊 Panel</button>`:''}</div>`;
   let body; const fullScreen=(incSel!=null||incNew);
   if(incNew){ body=renderIncForm(); }
   else if(incSel!=null){ body=renderIncDetail(incSel); }
   else if(incTab==='panel'&&canManage){ body=renderIncPanel(INC); }
-  else if(incTab==='prev'&&canManage){ body=renderPrev(); }
   else if(incTab==='curso'){ body=renderIncCurso(); }
   else if(incTab==='historial'){ body=renderIncList(true); }
   else { body=renderIncBandeja(); }
@@ -3717,31 +3716,53 @@ function renderIncPanel(I){
 
 /* ---------------- MANTENIMIENTO PREVENTIVO ---------------- */
 function prevLocalIso(d){ const p=n=>(''+n).padStart(2,'0'); return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate()); }
+async function pagePreventivo(){
+  asgEnsureStyle(); incEnsureStyle();
+  const pv=await sb.from('mant_preventivo').select('*').order('proximo');
+  if(pv.error){ document.getElementById('main').innerHTML=`<div class="page-title">Mantenimiento preventivo</div><div class="panel">No se pudo cargar. ¿Ejecutaste <b>supabase_mantenimiento.sql</b> en Supabase?<br><small style="color:var(--suave)">${esc(pv.error.message)}</small></div>`; return; }
+  const [ed,un,stf]=await Promise.all([
+    sb.from('mant_edificios').select('*').order('orden').order('nombre'),
+    sb.from('mant_unidades').select('*').order('orden').order('nombre'),
+    sb.from('profiles').select('id,nombre,org_equipo,equipo,dept').eq('dept','Mantenimiento').eq('estado','aprobado'),
+  ]);
+  MANT_PREV=pv.data||[]; MANT_EDIF=ed.data||[]; MANT_UNI=un.data||[]; MANT_STAFF=stf.data||[];
+  MANT_STAFF.forEach(s=>{ s.team=s.org_equipo||s.equipo||''; });
+  MANT_TEAMS=[...new Set(MANT_STAFF.map(s=>s.team).filter(Boolean))];
+  document.getElementById('main').innerHTML=`<div class="page-title">Mantenimiento preventivo</div><div class="page-sub">Tareas programadas y recurrentes (piscina, filtros, revisiones…)</div>${renderPrev()}`;
+}
 function renderPrev(){
+  const canManage=incCan();
   const tasks=MANT_PREV.slice().sort((a,b)=>((a.proximo||'9999')<(b.proximo||'9999')?-1:1));
   const form = prevFormOpen? prevFormHTML() : '';
-  const cards = tasks.length? `<div class="inc-cards">${tasks.map(prevCardHTML).join('')}</div>` : '<div class="panel" style="color:var(--suave)">Sin tareas preventivas todavía. Crea la primera.</div>';
-  return `<div style="font-size:12.5px;color:var(--suave);margin:0 0 12px">Tareas que se repiten (piscina, filtros, revisiones…). Pulsa <b>Hecho</b> y se reprograma sola para la próxima vez.</div>
-    <div style="margin:0 0 12px"><button class="btn" onclick="prevNew()">+ Nueva tarea preventiva</button></div>
+  const cards = tasks.length? `<div class="inc-cards">${tasks.map(prevCardHTML).join('')}</div>` : '<div class="panel" style="color:var(--suave)">Sin tareas preventivas todavía.</div>';
+  return `<div style="font-size:12.5px;color:var(--suave);margin:0 0 12px">Tareas que se repiten. Pulsa <b>Hecho</b> y se reprograma sola para la próxima. Las <b style="color:#c0392b">vencidas parpadean</b>.</div>
+    ${canManage?`<div style="margin:0 0 12px"><button class="btn" onclick="prevNew()">+ Nueva tarea preventiva</button></div>`:''}
     ${form}${cards}`;
 }
 function prevCardHTML(t){
+  const canManage=incCan();
   const today=new Date(); today.setHours(0,0,0,0);
   const prox=t.proximo?new Date(t.proximo+'T00:00:00'):null;
-  const overdue = prox && prox<today;
+  const overdue = prox && prox<today && t.activo!==false;
   const dueSoon = prox && !overdue && (prox-today)/86400000<=3;
-  const estado = (t.activo===false)?'<span class="badge b-grey">Inactiva</span>': overdue?'<span class="badge b-red">⏰ Vencida</span>': dueSoon?'<span class="badge b-amber">Próxima</span>':'<span class="badge b-green">Al día</span>';
-  return `<div class="inc-card${t.activo===false?' done':''}">
+  const estado = (t.activo===false)?'<span class="badge b-grey">Inactiva</span>': overdue?'<span class="badge b-red urg-alarm">⏰ Vencida</span>': dueSoon?'<span class="badge b-amber">Próxima</span>':'<span class="badge b-green">Al día</span>';
+  const asg = t.asignado_a_nombre? ('→ '+esc(t.asignado_a_nombre)) : (t.asignado_equipo? ('→ '+esc(t.asignado_equipo)) : '→ Sin asignar');
+  const puedeTomar = incEsMant() && !t.asignado_a && t.activo!==false;
+  return `<div class="inc-card${t.activo===false?' done':''}${overdue?' prev-due':''}">
     <div class="inc-card-top">${estado}<span class="badge b-grey">cada ${t.frecuencia_dias} días</span></div>
     <div class="inc-card-loc">🗓️ ${esc(t.titulo)}</div>
     <div class="inc-card-desc">🏠 ${esc(t.edificio||'Cualquiera')}${t.unidad?' · '+esc(t.unidad):''}${t.categoria?' · '+incCatLabel(t.categoria):''}</div>
-    <div class="inc-card-meta">Próximo: <b>${prox?prox.toLocaleDateString('es-ES'):'—'}</b>${t.asignado_a_nombre?' · '+esc(t.asignado_a_nombre):(t.asignado_equipo?' · '+esc(t.asignado_equipo):'')}</div>
+    <div class="inc-card-meta">Próximo: <b>${prox?prox.toLocaleDateString('es-ES'):'—'}</b> · ${asg}</div>
     ${t.ultima?`<div class="inc-card-meta2">Última vez: ${new Date(t.ultima+'T00:00:00').toLocaleDateString('es-ES')}</div>`:''}
     <div class="inc-card-actions">
       <button class="btn-ok" onclick="prevDone(${t.id})">✅ Hecho hoy</button>
-      <button class="btn-sm ghost" onclick="prevEdit(${t.id})">✏️ Editar</button>
-      <button class="btn-sm x" onclick="prevDelete(${t.id})">🗑</button>
+      ${puedeTomar?`<button class="btn-sm" onclick="prevTomar(${t.id})">✋ Tomar</button>`:''}
+      ${canManage?`<button class="btn-sm ghost" onclick="prevEdit(${t.id})">✏️ Editar</button><button class="btn-sm x" onclick="prevDelete(${t.id})">🗑</button>`:''}
     </div></div>`;
+}
+async function prevTomar(id){
+  await sb.from('mant_preventivo').update({asignado_a:ME.id,asignado_a_nombre:PROFILE.nombre}).eq('id',id);
+  toast('✓ Te la has asignado'); show('preventivo');
 }
 function prevFormHTML(){
   const t = prevEditId? (MANT_PREV.find(x=>String(x.id)===String(prevEditId))||{}) : {};
@@ -3765,9 +3786,9 @@ function prevFormHTML(){
   </form></div>`;
 }
 function prevFormEdif(){ const ed=(document.getElementById('pEdif')||{}).value||''; const uni=document.getElementById('pUni'); if(!uni)return; const list=MANT_UNI.filter(u=>u.edificio===ed); uni.innerHTML=`<option value="">— Cualquiera —</option>`+list.map(u=>`<option>${esc(u.nombre)}${u.tipo==='comun'?' (zona común)':''}</option>`).join(''); }
-function prevNew(){ prevEditId=null; prevFormOpen=true; show('incidencias'); }
-function prevEdit(id){ prevEditId=id; prevFormOpen=true; show('incidencias'); }
-function prevCancel(){ prevFormOpen=false; prevEditId=null; show('incidencias'); }
+function prevNew(){ prevEditId=null; prevFormOpen=true; show('preventivo'); }
+function prevEdit(id){ prevEditId=id; prevFormOpen=true; show('preventivo'); }
+function prevCancel(){ prevFormOpen=false; prevEditId=null; show('preventivo'); }
 async function prevSave(e){
   e.preventDefault();
   const g=x=>{const el=document.getElementById(x);return el?el.value:'';};
@@ -3780,15 +3801,15 @@ async function prevSave(e){
   if(prevEditId){ const r=await sb.from('mant_preventivo').update(row).eq('id',prevEditId); err=r.error; }
   else { row.activo=true; const r=await sb.from('mant_preventivo').insert(row); err=r.error; }
   if(err){ alert('Error: '+err.message); return false; }
-  prevFormOpen=false; prevEditId=null; toast('✓ Guardado'); show('incidencias'); return false;
+  prevFormOpen=false; prevEditId=null; toast('✓ Guardado'); show('preventivo'); return false;
 }
 async function prevDone(id){
   const t=MANT_PREV.find(x=>String(x.id)===String(id)); if(!t)return;
   const today=new Date(); const next=new Date(); next.setDate(next.getDate()+(t.frecuencia_dias||30));
   await sb.from('mant_preventivo').update({ultima:prevLocalIso(today),proximo:prevLocalIso(next)}).eq('id',id);
-  toast('✓ Hecho · reprogramada para '+next.toLocaleDateString('es-ES')); show('incidencias');
+  toast('✓ Hecho · reprogramada para '+next.toLocaleDateString('es-ES')); show('preventivo');
 }
-async function prevDelete(id){ if(!confirm('¿Eliminar esta tarea preventiva?'))return; const{error}=await sb.from('mant_preventivo').delete().eq('id',id); if(error){alert('Error: '+error.message);return;} toast('Eliminada'); show('incidencias'); }
+async function prevDelete(id){ if(!confirm('¿Eliminar esta tarea preventiva?'))return; const{error}=await sb.from('mant_preventivo').delete().eq('id',id); if(error){alert('Error: '+error.message);return;} toast('Eliminada'); show('preventivo'); }
 
 /* ---------------- VIDEOS EXPLICATIVOS ---------------- */
 let vidFormOpen=false;
