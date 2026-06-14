@@ -3198,10 +3198,16 @@ async function createKudo(e){e.preventDefault();const para=document.getElementBy
 /* ================= MANTENIMIENTO · INCIDENCIAS (v2) ================= */
 let incFormOpen=false, incTab='bandeja', incSel=null, incTimerInt=null, incEditOpen=false, incNew=false;
 let incFilters={ambito:'',edificio:'',unidad:'',urgencia:'',estado:''};
-let MANT_EDIF=[], MANT_UNI=[], MANT_STAFF=[], MANT_TEAMS=[], INC=[], INC_FOTOS={};
+let MANT_EDIF=[], MANT_UNI=[], MANT_STAFF=[], MANT_TEAMS=[], MANT_PREV=[], INC=[], INC_FOTOS={};
+let prevFormOpen=false, prevEditId=null;
 const INC_URG={alta:['Alta','b-red','🔴'],media:['Media','b-amber','🟠'],baja:['Baja','b-grey','🟢']};
 const INC_EST={pendiente:['Pendiente','b-grey'],asignada:['Asignada','b-blue'],en_curso:['En curso','b-amber'],pausada:['Pausada','b-amber'],a_medias:['A medias','b-amber'],terminada:['Terminada','b-green'],cancelada:['Cancelada','b-grey']};
 const INC_VIA={cliente_ota:'🌐 Cliente (OTA)',limpieza:'🧹 Limpieza',personal:'👤 Personal interno'};
+const INC_CAT=[['fontaneria','🚰 Fontanería'],['electricidad','💡 Electricidad'],['climatizacion','❄️ Climatización'],['electrodomesticos','🔌 Electrodomésticos'],['mobiliario','🛋️ Mobiliario'],['cerrajeria','🔑 Cerrajería'],['pintura','🎨 Pintura'],['otros','🔧 Otros']];
+function incCatLabel(c){ const f=INC_CAT.find(x=>x[0]===c); return f?f[1]:(c||'Sin categoría'); }
+const SLA_H={alta:24,media:72,baja:168};
+function incVencida(i){ if(['terminada','cancelada'].includes(i.estado))return false; const lim=SLA_H[i.urgencia]||72; return (Date.now()-new Date(i.created_at).getTime())/3600000 > lim; }
+function incMoney(n){ const v=Number(n); return isNaN(v)?'—':('$'+v.toLocaleString('es-ES',{minimumFractionDigits:0,maximumFractionDigits:2})); }
 function incCan(){ return CAN_MANAGE.includes(PROFILE.role); }
 function incEsMant(){ return PROFILE.dept==='Mantenimiento' || incCan(); }
 function incMyTeam(){ return PROFILE.org_equipo||PROFILE.equipo||''; }
@@ -3269,13 +3275,14 @@ async function pageIncidencias(){
   const inc=await sb.from('mant_incidencias').select('*').order('created_at',{ascending:false});
   if(inc.error){ document.getElementById('main').innerHTML=`<div class="page-title">Incidencias y mantenimiento</div><div class="panel">No se pudo cargar. ¿Ejecutaste <b>supabase_mantenimiento.sql</b> en Supabase?<br><small style="color:var(--suave)">${esc(inc.error.message)}</small></div>`; return; }
   INC=inc.data||[];
-  const [ed,un,fo,stf]=await Promise.all([
+  const [ed,un,fo,stf,pv]=await Promise.all([
     sb.from('mant_edificios').select('*').order('orden').order('nombre'),
     sb.from('mant_unidades').select('*').order('orden').order('nombre'),
     sb.from('mant_fotos').select('*').order('id'),
     sb.from('profiles').select('id,nombre,org_equipo,equipo,dept').eq('dept','Mantenimiento').eq('estado','aprobado'),
+    sb.from('mant_preventivo').select('*').order('proximo'),
   ]);
-  MANT_EDIF=ed.data||[]; MANT_UNI=un.data||[]; MANT_STAFF=stf.data||[];
+  MANT_EDIF=ed.data||[]; MANT_UNI=un.data||[]; MANT_STAFF=stf.data||[]; MANT_PREV=pv.data||[];
   MANT_STAFF.forEach(s=>{ s.team=s.org_equipo||s.equipo||''; });
   MANT_TEAMS=[...new Set(MANT_STAFF.map(s=>s.team).filter(Boolean))];
   INC_FOTOS={}; (fo.data||[]).forEach(f=>{(INC_FOTOS[f.incidencia_id]=INC_FOTOS[f.incidencia_id]||[]).push(f);});
@@ -3285,11 +3292,13 @@ async function pageIncidencias(){
     <button class="asg-tab ${incTab==='bandeja'?'on':''}" onclick="setIncTab('bandeja')">📥 Bandeja</button>
     <button class="asg-tab ${incTab==='curso'?'on':''}" onclick="setIncTab('curso')">🛠️ En curso${enCurso?` (${enCurso})`:''}</button>
     <button class="asg-tab ${incTab==='historial'?'on':''}" onclick="setIncTab('historial')">📜 Historial</button>
+    ${canManage?`<button class="asg-tab ${incTab==='prev'?'on':''}" onclick="setIncTab('prev')">🗓️ Preventivo</button>`:''}
     ${canManage?`<button class="asg-tab ${incTab==='panel'?'on':''}" onclick="setIncTab('panel')">📊 Panel</button>`:''}</div>`;
   let body; const fullScreen=(incSel!=null||incNew);
   if(incNew){ body=renderIncForm(); }
   else if(incSel!=null){ body=renderIncDetail(incSel); }
   else if(incTab==='panel'&&canManage){ body=renderIncPanel(INC); }
+  else if(incTab==='prev'&&canManage){ body=renderPrev(); }
   else if(incTab==='curso'){ body=renderIncCurso(); }
   else if(incTab==='historial'){ body=renderIncList(true); }
   else { body=renderIncBandeja(); }
@@ -3342,6 +3351,7 @@ function incFilteredList(hist){
   });
   arr.sort((a,b)=>{
     if(hist) return new Date(b.resuelta_at||b.updated_at||b.created_at)-new Date(a.resuelta_at||a.updated_at||a.created_at);
+    const va=incVencida(a)?0:1, vb=incVencida(b)?0:1; if(va!==vb) return va-vb;
     const ua=(urgRank[a.urgencia]!=null?urgRank[a.urgencia]:1), ub=(urgRank[b.urgencia]!=null?urgRank[b.urgencia]:1);
     if(ua!==ub) return ua-ub;
     return new Date(a.created_at)-new Date(b.created_at);
@@ -3374,8 +3384,8 @@ function incCardHTML(i){
   const puedeTomar = incEsMant() && i.estado==='pendiente' && !i.asignado_a;
   const done=(i.estado==='terminada'||i.estado==='cancelada');
   return `<div class="inc-card urg-${i.urgencia}${done?' done':''}">
-    <div class="inc-card-top"><span class="badge ${u[1]}">${u[2]} ${u[0]}</span><span class="badge ${e[1]}">${i.timer_ini?'<span class="inc-dot"></span> ':''}${e[0]}</span></div>
-    <div class="inc-card-loc">🏠 ${esc(i.edificio||'—')}${i.unidad?' · '+esc(i.unidad):''}</div>
+    <div class="inc-card-top"><span class="badge ${u[1]}">${u[2]} ${u[0]}</span><span class="badge ${e[1]}">${i.timer_ini?'<span class="inc-dot"></span> ':''}${e[0]}</span>${incVencida(i)?'<span class="badge b-red">⏰ Vencida</span>':''}${i.afecta_huesped?'<span class="badge b-amber">🛎️ Huésped</span>':''}${i.fuera_servicio?'<span class="badge b-red">⛔ Fuera de servicio</span>':''}</div>
+    <div class="inc-card-loc">🏠 ${esc(i.edificio||'—')}${i.unidad?' · '+esc(i.unidad):''}${i.categoria?` <span style="font-weight:400;color:var(--suave);font-size:12px">· ${incCatLabel(i.categoria)}</span>`:''}</div>
     <div class="inc-card-desc">${esc((i.descripcion||'').slice(0,140))}${(i.descripcion||'').length>140?'…':''}</div>
     <div class="inc-card-meta">${asg} ${tom} ${nf?('· 📷 '+nf):''}</div>
     <div class="inc-card-meta2">${new Date(i.created_at).toLocaleString('es-ES',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}${['en_curso','pausada','a_medias'].includes(i.estado)?' · ⏱ '+incFmtT(incElapsed(i)):''}</div>
@@ -3401,6 +3411,8 @@ function incFormHTML(){
     <select id="iVia"><option value="cliente_ota">🌐 Cliente (OTA)</option><option value="limpieza">🧹 Personal de limpieza</option><option value="personal" selected>👤 Personal interno</option></select>
     <label>Urgencia</label>
     <select id="iUrg"><option value="alta">🔴 Alta · hoy mismo</option><option value="media" selected>🟠 Media · lo antes posible</option><option value="baja">🟢 Baja · cuando convenga</option></select>
+    <label>Categoría de la avería</label>
+    <select id="iCat"><option value="">— Sin categoría —</option>${INC_CAT.map(([v,l])=>`<option value="${v}">${l}</option>`).join('')}</select>
     <div class="row">
       <div><label>Edificio</label><select id="iEdif" onchange="incFormEdif()">${edOpts}</select></div>
       <div><label>Unidad / zona</label><select id="iUni"><option value="">— Selecciona edificio —</option></select></div>
@@ -3409,6 +3421,7 @@ function incFormHTML(){
     <textarea id="iDesc" rows="3" required placeholder="Describe el problema con el máximo detalle"></textarea>
     <label>Fotos / vídeo (opcional)</label>
     <input id="iFotos" type="file" accept="image/*,video/*" multiple>
+    <div style="display:flex;gap:18px;flex-wrap:wrap;margin:12px 0 2px"><label style="font-weight:400;display:flex;gap:6px;align-items:center;cursor:pointer"><input type="checkbox" id="iAfecta"> 🛎️ Afecta a un huésped / reserva activa</label><label style="font-weight:400;display:flex;gap:6px;align-items:center;cursor:pointer"><input type="checkbox" id="iFuera"> ⛔ Unidad fuera de servicio</label></div>
     <div class="row">
       <div><label>Asignar a equipo</label><select id="iEquipo" onchange="incFormEquipo()">${teamOpts}</select></div>
       <div><label>Asignar a persona</label><select id="iPersona">${perOpts}</select></div>
@@ -3425,7 +3438,9 @@ async function incCreate(e){
   const personaId=g('iPersona')||null;
   const persona=personaId?MANT_STAFF.find(s=>String(s.id)===String(personaId)):null;
   const btn=e.target.querySelector('button[type=submit]'); if(btn){btn.disabled=true;btn.textContent='⏳ Guardando…';}
-  const row={ via:g('iVia'), urgencia:g('iUrg'), edificio:g('iEdif')||null, unidad:g('iUni')||null, descripcion:desc,
+  const afecta=!!(document.getElementById('iAfecta')||{}).checked, fuera=!!(document.getElementById('iFuera')||{}).checked;
+  const row={ via:g('iVia'), urgencia:g('iUrg'), categoria:g('iCat')||null, edificio:g('iEdif')||null, unidad:g('iUni')||null, descripcion:desc,
+    afecta_huesped:afecta, fuera_servicio:fuera,
     asignado_equipo:g('iEquipo')||'*', asignado_a:personaId||null, asignado_a_nombre:persona?persona.nombre:null,
     estado: personaId?'asignada':'pendiente', creado_por:ME.id, creado_por_nombre:PROFILE.nombre,
     historial:[{t:new Date().toISOString(),who:PROFILE.nombre,act:'Creada'}] };
@@ -3436,6 +3451,7 @@ async function incCreate(e){
   const quien=persona?persona.nombre:('el equipo '+(row.asignado_equipo==='*'?'de Mantenimiento':row.asignado_equipo));
   const urgTxt=row.urgencia==='alta'?'🔴 URGENTE · ':'';
   await notifyTeam('Mantenimiento','🛠️',`${urgTxt}Nueva incidencia en ${row.edificio||'—'}${row.unidad?' · '+row.unidad:''} (asignada a ${quien})`,'incidencias');
+  if(afecta||fuera){ try{ await notifyTeam('Atención al cliente','🛎️',`Incidencia que afecta a la unidad ${row.edificio||''}${row.unidad?' · '+row.unidad:''}${fuera?' (FUERA DE SERVICIO)':''}`,'incidencias'); }catch(e){} }
   incFormOpen=false; incNew=false; toast('✓ Incidencia creada'); show('incidencias'); return false;
 }
 async function incUpload(incId, files, tipo){
@@ -3451,7 +3467,7 @@ async function incUpload(incId, files, tipo){
 async function incTomar(id){
   const i=INC.find(x=>String(x.id)===String(id))||{};
   await sb.from('mant_incidencias').update({estado:'asignada',tomada_por:ME.id,tomada_por_nombre:PROFILE.nombre,historial:incLog(i,'Tomada'),updated_at:new Date().toISOString()}).eq('id',id);
-  toast('✓ Incidencia tomada'); incOpen(id);
+  toast('✓ La tienes en "Mías"'); show('incidencias');
 }
 async function incReasignarme(id){
   const i=INC.find(x=>String(x.id)===String(id)); if(!i)return;
@@ -3484,7 +3500,8 @@ async function incFinalizar(id,estadoFinal){
   const nota=(document.getElementById('incNota')||{}).value||i.nota_solucion||null;
   const selQ=(document.getElementById('incQuien')||{}).value||ME.id;
   const quien=(String(selQ)===String(ME.id))?PROFILE.nombre:(((MANT_STAFF.find(s=>String(s.id)===String(selQ))||{}).nombre)||PROFILE.nombre);
-  const upd={tiempo_seg:(i.tiempo_seg||0)+add,timer_ini:null,nota_solucion:nota,tomada_por:selQ,tomada_por_nombre:quien,updated_at:new Date().toISOString()};
+  const costeV=(document.getElementById('incCoste')||{}).value; const provV=(document.getElementById('incProv')||{}).value;
+  const upd={tiempo_seg:(i.tiempo_seg||0)+add,timer_ini:null,nota_solucion:nota,tomada_por:selQ,tomada_por_nombre:quien,coste:(costeV===''||costeV==null)?null:Number(costeV),proveedor:(provV||'').trim()||null,updated_at:new Date().toISOString()};
   if(estadoFinal==='terminada'){ upd.estado='terminada'; upd.resuelto_por_nombre=quien; upd.resuelta_at=new Date().toISOString(); upd.historial=incLog(i,'Terminada · realizada por '+quien); }
   else { upd.estado='a_medias'; upd.historial=incLog(i,'Dejada a medias'); }
   await sb.from('mant_incidencias').update(upd).eq('id',id);
@@ -3515,7 +3532,8 @@ async function incSaveEdit(id){
   const g=x=>{const el=document.getElementById(x);return el?el.value:'';};
   const desc=(g('eDesc')||'').trim(); if(!desc){alert('La descripción no puede quedar vacía.');return;}
   const personaId=g('ePersona')||null; const persona=personaId?MANT_STAFF.find(s=>String(s.id)===String(personaId)):null;
-  await sb.from('mant_incidencias').update({urgencia:g('eUrg'),descripcion:desc,asignado_equipo:g('eEquipo')||'*',asignado_a:personaId||null,asignado_a_nombre:persona?persona.nombre:null,historial:incLog(i,'Editada / reasignada'),updated_at:new Date().toISOString()}).eq('id',id);
+  const costeV=g('eCoste'); const afecta=!!(document.getElementById('eAfecta')||{}).checked, fuera=!!(document.getElementById('eFuera')||{}).checked;
+  await sb.from('mant_incidencias').update({urgencia:g('eUrg'),categoria:g('eCat')||null,descripcion:desc,asignado_equipo:g('eEquipo')||'*',asignado_a:personaId||null,asignado_a_nombre:persona?persona.nombre:null,coste:(costeV===''||costeV==null)?null:Number(costeV),proveedor:(g('eProv')||'').trim()||null,afecta_huesped:afecta,fuera_servicio:fuera,historial:incLog(i,'Editada / reasignada'),updated_at:new Date().toISOString()}).eq('id',id);
   incEditOpen=false; toast('✓ Cambios guardados'); show('incidencias');
 }
 async function incDelete(id){
@@ -3548,10 +3566,14 @@ function renderIncDetail(id){
     const perList=MANT_STAFF.filter(s=> curTeam==='*'?true:s.team===curTeam);
     const perOpts=`<option value="">Todo el equipo (que alguien la tome)</option>`+perList.map(s=>`<option value="${s.id}" ${String(i.asignado_a)===String(s.id)?'selected':''}>${esc(s.nombre)}</option>`).join('');
     return `<div class="panel"><h3 class="inc-h3">✏️ Editar / reasignar</h3>
-      <label>Urgencia</label><select id="eUrg"><option value="alta" ${i.urgencia==='alta'?'selected':''}>🔴 Alta</option><option value="media" ${i.urgencia==='media'?'selected':''}>🟠 Media</option><option value="baja" ${i.urgencia==='baja'?'selected':''}>🟢 Baja</option></select>
+      <div class="row"><div><label>Urgencia</label><select id="eUrg"><option value="alta" ${i.urgencia==='alta'?'selected':''}>🔴 Alta</option><option value="media" ${i.urgencia==='media'?'selected':''}>🟠 Media</option><option value="baja" ${i.urgencia==='baja'?'selected':''}>🟢 Baja</option></select></div>
+      <div><label>Categoría</label><select id="eCat"><option value="">— Sin categoría —</option>${INC_CAT.map(([v,l])=>`<option value="${v}" ${i.categoria===v?'selected':''}>${l}</option>`).join('')}</select></div></div>
       <label>Descripción</label><textarea id="eDesc" class="inc-note">${esc(i.descripcion||'')}</textarea>
       <div class="row"><div><label>Equipo</label><select id="eEquipo" onchange="incEditEquipo()">${teamOpts}</select></div>
       <div><label>Persona</label><select id="ePersona">${perOpts}</select></div></div>
+      <div class="row"><div><label>Coste (opcional)</label><input id="eCoste" type="number" min="0" step="0.01" value="${i.coste!=null?i.coste:''}"></div>
+      <div><label>Proveedor (opcional)</label><input id="eProv" value="${esc(i.proveedor||'')}"></div></div>
+      <div style="display:flex;gap:18px;flex-wrap:wrap;margin:12px 0 2px"><label style="font-weight:400;display:flex;gap:6px;align-items:center;cursor:pointer"><input type="checkbox" id="eAfecta" ${i.afecta_huesped?'checked':''}> 🛎️ Afecta a huésped</label><label style="font-weight:400;display:flex;gap:6px;align-items:center;cursor:pointer"><input type="checkbox" id="eFuera" ${i.fuera_servicio?'checked':''}> ⛔ Fuera de servicio</label></div>
       <div class="inc-final"><button class="btn-ok" onclick="incSaveEdit(${i.id})">Guardar cambios</button><button class="btn-sm ghost" onclick="incToggleEdit()">Cancelar</button></div></div>`;
   })() : '';
   return `
@@ -3565,6 +3587,8 @@ function renderIncDetail(id){
     <h2 style="margin:8px 0 2px">🏠 ${esc(i.edificio||'—')}${i.unidad?' · '+esc(i.unidad):''}</h2>
     <div style="color:var(--suave);font-size:13px;margin-bottom:10px">${INC_VIA[i.via]||'—'} · reportada por <b>${esc(i.creado_por_nombre||'—')}</b> · ${new Date(i.created_at).toLocaleString('es-ES')}</div>
     <p style="font-size:14.5px;white-space:pre-wrap">${esc(i.descripcion||'')}</p>
+    <div class="inc-kv"><b>Categoría:</b> ${incCatLabel(i.categoria)}${incVencida(i)?' · <span style="color:#c0392b;font-weight:700">⏰ Fuera de plazo (SLA)</span>':''}</div>
+    ${(i.afecta_huesped||i.fuera_servicio)?`<div class="inc-kv">${i.afecta_huesped?'<span class="badge b-amber">🛎️ Afecta a huésped</span> ':''}${i.fuera_servicio?'<span class="badge b-red">⛔ Unidad fuera de servicio</span>':''}</div>`:''}
     <div class="inc-kv"><b>Asignada a:</b> ${asg}${i.tomada_por_nombre?` · <b>realiza:</b> 🛠 ${esc(i.tomada_por_nombre)}`:''}</div>
     <h3 class="inc-h3">📷 Fotos del reporte</h3>${galeria(fr,'Sin fotos de reporte.')}
   </div>`
@@ -3572,6 +3596,7 @@ function renderIncDetail(id){
   + ( (i.estado==='terminada')? `<div class="panel"><h3 class="inc-h3">✅ Resolución</h3>
        <div class="inc-kv"><b>Resuelta por:</b> ${esc(i.resuelto_por_nombre||'—')} · ${i.resuelta_at?new Date(i.resuelta_at).toLocaleString('es-ES'):''}</div>
        <div class="inc-kv"><b>Tiempo empleado:</b> ${incFmtT(i.tiempo_seg)}</div>
+       ${(i.coste!=null&&i.coste!=='')?`<div class="inc-kv"><b>Coste:</b> ${incMoney(i.coste)}${i.proveedor?' · '+esc(i.proveedor):''}</div>`:''}
        ${i.nota_solucion?`<div class="inc-kv"><b>Nota:</b> ${esc(i.nota_solucion)}</div>`:''}
        <h3 class="inc-h3">📷 Fotos de la solución</h3>${galeria(fs,'Sin fotos de solución.')}
        ${puedeEditar?`<div style="margin-top:14px"><button class="btn-sm" onclick="incReabrir(${i.id})">🔄 Reabrir incidencia</button></div>`:''}</div>` : '')
@@ -3584,6 +3609,8 @@ function renderIncDetail(id){
        <div class="inc-man"><label>O introduce el tiempo manualmente (minutos)</label><div style="display:flex;gap:8px"><input id="incManMin" type="number" min="0" placeholder="Ej: 45" style="max-width:120px"><button class="btn-sm ghost" onclick="incTiempoManual(${i.id})">Guardar tiempo</button></div></div>
        <label style="margin-top:12px;display:block">Fotos de la solución</label><input id="incFotoSol" type="file" accept="image/*,video/*" multiple>
        <label style="margin-top:10px;display:block">Nota de la solución (opcional)</label><textarea id="incNota" class="inc-note" placeholder="Qué se hizo para resolverlo…">${esc(i.nota_solucion||'')}</textarea>
+       <div class="row"><div><label style="margin-top:10px;display:block">Coste de la reparación (opcional)</label><input id="incCoste" type="number" min="0" step="0.01" placeholder="Ej: 35" value="${i.coste!=null?i.coste:''}"></div>
+       <div><label style="margin-top:10px;display:block">Proveedor (si fue externo)</label><input id="incProv" placeholder="Empresa / técnico externo" value="${esc(i.proveedor||'')}"></div></div>
        <label style="margin-top:10px;display:block">¿Quién ha realizado la incidencia?</label><select id="incQuien">${incQuienOpts(i)}</select>
        <div class="inc-final">
          <button class="btn-ok" onclick="incFinalizar(${i.id},'terminada')">✅ Marcar terminada</button>
@@ -3608,16 +3635,27 @@ function renderIncPanel(I){
   const tasa=I.length?Math.round(term.length/I.length*100):0;
   let tmedio='—'; if(term.length){ tmedio=incFmtT(term.reduce((a,x)=>a+(x.tiempo_seg||0),0)/term.length); }
   let antig='—'; if(pend.length){ antig=(pend.reduce((a,x)=>a+((today-new Date(x.created_at))/86400000),0)/pend.length).toFixed(1); }
-  const porEdif={},porUni={},porUrg={alta:0,media:0,baja:0},porVia={},repPorPersona={},resPorPersona={};
+  const vencidas=pend.filter(incVencida).length;
+  const ym=todayISO.slice(0,7);
+  const gastoTotal=I.reduce((a,x)=>a+(Number(x.coste)||0),0);
+  const gastoMes=term.filter(x=>resDe(x).slice(0,7)===ym).reduce((a,x)=>a+(Number(x.coste)||0),0);
+  const porEdif={},porUni={},porUrg={alta:0,media:0,baja:0},porVia={},porCat={},gastoEdif={},repPorPersona={},resPorPersona={},recCount={};
   I.forEach(x=>{ const ed=(x.edificio||'(sin edificio)'); porEdif[ed]=(porEdif[ed]||0)+1;
     const un=((x.edificio?x.edificio+' · ':'')+(x.unidad||'(sin unidad)')); porUni[un]=(porUni[un]||0)+1;
     if(porUrg[x.urgencia]!==undefined)porUrg[x.urgencia]++;
     const v=INC_VIA[x.via]||'—'; porVia[v]=(porVia[v]||0)+1;
+    porCat[incCatLabel(x.categoria)]=(porCat[incCatLabel(x.categoria)]||0)+1;
+    gastoEdif[ed]=(gastoEdif[ed]||0)+(Number(x.coste)||0);
+    const rk=(x.edificio||'?')+' · '+(x.unidad||'?')+' · '+incCatLabel(x.categoria); recCount[rk]=(recCount[rk]||0)+1;
     const cr=x.creado_por_nombre||'—'; repPorPersona[cr]=(repPorPersona[cr]||0)+1; });
   term.forEach(x=>{ const r=x.resuelto_por_nombre||'—'; resPorPersona[r]=(resPorPersona[r]||0)+1; });
+  const recurrentes=Object.entries(recCount).filter(([k,v])=>v>=2).sort((a,b)=>b[1]-a[1]).slice(0,8);
   const dias=[]; for(let i=13;i>=0;i--){ const d=new Date(today); d.setDate(today.getDate()-i); const k=iso(d); dias.push({label:pad(d.getDate())+'/'+pad(d.getMonth()+1),r:term.filter(x=>resDe(x)===k).length,c:I.filter(x=>fechaDe(x)===k).length}); }
   const maxDia=Math.max(1,...dias.map(x=>Math.max(x.r,x.c)));
   const rank=(obj,top)=>{ const arr=Object.entries(obj).sort((a,b)=>b[1]-a[1]).slice(0,top); const mx=Math.max(1,...arr.map(x=>x[1])); return arr.length?arr.map(([k,v])=>`<div class="kp-row"><span class="kp-k">${esc(k)}</span><span class="kp-bar"><i style="width:${Math.round(v/mx*100)}%"></i></span><b class="kp-v">${v}</b></div>`).join(''):'<div style="color:var(--suave);font-size:13px">Sin datos todavía</div>'; };
+  const gastoRows=Object.entries(gastoEdif).filter(([k,v])=>v>0).sort((a,b)=>b[1]-a[1]).slice(0,10); const gastoMx=Math.max(1,...gastoRows.map(x=>x[1]));
+  const gastoHTML=gastoRows.length?gastoRows.map(([k,v])=>`<div class="kp-row"><span class="kp-k">${esc(k)}</span><span class="kp-bar"><i style="width:${Math.round(v/gastoMx*100)}%"></i></span><b class="kp-v">${incMoney(v)}</b></div>`).join(''):'<div style="color:var(--suave);font-size:13px">Sin coste registrado todavía</div>';
+  const recHTML=recurrentes.length?recurrentes.map(([k,v])=>`<div class="kp-row"><span class="kp-k">${esc(k)}</span><b class="kp-v" style="color:#c0392b">${v}×</b></div>`).join(''):'<div style="color:var(--suave);font-size:13px">Sin patrones recurrentes 👍</div>';
   return `
     <div class="kpi-cards">
       <div class="kpi"><div class="kpi-n" style="color:var(--rojo)">${pend.length}</div><div class="kpi-l">Pendientes</div></div>
@@ -3628,6 +3666,9 @@ function renderIncPanel(I){
       <div class="kpi"><div class="kpi-n">${tasa}%</div><div class="kpi-l">Tasa de resolución</div></div>
       <div class="kpi"><div class="kpi-n">${tmedio}</div><div class="kpi-l">Tiempo medio resolución</div></div>
       <div class="kpi"><div class="kpi-n">${antig}</div><div class="kpi-l">Días medios pendiente</div></div>
+      <div class="kpi"><div class="kpi-n" style="color:#c0392b">${vencidas}</div><div class="kpi-l">⏰ Vencidas (fuera de plazo)</div></div>
+      <div class="kpi"><div class="kpi-n">${incMoney(gastoMes)}</div><div class="kpi-l">Gasto este mes</div></div>
+      <div class="kpi"><div class="kpi-n">${incMoney(gastoTotal)}</div><div class="kpi-l">Gasto acumulado</div></div>
     </div>
     <div class="panel"><h2>📈 Creadas vs resueltas · últimos 14 días</h2>
       <div class="kp-days">${dias.map(x=>`<div class="kp-day"><div class="kp-day-bar2"><i class="b1" style="height:${Math.round(x.c/maxDia*100)}%" title="Creadas: ${x.c}"></i><i class="b2" style="height:${Math.round(x.r/maxDia*100)}%" title="Resueltas: ${x.r}"></i></div><small>${x.label}</small></div>`).join('')}</div>
@@ -3639,10 +3680,90 @@ function renderIncPanel(I){
       <div class="panel"><h2>🛠 Resoluciones por persona</h2>${rank(resPorPersona,10)}</div>
     </div>
     <div class="kp-grid2">
+      <div class="panel"><h2>🔧 Por categoría de avería</h2>${rank(porCat,10)}</div>
+      <div class="panel"><h2>💶 Gasto por edificio</h2>${gastoHTML}</div>
+    </div>
+    <div class="kp-grid2">
       <div class="panel"><h2>🚦 Por urgencia</h2>${rank({['🔴 Alta']:porUrg.alta,['🟠 Media']:porUrg.media,['🟢 Baja']:porUrg.baja},3)}</div>
       <div class="panel"><h2>📥 Por vía de aviso</h2>${rank(porVia,5)}</div>
-    </div>`;
+    </div>
+    <div class="panel"><h2>🔁 Problemas recurrentes <small style="color:var(--suave);font-weight:400">· misma unidad y categoría 2+ veces</small></h2>${recHTML}</div>`;
 }
+
+/* ---------------- MANTENIMIENTO PREVENTIVO ---------------- */
+function prevLocalIso(d){ const p=n=>(''+n).padStart(2,'0'); return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate()); }
+function renderPrev(){
+  const tasks=MANT_PREV.slice().sort((a,b)=>((a.proximo||'9999')<(b.proximo||'9999')?-1:1));
+  const form = prevFormOpen? prevFormHTML() : '';
+  const cards = tasks.length? `<div class="inc-cards">${tasks.map(prevCardHTML).join('')}</div>` : '<div class="panel" style="color:var(--suave)">Sin tareas preventivas todavía. Crea la primera.</div>';
+  return `<div style="font-size:12.5px;color:var(--suave);margin:0 0 12px">Tareas que se repiten (piscina, filtros, revisiones…). Pulsa <b>Hecho</b> y se reprograma sola para la próxima vez.</div>
+    <div style="margin:0 0 12px"><button class="btn" onclick="prevNew()">+ Nueva tarea preventiva</button></div>
+    ${form}${cards}`;
+}
+function prevCardHTML(t){
+  const today=new Date(); today.setHours(0,0,0,0);
+  const prox=t.proximo?new Date(t.proximo+'T00:00:00'):null;
+  const overdue = prox && prox<today;
+  const dueSoon = prox && !overdue && (prox-today)/86400000<=3;
+  const estado = (t.activo===false)?'<span class="badge b-grey">Inactiva</span>': overdue?'<span class="badge b-red">⏰ Vencida</span>': dueSoon?'<span class="badge b-amber">Próxima</span>':'<span class="badge b-green">Al día</span>';
+  return `<div class="inc-card${t.activo===false?' done':''}">
+    <div class="inc-card-top">${estado}<span class="badge b-grey">cada ${t.frecuencia_dias} días</span></div>
+    <div class="inc-card-loc">🗓️ ${esc(t.titulo)}</div>
+    <div class="inc-card-desc">🏠 ${esc(t.edificio||'Cualquiera')}${t.unidad?' · '+esc(t.unidad):''}${t.categoria?' · '+incCatLabel(t.categoria):''}</div>
+    <div class="inc-card-meta">Próximo: <b>${prox?prox.toLocaleDateString('es-ES'):'—'}</b>${t.asignado_a_nombre?' · '+esc(t.asignado_a_nombre):(t.asignado_equipo?' · '+esc(t.asignado_equipo):'')}</div>
+    ${t.ultima?`<div class="inc-card-meta2">Última vez: ${new Date(t.ultima+'T00:00:00').toLocaleDateString('es-ES')}</div>`:''}
+    <div class="inc-card-actions">
+      <button class="btn-ok" onclick="prevDone(${t.id})">✅ Hecho hoy</button>
+      <button class="btn-sm ghost" onclick="prevEdit(${t.id})">✏️ Editar</button>
+      <button class="btn-sm x" onclick="prevDelete(${t.id})">🗑</button>
+    </div></div>`;
+}
+function prevFormHTML(){
+  const t = prevEditId? (MANT_PREV.find(x=>String(x.id)===String(prevEditId))||{}) : {};
+  const edOpts=`<option value="">— Cualquiera —</option>`+MANT_EDIF.map(e=>`<option ${t.edificio===e.nombre?'selected':''}>${esc(e.nombre)}</option>`).join('');
+  const uniList=MANT_UNI.filter(u=>u.edificio===t.edificio);
+  const unOpts=`<option value="">— Cualquiera —</option>`+uniList.map(u=>`<option ${t.unidad===u.nombre?'selected':''}>${esc(u.nombre)}</option>`).join('');
+  const catOpts=`<option value="">— Sin categoría —</option>`+INC_CAT.map(([v,l])=>`<option value="${v}" ${t.categoria===v?'selected':''}>${l}</option>`).join('');
+  const teamOpts=`<option value="">— Sin equipo —</option>`+MANT_TEAMS.map(tm=>`<option ${t.asignado_equipo===tm?'selected':''}>${esc(tm)}</option>`).join('');
+  const perOpts=`<option value="">— Nadie en concreto —</option>`+MANT_STAFF.map(s=>`<option value="${s.id}" ${String(t.asignado_a)===String(s.id)?'selected':''}>${esc(s.nombre)}</option>`).join('');
+  return `<div class="panel" style="max-width:680px"><form class="box" style="max-width:none" onsubmit="return prevSave(event)">
+    <label>Título de la tarea</label><input id="pTit" required value="${esc(t.titulo||'')}" placeholder="Ej: Limpieza de filtros de piscina">
+    <div class="row"><div><label>Edificio</label><select id="pEdif" onchange="prevFormEdif()">${edOpts}</select></div>
+    <div><label>Unidad / zona</label><select id="pUni">${unOpts}</select></div></div>
+    <div class="row"><div><label>Categoría</label><select id="pCat">${catOpts}</select></div>
+    <div><label>Cada cuántos días</label><input id="pFreq" type="number" min="1" value="${t.frecuencia_dias||30}"></div></div>
+    <div class="row"><div><label>Próxima fecha</label><input id="pProx" type="date" value="${t.proximo||''}"></div>
+    <div><label>Equipo</label><select id="pEquipo">${teamOpts}</select></div></div>
+    <label>Persona (opcional)</label><select id="pPersona">${perOpts}</select>
+    <label>Notas (opcional)</label><textarea id="pNotas" class="inc-note">${esc(t.notas||'')}</textarea>
+    <div class="inc-final" style="margin-top:12px"><button class="btn-ok" type="submit">${prevEditId?'Guardar':'Crear tarea'}</button><button class="btn-sm ghost" type="button" onclick="prevCancel()">Cancelar</button></div>
+  </form></div>`;
+}
+function prevFormEdif(){ const ed=(document.getElementById('pEdif')||{}).value||''; const uni=document.getElementById('pUni'); if(!uni)return; const list=MANT_UNI.filter(u=>u.edificio===ed); uni.innerHTML=`<option value="">— Cualquiera —</option>`+list.map(u=>`<option>${esc(u.nombre)}${u.tipo==='comun'?' (zona común)':''}</option>`).join(''); }
+function prevNew(){ prevEditId=null; prevFormOpen=true; show('incidencias'); }
+function prevEdit(id){ prevEditId=id; prevFormOpen=true; show('incidencias'); }
+function prevCancel(){ prevFormOpen=false; prevEditId=null; show('incidencias'); }
+async function prevSave(e){
+  e.preventDefault();
+  const g=x=>{const el=document.getElementById(x);return el?el.value:'';};
+  const tit=(g('pTit')||'').trim(); if(!tit){alert('Pon un título.');return false;}
+  const personaId=g('pPersona')||null; const persona=personaId?MANT_STAFF.find(s=>String(s.id)===String(personaId)):null;
+  const row={ titulo:tit, edificio:g('pEdif')||null, unidad:g('pUni')||null, categoria:g('pCat')||null,
+    frecuencia_dias:Math.max(1,parseInt(g('pFreq'),10)||30), proximo:g('pProx')||null,
+    asignado_equipo:g('pEquipo')||null, asignado_a:personaId||null, asignado_a_nombre:persona?persona.nombre:null, notas:(g('pNotas')||'').trim()||null };
+  let err;
+  if(prevEditId){ const r=await sb.from('mant_preventivo').update(row).eq('id',prevEditId); err=r.error; }
+  else { row.activo=true; const r=await sb.from('mant_preventivo').insert(row); err=r.error; }
+  if(err){ alert('Error: '+err.message); return false; }
+  prevFormOpen=false; prevEditId=null; toast('✓ Guardado'); show('incidencias'); return false;
+}
+async function prevDone(id){
+  const t=MANT_PREV.find(x=>String(x.id)===String(id)); if(!t)return;
+  const today=new Date(); const next=new Date(); next.setDate(next.getDate()+(t.frecuencia_dias||30));
+  await sb.from('mant_preventivo').update({ultima:prevLocalIso(today),proximo:prevLocalIso(next)}).eq('id',id);
+  toast('✓ Hecho · reprogramada para '+next.toLocaleDateString('es-ES')); show('incidencias');
+}
+async function prevDelete(id){ if(!confirm('¿Eliminar esta tarea preventiva?'))return; const{error}=await sb.from('mant_preventivo').delete().eq('id',id); if(error){alert('Error: '+error.message);return;} toast('Eliminada'); show('incidencias'); }
 
 /* ---------------- VIDEOS EXPLICATIVOS ---------------- */
 let vidFormOpen=false;
