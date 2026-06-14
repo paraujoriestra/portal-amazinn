@@ -2774,7 +2774,7 @@ async function pageMensajes(){
   document.getElementById('main').innerHTML=`<div class="page-title">Mensajes y plantillas</div><div class="page-sub">Plantillas por apartamento para Atención al cliente</div>
     ${manage?`<div class="tabs">${tabs.map(t=>`<button class="${msgTab===t[0]?'on':''}" onclick="setMsgTab('${t[0]}')">${t[1]}</button>`).join('')}</div>`:''}${body}`;
 }
-async function loadUnidades(){const{data}=await sb.from('unidades').select('*').order('id');return data||[];}
+async function loadUnidades(){const{data}=await sb.from('mant_unidades').select('*').order('edificio').order('orden').order('nombre');return (data||[]).map(u=>({id:u.id,nombre:u.nombre,prop:u.edificio,numero:u.numero||'',codigo:u.codigo||'',wifi:u.wifi||''}));}
 async function msgViewer(){
   const uni=await loadUnidades();
   const props=[...new Set(uni.map(u=>u.prop))];
@@ -2795,14 +2795,19 @@ async function msgViewer(){
 }
 function copyTxt(btn){const t=btn.getAttribute('data-t');navigator.clipboard?navigator.clipboard.writeText(t).then(()=>toast('✓ Copiado')).catch(()=>toast('No se pudo copiar')):toast('No disponible');}
 async function msgManage(){
+  asgEnsureStyle();
   const{data:tpls}=await sb.from('plantillas').select('*').order('id');
   const rows=(tpls||[]).map(t=>`<div style="display:flex;align-items:center;gap:10px;padding:12px 0;border-bottom:1px solid var(--gris);flex-wrap:wrap">
     <span class="badge ${TPL_CAT[t.cat]||'b-grey'}">${esc(t.cat||'')}</span><b style="min-width:220px">${esc(t.titulo)}</b><span style="color:var(--suave);font-size:13px">${(t.unidades||[]).length} apto(s)</span>
-    <span style="margin-left:auto;display:flex;gap:6px"><button class="btn ghost" style="padding:5px 11px" onclick='tplEdit(${JSON.stringify(t).replace(/'/g,"&#39;")})'>✏️ Editar</button>
-    <button class="btn ghost" style="padding:5px 11px" onclick="tplDup(${t.id})">⧉ Duplicar</button></span></div>`).join('');
+    <details class="asg-kebab" style="margin-left:auto"><summary>⋮</summary><div class="asg-kebab-menu">
+      <button onclick='tplEdit(${JSON.stringify(t).replace(/'/g,"&#39;")})'>✏️ Editar</button>
+      <button onclick="tplDup(${t.id})">⧉ Duplicar</button>
+      <button onclick="tplDelete(${t.id})" style="color:#c0392b">🗑 Eliminar</button>
+    </div></details></div>`).join('');
   return `<div style="margin-bottom:14px"><button class="btn" onclick="tplNew()">+ Nueva plantilla</button></div>${tplFormOpen?await tplForm():''}
     <div class="panel"><h2>Plantillas (${(tpls||[]).length})</h2>${rows||'<div style="color:var(--suave)">Sin plantillas.</div>'}</div>`;
 }
+async function tplDelete(id){ if(!confirm('¿Eliminar esta plantilla de forma permanente?'))return; const{error}=await sb.from('plantillas').delete().eq('id',id); if(error){alert(error.message);return;} try{auditLog('Eliminó una plantilla','plantilla');}catch(e){} toast('Plantilla eliminada'); show('mensajes'); }
 let tplDraft={};
 function tplNew(){tplEditId=null;tplDraft={};tplFormOpen=true;show('mensajes');}
 function tplEdit(t){tplEditId=t.id;tplDraft=t;tplFormOpen=true;show('mensajes');}
@@ -2845,7 +2850,7 @@ function verify2FA(){const v=(document.getElementById('twofa').value||'').trim()
 async function saveCodes(){
   const uni=await loadUnidades();let n=0;
   for(const u of uni){const num=val('n_'+u.id),cod=val('c_'+u.id);
-    if(num!==u.numero||cod!==u.codigo){await sb.from('unidades').update({numero:num,codigo:cod}).eq('id',u.id);
+    if(num!==u.numero||cod!==u.codigo){await sb.from('mant_unidades').update({numero:num,codigo:cod}).eq('id',u.id);
       if(cod!==u.codigo)auditLog(`Cambió el código de acceso de ${u.nombre} (${u.codigo}→${cod})`,'codigo');n++;}}
   toast(n?`✓ ${n} cambio(s) guardados`:'Sin cambios');show('mensajes');
 }
@@ -3509,10 +3514,14 @@ async function incCreate(e){
   if(ins.error){ alert('No se pudo crear: '+ins.error.message); if(btn){btn.disabled=false;btn.textContent='Crear incidencia';} return false; }
   const id=ins.data.id;
   await incUpload(id,(document.getElementById('iFotos')||{}).files||[],'reporte');
-  const quien=persona?persona.nombre:('el equipo '+(row.asignado_equipo==='*'?'de Mantenimiento':row.asignado_equipo));
-  const urgTxt=row.urgencia==='alta'?'🔴 URGENTE · ':'';
-  await notifyTeam('Mantenimiento','🛠️',`${urgTxt}Nueva incidencia en ${row.edificio||'—'}${row.unidad?' · '+row.unidad:''} (asignada a ${quien})`,'incidencias');
-  if(afecta||fuera){ try{ await notifyTeam('Atención al cliente','🛎️',`Incidencia que afecta a la unidad ${row.edificio||''}${row.unidad?' · '+row.unidad:''}${fuera?' (FUERA DE SERVICIO)':''}`,'incidencias'); }catch(e){} }
+  const loc=(row.edificio||'—')+(row.unidad?' · '+row.unidad:'');
+  const urgLbl=INC_URG[row.urgencia]?INC_URG[row.urgencia][0]:row.urgencia;
+  if(personaId && String(personaId)!==String(ME.id)){
+    try{ await sb.from('mensajes').insert({de_id:ME.id,para_id:personaId,de_nombre:PROFILE.nombre,para_nombre:persona?persona.nombre:'',texto:`🛠️ Se te ha asignado una incidencia (${urgLbl}) en ${loc}: ${desc.slice(0,120)}`,leido:false}); }catch(e){}
+  } else if(!personaId && row.urgencia==='alta'){
+    await notifyTeam('Mantenimiento','🔴',`URGENTE sin asignar en ${loc} — ¡que alguien la tome!`,'incidencias');
+  }
+  if(afecta||fuera){ try{ await notifyTeam('Atención al cliente','🛎️',`Incidencia que afecta a la unidad ${loc}${fuera?' (FUERA DE SERVICIO)':''}`,'incidencias'); }catch(e){} }
   incFormOpen=false; incNew=false; toast('✓ Incidencia creada'); show('incidencias'); return false;
 }
 async function incUpload(incId, files, tipo){
