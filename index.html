@@ -1512,7 +1512,7 @@ function renderComu(){
   document.getElementById('main').innerHTML = `
     <div class="page-title">Comunicados</div>
     <div class="page-sub">Novedades oficiales de la empresa · ${total} en total${sinLeer?` · <b style="color:var(--rojo)">${sinLeer} sin leer</b>`:' · todo al día ✓'}</div>
-    ${CC.canCreate?`<div style="margin-bottom:18px"><button class="btn" onclick="toggleComForm()">➕ Nuevo comunicado</button></div><div id="comFormBox"></div>`:''}
+    ${CC.canCreate?`<div style="margin-bottom:18px"><button class="btn" onclick="toggleComForm()">+ Nuevo comunicado</button></div><div id="comFormBox"></div>`:''}
     ${body}`;
 }
 function comSetFilter(f){comFilter=f; renderComu();}
@@ -1667,7 +1667,7 @@ async function horCrear(){
     ${step('2','Fechas','Desde qué día hasta qué día',`<div class="row"><div><label>Desde</label><input type="date" value="${horW.desde}" onchange="horW.desde=this.value;horClearGrid()"></div>
       <div><label>Hasta</label><input type="date" value="${horW.hasta}" onchange="horW.hasta=this.value;horClearGrid()"></div></div>`)}
     ${step('3','Turnos y horarios','Marca los turnos y ajusta sus horas para este horario (no cambia el catálogo)',`<div class="thk-grid">${checks}</div>
-      <button class="btn ghost" style="padding:6px 12px;margin-top:10px" onclick="horAddTurnoForm()">➕ Nuevo tipo de turno</button><div id="horNewTurno"></div>`)}
+      <button class="btn ghost" style="padding:6px 12px;margin-top:10px" onclick="horAddTurnoForm()">+ Nuevo tipo de turno</button><div id="horNewTurno"></div>`)}
     <div style="text-align:right;margin-top:2px"><button class="btn" onclick="horGenerar()">Generar cuadrícula →</button></div>
   </div>`;
   const grid = horW.gen ? await horGrid() : '';
@@ -2148,8 +2148,8 @@ async function pageProveedores(){
     ${canEdit?`<td><button class="kebab" onclick="proRowMenu(event,'proveedores',${p.id})" title="Opciones">⋮</button></td>`:''}</tr>`).join('');
   document.getElementById('main').innerHTML=`
     <div class="page-title">Proveedores</div><div class="page-sub">Directorio de proveedores${canEdit?' · puedes añadir':''}</div>
-    ${canEdit?`<div style="margin-bottom:14px;display:flex;gap:8px;flex-wrap:wrap;align-items:center"><button class="btn" onclick="provNew()">${provFormOpen?'✕ Cerrar':'➕ Nuevo proveedor'}</button>${importBtn('proveedores')}</div>`:''}
-    ${canEdit&&provFormOpen?`<div class="panel" style="max-width:720px"><h2>${provEditId?'✏️ Editar proveedor':'➕ Nuevo proveedor'}</h2><form class="box" onsubmit="return saveProv(event)" style="max-width:none">
+    ${canEdit?`<div style="margin-bottom:14px;display:flex;gap:8px;flex-wrap:wrap;align-items:center"><button class="btn" onclick="provNew()">${provFormOpen?'✕ Cerrar':'+ Nuevo proveedor'}</button>${importBtn('proveedores')}</div>`:''}
+    ${canEdit&&provFormOpen?`<div class="panel" style="max-width:720px"><h2>${provEditId?'✏️ Editar proveedor':'+ Nuevo proveedor'}</h2><form class="box" onsubmit="return saveProv(event)" style="max-width:none">
       <div class="row"><div><label>Nombre proveedor</label><input id="pN" required value="${esc(provDraft.nombre||'')}"></div><div><label>Tipología</label><input id="pTip" placeholder="Electricidad, Limpieza…" value="${esc(provDraft.tipologia||'')}"></div></div>
       <label>Concepto</label><input id="pCon" placeholder="Servicio/producto que provee" value="${esc(provDraft.concepto||'')}">
       <div class="row"><div><label>RUC</label><input id="pR" value="${esc(provDraft.ruc||'')}"></div><div><label>Email</label><input id="pE" type="email" value="${esc(provDraft.email||'')}"></div></div>
@@ -2190,8 +2190,8 @@ async function pagePropietarios(){
     ${canEdit?`<td><button class="kebab" onclick="proRowMenu(event,'propietarios',${p.id})" title="Opciones">⋮</button></td>`:''}</tr>`).join('');
   document.getElementById('main').innerHTML=`
     <div class="page-title">Propietarios</div><div class="page-sub">Directorio de propietarios${canEdit?' · puedes añadir':''}</div>
-    ${canEdit?`<div style="margin-bottom:14px;display:flex;gap:8px;flex-wrap:wrap;align-items:center"><button class="btn" onclick="propNew()">${propFormOpen?'✕ Cerrar':'➕ Nuevo propietario'}</button>${importBtn('propietarios')}</div>`:''}
-    ${canEdit&&propFormOpen?`<div class="panel" style="max-width:720px"><h2>${propEditId?'✏️ Editar propietario':'➕ Nuevo propietario'}</h2><form class="box" onsubmit="return saveProp(event)" style="max-width:none">
+    ${canEdit?`<div style="margin-bottom:14px;display:flex;gap:8px;flex-wrap:wrap;align-items:center"><button class="btn" onclick="propNew()">${propFormOpen?'✕ Cerrar':'+ Nuevo propietario'}</button>${importBtn('propietarios')}</div>`:''}
+    ${canEdit&&propFormOpen?`<div class="panel" style="max-width:720px"><h2>${propEditId?'✏️ Editar propietario':'+ Nuevo propietario'}</h2><form class="box" onsubmit="return saveProp(event)" style="max-width:none">
       <div class="row"><div><label>Nombre propietario</label><input id="oN" required value="${esc(propDraft.nombre||'')}"></div><div><label>Propiedad</label><input id="oProp" value="${esc(propDraft.propiedad||'')}"></div></div>
       <div class="row"><div><label>Concepto</label><input id="oCon" value="${esc(propDraft.concepto||'')}"></div><div><label>Sociedad</label><input id="oSoc" value="${esc(propDraft.sociedad||'')}"></div></div>
       <div class="row"><div><label>RUC</label><input id="oR" value="${esc(propDraft.ruc||'')}"></div><div><label>Email</label><input id="oE" type="email" value="${esc(propDraft.email||'')}"></div></div>
@@ -2234,8 +2234,8 @@ async function pageSuministros(){
   document.getElementById('main').innerHTML=`
     <div class="page-title">Suministros por activo</div><div class="page-sub">Referencias de los contratos de cada propiedad</div>
     <div class="tabs">${tabs.map(t=>`<button class="${supTab===t[0]?'on':''}" onclick="setSupTab('${t[0]}')">${t[1]}</button>`).join('')}</div>
-    ${canEdit?`<div style="margin-bottom:14px;display:flex;gap:8px;flex-wrap:wrap;align-items:center"><button class="btn" onclick="supNew()">${supFormOpen?'✕ Cerrar':'➕ Añadir registro'}</button>${importBtn('suministros',supTab)}</div>`:''}
-    ${canEdit&&supFormOpen?`<div class="panel" style="max-width:600px"><h2>${supEditId?'✏️ Editar registro':'➕ Nuevo registro'} · ${tabs.find(t=>t[0]===supTab)[1]}</h2><form class="box" onsubmit="return saveSup(event)" style="max-width:none">
+    ${canEdit?`<div style="margin-bottom:14px;display:flex;gap:8px;flex-wrap:wrap;align-items:center"><button class="btn" onclick="supNew()">${supFormOpen?'✕ Cerrar':'+ Añadir registro'}</button>${importBtn('suministros',supTab)}</div>`:''}
+    ${canEdit&&supFormOpen?`<div class="panel" style="max-width:600px"><h2>${supEditId?'✏️ Editar registro':'+ Nuevo registro'} · ${tabs.find(t=>t[0]===supTab)[1]}</h2><form class="box" onsubmit="return saveSup(event)" style="max-width:none">
       <div class="row"><div><label>${refLbl}</label><input id="sR" value="${esc(d.referencia||'')}"></div>${conMedidor?`<div><label>Nº de medidor</label><input id="sMed" value="${esc(d.medidor||'')}"></div>`:'<div></div>'}</div>
       <div class="row"><div><label>A nombre de</label><input id="sT" value="${esc(d.titular||'')}"></div><div><label>Compañía</label><input id="sC" value="${esc(d.compania||'')}"></div></div>
       <label>Propiedad</label><input id="sP" value="${esc(d.propiedad||'')}">
@@ -2389,7 +2389,7 @@ async function pageCalendario(){
       : (canEdit?`<span style="margin-left:auto;display:flex;gap:6px"><button class="btn ghost" style="padding:3px 9px" onclick="evEdit(${e.id})">✏️</button><button class="btn ghost" style="padding:3px 9px" onclick="evDel(${e.id})">🗑️</button></span>`:`<span class="badge b-grey" style="margin-left:auto">${t[0]}</span>`);
     return `<div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--gris);font-size:13.5px"><span style="font-weight:700;color:var(--azul);min-width:170px">${r}</span><span style="width:10px;height:10px;border-radius:50%;background:${t[1]}"></span>${isCom?'📢 ':''}${esc(e.titulo)}${acc}</div>`;}).join('');
   document.getElementById('main').innerHTML=`<div class="page-title">Calendario · ${ms[M]} ${Y}</div><div class="page-sub">Eventos importantes: avisos, formaciones y fechas marcadas</div>
-    ${canEdit?`<div style="margin-bottom:16px"><button class="btn" onclick="evNew()">➕ Nuevo evento</button></div>${evFormOpen?evForm():''}`:''}
+    ${canEdit?`<div style="margin-bottom:16px"><button class="btn" onclick="evNew()">+ Nuevo evento</button></div>${evFormOpen?evForm():''}`:''}
     <div class="panel">${grid}<div style="display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--suave);margin-top:12px">${Object.values(TIPO_EV).map(t=>`<span><i style="display:inline-block;width:12px;height:12px;border-radius:3px;background:${t[1]}"></i> ${t[0]}</span>`).join('')}</div></div>
     <div class="panel"><h2>📌 Eventos</h2>${lista||'<div style="color:var(--suave);font-size:13.5px">No hay eventos.</div>'}</div>`;
 }
@@ -2477,27 +2477,27 @@ function pageCatalogos(){
     <div class="page-sub">Estructura de la empresa. Solo tú (Propietario) puedes editarla.</div>
     <div class="cat-grid">
       <div class="panel"><h2>🏛️ Áreas</h2><div class="cat-list">${areaList}</div>
-        <div class="cat-add"><input id="nArea" placeholder="Nueva área"><button class="btn" onclick="addArea()">➕</button></div></div>
+        <div class="cat-add"><input id="nArea" placeholder="Nueva área"><button class="btn" onclick="addArea()">+</button></div></div>
 
       <div class="panel"><h2>🏢 Departamentos</h2><div class="cat-list">${deptList}</div>
         <div class="cat-add"><input id="nDepto" placeholder="Nuevo departamento">
           <select id="nDeptoArea" style="max-width:150px">${CAT.areas.map(a=>`<option>${esc(a)}</option>`).join('')}</select>
-          <button class="btn" onclick="addDepto()">➕</button></div></div>
+          <button class="btn" onclick="addDepto()">+</button></div></div>
 
       <div class="panel"><h2>📊 Posiciones</h2><div class="cat-list">${posList}</div>
-        <div class="cat-add"><input id="nPos" placeholder="Nueva posición"><button class="btn" onclick="addPos()">➕</button></div></div>
+        <div class="cat-add"><input id="nPos" placeholder="Nueva posición"><button class="btn" onclick="addPos()">+</button></div></div>
 
       <div class="panel"><h2>👥 Equipos</h2><div class="cat-list">${equipoList}</div>
-        <div class="cat-add"><input id="nEquipo" placeholder="Nuevo equipo (ej: Hotel Mío)"><button class="btn" onclick="addEquipo()">➕</button></div></div>
+        <div class="cat-add"><input id="nEquipo" placeholder="Nuevo equipo (ej: Hotel Mío)"><button class="btn" onclick="addEquipo()">+</button></div></div>
 
       <div class="panel"><h2>📍 Ubicaciones</h2><div class="cat-list">${ubicList}</div>
-        <div class="cat-add"><input id="nUbic" placeholder="Nueva ubicación (ej: Recepción central)"><button class="btn" onclick="addUbic()">➕</button></div></div>
+        <div class="cat-add"><input id="nUbic" placeholder="Nueva ubicación (ej: Recepción central)"><button class="btn" onclick="addUbic()">+</button></div></div>
     </div>
     <div class="panel" style="margin-top:16px"><h2>🏢 Edificios y unidades <small style="color:var(--suave);font-weight:400">· Mantenimiento</small></h2>
       <div class="cat-add" style="margin-bottom:6px">
         <input id="nEdif" placeholder="Nombre del edificio (ej: Casa Diez)">
         <input id="nEdifNum" type="number" min="0" placeholder="Nº apartamentos" style="max-width:150px">
-        <button class="btn" onclick="addEdif()">➕ Crear edificio</button>
+        <button class="btn" onclick="addEdif()">+ Crear edificio</button>
       </div>
       <div style="font-size:12px;color:var(--suave);margin:0 0 14px">Se crean automáticamente: <b>Zona Común</b> + <b>Nº 1…N</b>. Luego puedes añadir o quitar unidades.</div>
       ${edBlocks}
@@ -2507,7 +2507,7 @@ function pageCatalogos(){
           <select id="nUniEdif" style="max-width:160px">${CAT.edificios.map(e=>`<option>${esc(e)}</option>`).join('')||'<option value="">— crea un edificio —</option>'}</select>
           <input id="nUniNom" placeholder="Ej: Nº 12 o Ático">
           <select id="nUniTipo" style="max-width:130px"><option value="apartamento">Apartamento</option><option value="comun">Zona común</option></select>
-          <button class="btn" onclick="addUni()">➕</button>
+          <button class="btn" onclick="addUni()">+</button>
         </div>
       </div>
     </div>
@@ -2657,13 +2657,13 @@ function userForm(){const u=userDraft;const colores=['#1F4E79','#16a085','#8e44a
     <div class="row"><div><label>Nombre</label><input id="uN" value="${esc(u.nombre||'')}"></div><div><label>Días vacaciones</label><input id="uV" type="number" value="${u.vac||0}"></div></div>
     ${(()=>{const curArea=u.area||deptArea(u.dept)||'';const depsArea=CAT.deptos.filter(d=>d.area===curArea);return `
     <div class="row"><div><label>Área</label>
-        <select id="uArea" onchange="if(this.value==='__new__')crearCatInline('area');else onAreaChange(this.value)"><option value="__none__" ${!curArea?'selected':''}>— Ninguno (todas las áreas) —</option>${CAT.areas.map(a=>`<option ${curArea===a?'selected':''}>${esc(a)}</option>`).join('')}<option value="__new__">➕ Crear nueva…</option></select></div>
+        <select id="uArea" onchange="if(this.value==='__new__')crearCatInline('area');else onAreaChange(this.value)"><option value="__none__" ${!curArea?'selected':''}>— Ninguno (todas las áreas) —</option>${CAT.areas.map(a=>`<option ${curArea===a?'selected':''}>${esc(a)}</option>`).join('')}<option value="__new__">+ Crear nueva…</option></select></div>
       <div><label>Departamento</label>
-        <select id="uD" onchange="if(this.value==='__new__')crearCatInline('departamento');else userDraft.dept=this.value==='__none__'?'':this.value"><option value="__none__" ${!u.dept?'selected':''}>— Ninguno (toda el área) —</option>${depsArea.map(d=>`<option ${u.dept===d.nombre?'selected':''}>${esc(d.nombre)}</option>`).join('')}<option value="__new__">➕ Crear nuevo…</option></select></div></div>`;})()}
+        <select id="uD" onchange="if(this.value==='__new__')crearCatInline('departamento');else userDraft.dept=this.value==='__none__'?'':this.value"><option value="__none__" ${!u.dept?'selected':''}>— Ninguno (toda el área) —</option>${depsArea.map(d=>`<option ${u.dept===d.nombre?'selected':''}>${esc(d.nombre)}</option>`).join('')}<option value="__new__">+ Crear nuevo…</option></select></div></div>`;})()}
     <div class="row"><div><label>Posición</label>
-        <select id="uPos" onchange="if(this.value==='__new__')crearCatInline('posicion')"><option value="__none__" ${!u.posicion?'selected':''}>— Sin posición —</option>${CAT.posiciones.map(p=>`<option ${u.posicion===p?'selected':''}>${esc(p)}</option>`).join('')}<option value="__new__">➕ Crear nueva…</option></select></div>
+        <select id="uPos" onchange="if(this.value==='__new__')crearCatInline('posicion')"><option value="__none__" ${!u.posicion?'selected':''}>— Sin posición —</option>${CAT.posiciones.map(p=>`<option ${u.posicion===p?'selected':''}>${esc(p)}</option>`).join('')}<option value="__new__">+ Crear nueva…</option></select></div>
       <div><label>Equipo</label>
-        <select id="uEquipo" onchange="if(this.value==='__new__')crearCatInline('equipo')"><option value="__none__" ${!u.equipo?'selected':''}>— Ninguno —</option>${CAT.equipos.map(eq=>`<option ${u.equipo===eq?'selected':''}>${esc(eq)}</option>`).join('')}<option value="__new__">➕ Crear nuevo…</option></select></div></div>
+        <select id="uEquipo" onchange="if(this.value==='__new__')crearCatInline('equipo')"><option value="__none__" ${!u.equipo?'selected':''}>— Ninguno —</option>${CAT.equipos.map(eq=>`<option ${u.equipo===eq?'selected':''}>${esc(eq)}</option>`).join('')}<option value="__new__">+ Crear nuevo…</option></select></div></div>
     <div class="row"><div><label>Rol / permisos</label>${u.role==='propietario'
         ? `<input value="Propietario 👑" disabled style="background:var(--gris)"><small style="color:var(--suave)">El rol de Propietario no se puede cambiar.</small>`
         : `<select id="uR">${ROLES.filter(r=>r[0]!=='propietario').map(r=>`<option value="${r[0]}" ${u.role===r[0]?'selected':''}>${esc(r[1])}</option>`).join('')}</select>`}</div>
@@ -2778,7 +2778,7 @@ async function msgManage(){
     <span class="badge ${TPL_CAT[t.cat]||'b-grey'}">${esc(t.cat||'')}</span><b style="min-width:220px">${esc(t.titulo)}</b><span style="color:var(--suave);font-size:13px">${(t.unidades||[]).length} apto(s)</span>
     <span style="margin-left:auto;display:flex;gap:6px"><button class="btn ghost" style="padding:5px 11px" onclick='tplEdit(${JSON.stringify(t).replace(/'/g,"&#39;")})'>✏️ Editar</button>
     <button class="btn ghost" style="padding:5px 11px" onclick="tplDup(${t.id})">⧉ Duplicar</button></span></div>`).join('');
-  return `<div style="margin-bottom:14px"><button class="btn" onclick="tplNew()">➕ Nueva plantilla</button></div>${tplFormOpen?await tplForm():''}
+  return `<div style="margin-bottom:14px"><button class="btn" onclick="tplNew()">+ Nueva plantilla</button></div>${tplFormOpen?await tplForm():''}
     <div class="panel"><h2>Plantillas (${(tpls||[]).length})</h2>${rows||'<div style="color:var(--suave)">Sin plantillas.</div>'}</div>`;
 }
 let tplDraft={};
@@ -2790,7 +2790,7 @@ async function tplDup(id){const{data}=await sb.from('plantillas').select('*').eq
 async function tplForm(){
   const t=tplDraft;const cats=['Acceso','Bienvenida','WiFi','Normas','Check-out','General'];const uni=await loadUnidades();
   const checked=new Set(t.unidades||[]);const props=[...new Set(uni.map(u=>u.prop))];
-  return `<div class="panel" style="max-width:760px"><h2>${tplEditId?'✏️ Editar plantilla':'➕ Nueva plantilla'}</h2><form class="box" onsubmit="return tplSave(event)" style="max-width:none">
+  return `<div class="panel" style="max-width:760px"><h2>${tplEditId?'✏️ Editar plantilla':'+ Nueva plantilla'}</h2><form class="box" onsubmit="return tplSave(event)" style="max-width:none">
     <div class="row"><div><label>Título</label><input id="tT" required value="${t.titulo?esc(t.titulo):''}"></div><div><label>Categoría</label><select id="tC">${cats.map(c=>`<option ${t.cat===c?'selected':''}>${c}</option>`).join('')}</select></div></div>
     <label>Contenido</label><textarea id="tB" rows="5" required>${t.cuerpo?esc(t.cuerpo):''}</textarea>
     <small style="color:var(--suave)">Variables: {apartamento} {numero} {codigo} {wifi} {propiedad}</small>
@@ -2874,7 +2874,7 @@ async function pageFormacion(){
   const{data}=await sb.from('formaciones').select('*').order('created_at',{ascending:false});
   const rows=(data||[]).map(f=>`<tr><td><b>${esc(f.titulo)}</b></td><td><span class="badge ${f.tipo==='Obligatoria'?'b-red':f.tipo==='Recomendada'?'b-blue':'b-grey'}">${esc(f.tipo||'')}</span></td><td>${esc(f.fecha||'')}</td>${canEdit?`<td><button class="btn ghost" style="padding:4px 9px" onclick="delRow('formaciones',${f.id},'formacion')">🗑️</button></td>`:''}</tr>`).join('');
   document.getElementById('main').innerHTML=`<div class="page-title">Formaciones</div><div class="page-sub">Catálogo de formación del equipo</div>
-    ${canEdit?`<div style="margin-bottom:14px"><button class="btn" onclick="forFormOpen=!forFormOpen;show('formacion')">${forFormOpen?'✕ Cerrar':'➕ Nueva formación'}</button></div>${forFormOpen?`<div class="panel" style="max-width:560px"><form class="box" onsubmit="return forSave(event)" style="max-width:none"><label>Título</label><input id="fT" required><label>Tipo</label><select id="fTipo"><option>Obligatoria</option><option>Recomendada</option><option>Voluntaria</option></select><label>Fecha</label><input id="fF" placeholder="15 jun 2026 o Continuo"><div><button class="btn" type="submit">Guardar</button></div></form></div>`:''}`:''}
+    ${canEdit?`<div style="margin-bottom:14px"><button class="btn" onclick="forFormOpen=!forFormOpen;show('formacion')">${forFormOpen?'✕ Cerrar':'+ Nueva formación'}</button></div>${forFormOpen?`<div class="panel" style="max-width:560px"><form class="box" onsubmit="return forSave(event)" style="max-width:none"><label>Título</label><input id="fT" required><label>Tipo</label><select id="fTipo"><option>Obligatoria</option><option>Recomendada</option><option>Voluntaria</option></select><label>Fecha</label><input id="fF" placeholder="15 jun 2026 o Continuo"><div><button class="btn" type="submit">Guardar</button></div></form></div>`:''}`:''}
     <div class="panel"><table><thead><tr><th>Formación</th><th>Tipo</th><th>Fecha</th>${canEdit?'<th></th>':''}</tr></thead><tbody>${rows||'<tr><td colspan="4" style="color:var(--suave)">Sin formaciones.</td></tr>'}</tbody></table></div>`;
 }
 async function forSave(e){e.preventDefault();await sb.from('formaciones').insert({titulo:val('fT'),tipo:document.getElementById('fTipo').value,fecha:val('fF')});forFormOpen=false;show('formacion');return false;}
@@ -3196,7 +3196,7 @@ async function createKudo(e){e.preventDefault();const para=document.getElementBy
 
 /* ---------------- INCIDENCIAS ---------------- */
 /* ================= MANTENIMIENTO · INCIDENCIAS (v2) ================= */
-let incFormOpen=false, incTab='bandeja', incSel=null, incTimerInt=null;
+let incFormOpen=false, incTab='bandeja', incSel=null, incTimerInt=null, incEditOpen=false;
 let incFilters={ambito:'',edificio:'',unidad:'',urgencia:'',estado:''};
 let MANT_EDIF=[], MANT_UNI=[], MANT_STAFF=[], INC=[], INC_FOTOS={};
 const INC_URG={alta:['Alta','b-red','🔴'],media:['Media','b-amber','🟠'],baja:['Baja','b-grey','🟢']};
@@ -3210,6 +3210,9 @@ function incOpen(id){ incSel=id; show('incidencias'); }
 function incBack(){ incSel=null; if(incTimerInt){clearInterval(incTimerInt);incTimerInt=null;} show('incidencias'); }
 function incFmtT(s){ s=Math.max(0,Math.floor(s||0)); const h=Math.floor(s/3600),m=Math.floor(s%3600/60),ss=s%60; return h?(h+'h '+m+'m'):(m?(m+'m '+ss+'s'):(ss+'s')); }
 function incElapsed(i){ return (i.tiempo_seg||0)+(i.timer_ini?Math.floor((Date.now()-new Date(i.timer_ini).getTime())/1000):0); }
+function incFmtClock(s){ s=Math.max(0,Math.floor(s||0)); const h=Math.floor(s/3600),m=Math.floor(s%3600/60),ss=s%60; const p=n=>(''+n).padStart(2,'0'); return p(h)+':'+p(m)+':'+p(ss); }
+function incLog(i,act){ const h=Array.isArray(i.historial)?i.historial.slice():[]; h.push({t:new Date().toISOString(),who:PROFILE.nombre,act}); return h; }
+function incLightbox(url){ let o=document.getElementById('incLB'); if(!o){o=document.createElement('div');o.id='incLB';o.className='inc-lb';o.onclick=function(){o.remove();};document.body.appendChild(o);} o.innerHTML=`<button class="lb-x">✕</button><img src="${url}">`; }
 function incEnsureStyle(){ if(document.getElementById('incStyle'))return; const s=document.createElement('style'); s.id='incStyle'; s.textContent=`
   .inc-chips{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px}
   .inc-chip{background:#fff;border:1px solid var(--gris2);border-radius:20px;padding:6px 13px;font-size:13px;font-weight:600;color:var(--suave);cursor:pointer;font-family:inherit}
@@ -3236,9 +3239,23 @@ function incEnsureStyle(){ if(document.getElementById('incStyle'))return; const 
   .inc-gal{display:flex;gap:8px;flex-wrap:wrap}
   .inc-thumb{width:120px;height:90px;object-fit:cover;border-radius:8px;border:1px solid var(--gris2)}
   .inc-timer{display:flex;align-items:center;gap:16px;background:var(--gris);border-radius:10px;padding:12px 16px;margin-bottom:10px;flex-wrap:wrap}
-  .inc-timer-disp{font-size:26px;font-weight:800;color:var(--azul);font-variant-numeric:tabular-nums}
+  .inc-timer-disp{font-size:30px;font-weight:800;color:var(--azul);font-variant-numeric:tabular-nums;letter-spacing:1px}
   .inc-man{margin-top:8px}
-  .inc-final{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
+  .inc-final{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px;align-items:center}
+  .btn-ok{background:#1f9d55;color:#fff;border:none;border-radius:8px;padding:8px 14px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit}
+  .inc-note{width:100%;min-height:96px;font-family:inherit;font-size:14px;padding:10px 12px;border:1px solid var(--gris2);border-radius:8px;resize:vertical;box-sizing:border-box}
+  .inc-dot{display:inline-block;width:9px;height:9px;border-radius:50%;background:#e6a700;animation:incpulse 1s infinite;vertical-align:middle}
+  @keyframes incpulse{0%,100%{opacity:1}50%{opacity:.2}}
+  .inc-card.done{opacity:.6;filter:grayscale(.4)}
+  .inc-card.done:hover{opacity:1;filter:none}
+  .inc-lb{position:fixed;inset:0;background:rgba(0,0,0,.86);display:flex;align-items:center;justify-content:center;z-index:9999;padding:30px;cursor:zoom-out}
+  .inc-lb img{max-width:94%;max-height:94%;border-radius:8px;box-shadow:0 10px 40px rgba(0,0,0,.5)}
+  .inc-lb .lb-x{position:absolute;top:16px;right:24px;color:#fff;font-size:30px;cursor:pointer;background:none;border:none}
+  .inc-timeline{list-style:none;padding:0;margin:6px 0 0}
+  .inc-timeline li{position:relative;padding:0 0 12px 18px;font-size:13px;border-left:2px solid var(--gris2);margin-left:4px}
+  .inc-timeline li:last-child{border-left-color:transparent;padding-bottom:0}
+  .inc-timeline li::before{content:'';position:absolute;left:-5px;top:3px;width:8px;height:8px;border-radius:50%;background:var(--azul)}
+  .inc-timeline small{color:var(--suave)}
   .kp-day-bar2{flex:1;display:flex;gap:2px;align-items:flex-end;width:82%;max-width:30px;height:100%}
   .kp-day-bar2 i{flex:1;border-radius:4px 4px 0 0;min-height:2px}
   .kp-day-bar2 .b1{background:var(--gris2)}.kp-day-bar2 .b2{background:var(--azul)}
@@ -3290,7 +3307,7 @@ function renderIncBandeja(){
   const urgOpts=`<option value="">Toda urgencia</option>`+Object.entries(INC_URG).map(([k,v])=>`<option value="${k}" ${f.urgencia===k?'selected':''}>${v[2]} ${v[0]}</option>`).join('');
   const estOpts=`<option value="">Todo estado</option>`+['pendiente','asignada','en_curso','pausada','a_medias'].map(k=>`<option value="${k}" ${f.estado===k?'selected':''}>${INC_EST[k][0]}</option>`).join('');
   return `
-    <div style="margin-bottom:12px"><button class="btn" onclick="incFormOpen=!incFormOpen;show('incidencias')">${incFormOpen?'✕ Cerrar':'➕ Nueva incidencia'}</button></div>
+    <div style="margin-bottom:12px"><button class="btn" onclick="incFormOpen=!incFormOpen;show('incidencias')">${incFormOpen?'✕ Cerrar':'+ Nueva incidencia'}</button></div>
     ${incFormOpen?incFormHTML():''}
     <div class="inc-chips">${chipsHTML}</div>
     <div class="inc-filters">
@@ -3332,8 +3349,9 @@ function incCardHTML(i){
   const tom = i.tomada_por_nombre?`<span class="inc-tom">· 🛠 ${esc(i.tomada_por_nombre)}</span>`:'';
   const me=ME.id;
   const puedeTomar = incEsMant() && i.estado==='pendiente' && !i.asignado_a;
-  return `<div class="inc-card urg-${i.urgencia}">
-    <div class="inc-card-top"><span class="badge ${u[1]}">${u[2]} ${u[0]}</span><span class="badge ${e[1]}">${e[0]}</span>${i.timer_ini?'<span class="inc-live">⏱ en curso</span>':''}</div>
+  const done=(i.estado==='terminada'||i.estado==='cancelada');
+  return `<div class="inc-card urg-${i.urgencia}${done?' done':''}">
+    <div class="inc-card-top"><span class="badge ${u[1]}">${u[2]} ${u[0]}</span><span class="badge ${e[1]}">${i.timer_ini?'<span class="inc-dot"></span> ':''}${e[0]}</span></div>
     <div class="inc-card-loc">🏠 ${esc(i.edificio||'—')}${i.unidad?' · '+esc(i.unidad):''}</div>
     <div class="inc-card-desc">${esc((i.descripcion||'').slice(0,140))}${(i.descripcion||'').length>140?'…':''}</div>
     <div class="inc-card-meta">${asg} ${tom} ${nf?('· 📷 '+nf):''}</div>
@@ -3380,7 +3398,8 @@ async function incCreate(e){
   const btn=e.target.querySelector('button[type=submit]'); if(btn){btn.disabled=true;btn.textContent='⏳ Guardando…';}
   const row={ via:g('iVia'), urgencia:g('iUrg'), edificio:g('iEdif')||null, unidad:g('iUni')||null, descripcion:desc,
     asignado_equipo:g('iEquipo')||'*', asignado_a:personaId||null, asignado_a_nombre:persona?persona.nombre:null,
-    estado: personaId?'asignada':'pendiente', creado_por:ME.id, creado_por_nombre:PROFILE.nombre };
+    estado: personaId?'asignada':'pendiente', creado_por:ME.id, creado_por_nombre:PROFILE.nombre,
+    historial:[{t:new Date().toISOString(),who:PROFILE.nombre,act:'Creada'}] };
   const ins=await sb.from('mant_incidencias').insert(row).select('id').single();
   if(ins.error){ alert('No se pudo crear: '+ins.error.message); if(btn){btn.disabled=false;btn.textContent='Crear incidencia';} return false; }
   const id=ins.data.id;
@@ -3401,38 +3420,74 @@ async function incUpload(incId, files, tipo){
   }
 }
 async function incTomar(id){
-  await sb.from('mant_incidencias').update({estado:'asignada',tomada_por:ME.id,tomada_por_nombre:PROFILE.nombre,updated_at:new Date().toISOString()}).eq('id',id);
+  const i=INC.find(x=>String(x.id)===String(id))||{};
+  await sb.from('mant_incidencias').update({estado:'asignada',tomada_por:ME.id,tomada_por_nombre:PROFILE.nombre,historial:incLog(i,'Tomada'),updated_at:new Date().toISOString()}).eq('id',id);
   toast('✓ Incidencia tomada'); incOpen(id);
+}
+async function incReasignarme(id){
+  const i=INC.find(x=>String(x.id)===String(id)); if(!i)return;
+  if(!confirm('¿Reasignarte esta incidencia a ti? Pasarás a ser quien la realiza.'))return;
+  await sb.from('mant_incidencias').update({tomada_por:ME.id,tomada_por_nombre:PROFILE.nombre,estado:(i.estado==='pendiente'?'asignada':i.estado),historial:incLog(i,'Reasignada a '+PROFILE.nombre),updated_at:new Date().toISOString()}).eq('id',id);
+  toast('✓ Te la has reasignado'); show('incidencias');
+}
+function incQuienOpts(i){
+  const list=MANT_STAFF.slice();
+  if(!list.find(s=>String(s.id)===String(ME.id))) list.unshift({id:ME.id,nombre:PROFILE.nombre+' (yo)'});
+  const sel=i.tomada_por||ME.id;
+  return list.map(s=>`<option value="${s.id}" ${String(sel)===String(s.id)?'selected':''}>${esc(s.nombre)}</option>`).join('');
 }
 async function incTimer(id,action){
   const i=INC.find(x=>String(x.id)===String(id)); if(!i)return;
   const now=Date.now(); const upd={updated_at:new Date().toISOString()};
-  if(action==='start'){ upd.timer_ini=new Date().toISOString(); upd.estado='en_curso'; if(!i.tomada_por){upd.tomada_por=ME.id;upd.tomada_por_nombre=PROFILE.nombre;} }
-  else if(action==='pause'){ const add=i.timer_ini?Math.floor((now-new Date(i.timer_ini).getTime())/1000):0; upd.tiempo_seg=(i.tiempo_seg||0)+add; upd.timer_ini=null; upd.estado='pausada'; }
+  if(action==='start'){ upd.timer_ini=new Date().toISOString(); upd.estado='en_curso'; if(!i.tomada_por){upd.tomada_por=ME.id;upd.tomada_por_nombre=PROFILE.nombre;} upd.historial=incLog(i,'Cronómetro iniciado'); }
+  else if(action==='pause'){ const add=i.timer_ini?Math.floor((now-new Date(i.timer_ini).getTime())/1000):0; upd.tiempo_seg=(i.tiempo_seg||0)+add; upd.timer_ini=null; upd.estado='pausada'; upd.historial=incLog(i,'Cronómetro pausado'); }
   await sb.from('mant_incidencias').update(upd).eq('id',id); show('incidencias');
 }
 async function incTiempoManual(id){
+  const i=INC.find(x=>String(x.id)===String(id))||{};
   const v=document.getElementById('incManMin'); if(!v)return; const min=parseInt(v.value,10); if(isNaN(min)||min<0){alert('Pon un número de minutos válido.');return;}
-  await sb.from('mant_incidencias').update({tiempo_seg:min*60,timer_ini:null,updated_at:new Date().toISOString()}).eq('id',id);
+  await sb.from('mant_incidencias').update({tiempo_seg:min*60,timer_ini:null,historial:incLog(i,'Tiempo introducido manualmente ('+min+' min)'),updated_at:new Date().toISOString()}).eq('id',id);
   toast('✓ Tiempo guardado'); show('incidencias');
 }
 async function incFinalizar(id,estadoFinal){
   const i=INC.find(x=>String(x.id)===String(id)); if(!i)return;
   const add=i.timer_ini?Math.floor((Date.now()-new Date(i.timer_ini).getTime())/1000):0;
   const nota=(document.getElementById('incNota')||{}).value||i.nota_solucion||null;
-  const upd={tiempo_seg:(i.tiempo_seg||0)+add,timer_ini:null,nota_solucion:nota,updated_at:new Date().toISOString()};
-  if(estadoFinal==='terminada'){ upd.estado='terminada'; upd.resuelto_por_nombre=PROFILE.nombre; upd.resuelta_at=new Date().toISOString(); }
-  else { upd.estado='a_medias'; }
+  const selQ=(document.getElementById('incQuien')||{}).value||ME.id;
+  const quien=(String(selQ)===String(ME.id))?PROFILE.nombre:(((MANT_STAFF.find(s=>String(s.id)===String(selQ))||{}).nombre)||PROFILE.nombre);
+  const upd={tiempo_seg:(i.tiempo_seg||0)+add,timer_ini:null,nota_solucion:nota,tomada_por:selQ,tomada_por_nombre:quien,updated_at:new Date().toISOString()};
+  if(estadoFinal==='terminada'){ upd.estado='terminada'; upd.resuelto_por_nombre=quien; upd.resuelta_at=new Date().toISOString(); upd.historial=incLog(i,'Terminada · realizada por '+quien); }
+  else { upd.estado='a_medias'; upd.historial=incLog(i,'Dejada a medias'); }
   await sb.from('mant_incidencias').update(upd).eq('id',id);
   await incUpload(id,(document.getElementById('incFotoSol')||{}).files||[],'solucion');
+  if(estadoFinal==='terminada' && i.creado_por && i.creado_por!==ME.id){
+    try{ await sb.from('mensajes').insert({de_id:ME.id,para_id:i.creado_por,de_nombre:PROFILE.nombre,para_nombre:i.creado_por_nombre||'',texto:`✅ Tu incidencia en ${i.edificio||''}${i.unidad?' · '+i.unidad:''} ha sido resuelta por ${PROFILE.nombre}.`,leido:false}); }catch(e){}
+  }
   toast(estadoFinal==='terminada'?'✅ Incidencia terminada':'⏸️ Guardada a medias');
   if(estadoFinal==='terminada'){ incSel=null; if(incTimerInt){clearInterval(incTimerInt);incTimerInt=null;} }
   show('incidencias');
 }
+async function incReabrir(id){
+  const i=INC.find(x=>String(x.id)===String(id)); if(!i)return;
+  if(!confirm('¿Reabrir esta incidencia? Volverá a estar activa.'))return;
+  await sb.from('mant_incidencias').update({estado:i.tomada_por?'asignada':'pendiente',resuelta_at:null,resuelto_por_nombre:null,historial:incLog(i,'Reabierta'),updated_at:new Date().toISOString()}).eq('id',id);
+  toast('🔄 Incidencia reabierta'); incTab='bandeja'; show('incidencias');
+}
 async function incCancelar(id){
+  const i=INC.find(x=>String(x.id)===String(id))||{};
   if(!confirm('¿Cancelar y devolver la incidencia a pendiente para que otra persona la tome?'))return;
-  await sb.from('mant_incidencias').update({estado:'pendiente',tomada_por:null,tomada_por_nombre:null,timer_ini:null,updated_at:new Date().toISOString()}).eq('id',id);
+  await sb.from('mant_incidencias').update({estado:'pendiente',tomada_por:null,tomada_por_nombre:null,timer_ini:null,historial:incLog(i,'Cancelada · devuelta a pendiente'),updated_at:new Date().toISOString()}).eq('id',id);
   toast('Incidencia devuelta a pendiente'); incSel=null; show('incidencias');
+}
+function incToggleEdit(){ incEditOpen=!incEditOpen; show('incidencias'); }
+function incEditEquipo(){ const t=(document.getElementById('eEquipo')||{}).value||'*'; const per=document.getElementById('ePersona'); if(!per)return; const list=MANT_STAFF.filter(s=> t==='*'?true:s.org_equipo===t); per.innerHTML=`<option value="">Todo el equipo (que alguien la tome)</option>`+list.map(s=>`<option value="${s.id}">${esc(s.nombre)}</option>`).join(''); }
+async function incSaveEdit(id){
+  const i=INC.find(x=>String(x.id)===String(id)); if(!i)return;
+  const g=x=>{const el=document.getElementById(x);return el?el.value:'';};
+  const desc=(g('eDesc')||'').trim(); if(!desc){alert('La descripción no puede quedar vacía.');return;}
+  const personaId=g('ePersona')||null; const persona=personaId?MANT_STAFF.find(s=>String(s.id)===String(personaId)):null;
+  await sb.from('mant_incidencias').update({urgencia:g('eUrg'),descripcion:desc,asignado_equipo:g('eEquipo')||'*',asignado_a:personaId||null,asignado_a_nombre:persona?persona.nombre:null,historial:incLog(i,'Editada / reasignada'),updated_at:new Date().toISOString()}).eq('id',id);
+  incEditOpen=false; toast('✓ Cambios guardados'); show('incidencias');
 }
 async function incDelete(id){
   if(!confirm('¿Eliminar esta incidencia de forma permanente?'))return;
@@ -3448,39 +3503,66 @@ function renderIncDetail(id){
   const me=ME.id;
   const puedeTomar = incEsMant() && i.estado==='pendiente' && !i.asignado_a;
   const puedeTrabajar = incEsMant() && (i.tomada_por===me || i.asignado_a===me || incCan()) && i.estado!=='terminada' && i.estado!=='cancelada';
+  const puedeEditar = incCan() || i.creado_por===me;
   const running=!!i.timer_ini;
-  const galeria=(arr,vacio)=> arr.length? `<div class="inc-gal">${arr.map(f=>{ const isVid=(f.mime||'').startsWith('video'); return isVid?`<video src="${esc(f.url)}" controls class="inc-thumb"></video>`:`<a href="${esc(f.url)}" target="_blank"><img src="${esc(f.url)}" class="inc-thumb"></a>`; }).join('')}</div>` : `<div style="color:var(--suave);font-size:13px">${vacio}</div>`;
+  const galeria=(arr,vacio)=> arr.length? `<div class="inc-gal">${arr.map(f=>{ const isVid=(f.mime||'').startsWith('video'); return isVid?`<video src="${esc(f.url)}" controls class="inc-thumb"></video>`:`<img src="${esc(f.url)}" class="inc-thumb" style="cursor:zoom-in" onclick="incLightbox('${esc(f.url)}')">`; }).join('')}</div>` : `<div style="color:var(--suave);font-size:13px">${vacio}</div>`;
   const asg = i.asignado_a_nombre? esc(i.asignado_a_nombre) : (i.asignado_equipo==='*'?'Todos los equipos':(i.asignado_equipo?esc(i.asignado_equipo):'Sin asignar'));
+  const done=(i.estado==='terminada'||i.estado==='cancelada');
+  const otraPersona = ((i.tomada_por && i.tomada_por!==me) || (!i.tomada_por && i.asignado_a && i.asignado_a!==me));
+  const quienLa = i.tomada_por_nombre || i.asignado_a_nombre || '';
+  const banner = (incEsMant() && !done && otraPersona)? `<div class="panel" style="background:#fff8e6;border:1px solid #f0d98a;margin-top:12px"><b>⚠️ Esta incidencia la lleva ${esc(quienLa)}.</b> Si la vas a realizar tú, reasígnatela.<div style="margin-top:8px"><button class="btn-sm" onclick="incReasignarme(${i.id})">🙋 Reasignármela a mí</button></div></div>` : '';
+  // panel de edición
+  const editPanel = (incEditOpen && puedeEditar)? (function(){
+    const teams=[...new Set(MANT_STAFF.map(s=>s.org_equipo).filter(Boolean))];
+    const teamOpts=`<option value="*" ${i.asignado_equipo==='*'?'selected':''}>Todos los equipos</option>`+teams.map(t=>`<option ${i.asignado_equipo===t?'selected':''}>${esc(t)}</option>`).join('');
+    const curTeam=i.asignado_equipo||'*';
+    const perList=MANT_STAFF.filter(s=> curTeam==='*'?true:s.org_equipo===curTeam);
+    const perOpts=`<option value="">Todo el equipo (que alguien la tome)</option>`+perList.map(s=>`<option value="${s.id}" ${String(i.asignado_a)===String(s.id)?'selected':''}>${esc(s.nombre)}</option>`).join('');
+    return `<div class="panel"><h3 class="inc-h3">✏️ Editar / reasignar</h3>
+      <label>Urgencia</label><select id="eUrg"><option value="alta" ${i.urgencia==='alta'?'selected':''}>🔴 Alta</option><option value="media" ${i.urgencia==='media'?'selected':''}>🟠 Media</option><option value="baja" ${i.urgencia==='baja'?'selected':''}>🟢 Baja</option></select>
+      <label>Descripción</label><textarea id="eDesc" class="inc-note">${esc(i.descripcion||'')}</textarea>
+      <div class="row"><div><label>Equipo</label><select id="eEquipo" onchange="incEditEquipo()">${teamOpts}</select></div>
+      <div><label>Persona</label><select id="ePersona">${perOpts}</select></div></div>
+      <div class="inc-final"><button class="btn-ok" onclick="incSaveEdit(${i.id})">Guardar cambios</button><button class="btn-sm ghost" onclick="incToggleEdit()">Cancelar</button></div></div>`;
+  })() : '';
   return `
-  <button class="btn-sm ghost" onclick="incBack()">← Volver a la bandeja</button>
-  <div class="panel" style="margin-top:12px">
-    <div class="inc-card-top"><span class="badge ${u[1]}">${u[2]} ${u[0]}</span><span class="badge ${e[1]}">${e[0]}</span>${running?'<span class="inc-live">⏱ en curso</span>':''}</div>
+  <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+    <button class="btn-sm ghost" onclick="incBack()">← Volver</button>
+    ${puedeEditar&&!done?`<button class="btn-sm ghost" onclick="incToggleEdit()">${incEditOpen?'✕ Cerrar edición':'✏️ Editar / reasignar'}</button>`:''}
+  </div>
+  ${editPanel}
+  <div class="panel${done?' inc-card done':''}" style="margin-top:12px">
+    <div class="inc-card-top"><span class="badge ${u[1]}">${u[2]} ${u[0]}</span><span class="badge ${e[1]}">${running?'<span class="inc-dot"></span> ':''}${e[0]}</span></div>
     <h2 style="margin:8px 0 2px">🏠 ${esc(i.edificio||'—')}${i.unidad?' · '+esc(i.unidad):''}</h2>
     <div style="color:var(--suave);font-size:13px;margin-bottom:10px">${INC_VIA[i.via]||'—'} · reportada por <b>${esc(i.creado_por_nombre||'—')}</b> · ${new Date(i.created_at).toLocaleString('es-ES')}</div>
     <p style="font-size:14.5px;white-space:pre-wrap">${esc(i.descripcion||'')}</p>
     <div class="inc-kv"><b>Asignada a:</b> ${asg}${i.tomada_por_nombre?` · <b>realiza:</b> 🛠 ${esc(i.tomada_por_nombre)}`:''}</div>
     <h3 class="inc-h3">📷 Fotos del reporte</h3>${galeria(fr,'Sin fotos de reporte.')}
   </div>`
+  + banner
   + ( (i.estado==='terminada')? `<div class="panel"><h3 class="inc-h3">✅ Resolución</h3>
        <div class="inc-kv"><b>Resuelta por:</b> ${esc(i.resuelto_por_nombre||'—')} · ${i.resuelta_at?new Date(i.resuelta_at).toLocaleString('es-ES'):''}</div>
        <div class="inc-kv"><b>Tiempo empleado:</b> ${incFmtT(i.tiempo_seg)}</div>
        ${i.nota_solucion?`<div class="inc-kv"><b>Nota:</b> ${esc(i.nota_solucion)}</div>`:''}
-       <h3 class="inc-h3">📷 Fotos de la solución</h3>${galeria(fs,'Sin fotos de solución.')}</div>` : '')
-  + ( puedeTomar? `<div class="panel"><button class="btn" onclick="incTomar(${i.id})">✋ Tomar esta incidencia</button></div>`:'')
+       <h3 class="inc-h3">📷 Fotos de la solución</h3>${galeria(fs,'Sin fotos de solución.')}
+       ${puedeEditar?`<div style="margin-top:14px"><button class="btn-sm" onclick="incReabrir(${i.id})">🔄 Reabrir incidencia</button></div>`:''}</div>` : '')
+  + ( puedeTomar? `<div class="panel"><button class="btn-ok" onclick="incTomar(${i.id})">✋ Tomar esta incidencia</button></div>`:'')
   + ( puedeTrabajar? `<div class="panel">
        <h3 class="inc-h3">🛠 Ejecutar y resolver</h3>
-       <div class="inc-timer"><div class="inc-timer-disp" id="incTimerDisp">${incFmtT(incElapsed(i))}</div>
-         <div class="inc-timer-btns">${running?`<button class="btn-sm" onclick="incTimer(${i.id},'pause')">⏸️ Pausar</button>`:`<button class="btn-sm" onclick="incTimer(${i.id},'start')">▶️ ${i.tiempo_seg?'Reanudar':'Iniciar'}</button>`}</div>
+       <div class="inc-timer"><div class="inc-timer-disp" id="incTimerDisp">${running?'<span class="inc-dot"></span> ':''}${incFmtClock(incElapsed(i))}</div>
+         <div class="inc-timer-btns">${running?`<button class="btn-sm" onclick="incTimer(${i.id},'pause')">⏸️ Pausar</button>`:`<button class="btn-ok" onclick="incTimer(${i.id},'start')">▶️ ${i.tiempo_seg?'Reanudar':'Iniciar'}</button>`}</div>
        </div>
        <div class="inc-man"><label>O introduce el tiempo manualmente (minutos)</label><div style="display:flex;gap:8px"><input id="incManMin" type="number" min="0" placeholder="Ej: 45" style="max-width:120px"><button class="btn-sm ghost" onclick="incTiempoManual(${i.id})">Guardar tiempo</button></div></div>
        <label style="margin-top:12px;display:block">Fotos de la solución</label><input id="incFotoSol" type="file" accept="image/*,video/*" multiple>
-       <label style="margin-top:10px;display:block">Nota de la solución (opcional)</label><textarea id="incNota" rows="2">${esc(i.nota_solucion||'')}</textarea>
+       <label style="margin-top:10px;display:block">Nota de la solución (opcional)</label><textarea id="incNota" class="inc-note" placeholder="Qué se hizo para resolverlo…">${esc(i.nota_solucion||'')}</textarea>
+       <label style="margin-top:10px;display:block">¿Quién ha realizado la incidencia?</label><select id="incQuien">${incQuienOpts(i)}</select>
        <div class="inc-final">
-         <button class="btn" onclick="incFinalizar(${i.id},'terminada')">✅ Marcar terminada</button>
+         <button class="btn-ok" onclick="incFinalizar(${i.id},'terminada')">✅ Marcar terminada</button>
          <button class="btn-sm" onclick="incFinalizar(${i.id},'a_medias')">⏸️ Dejar a medias</button>
          <button class="btn-sm x" onclick="incCancelar(${i.id})">✖️ Cancelar (vuelve a pendiente)</button>
        </div>
-     </div>`:'');
+     </div>`:'')
+  + ( (i.historial&&i.historial.length)? `<div class="panel"><h3 class="inc-h3">🕒 Historial de actividad</h3><ul class="inc-timeline">${i.historial.slice().reverse().map(h=>`<li><b>${esc(h.act||'')}</b>${h.who?' · '+esc(h.who):''}<br><small>${h.t?new Date(h.t).toLocaleString('es-ES'):''}</small></li>`).join('')}</ul></div>` : '');
 }
 function renderIncPanel(I){
   const pad=n=>(''+n).padStart(2,'0'); const today=new Date();
@@ -3550,7 +3632,7 @@ async function pageVideos(){
         ${canEdit?`<button class="btn ghost" style="padding:5px 10px;margin-left:auto;color:#c0392b" onclick="delVideo(${v.id})">🗑</button>`:''}</div></div></div>`;};
   document.getElementById('main').innerHTML=`<div class="page-title">Videos explicativos</div>
     <div class="page-sub">Tutoriales y guías en vídeo de Mantenimiento${canEdit?' · puedes añadir':''}</div>
-    ${canEdit?`<div style="margin-bottom:16px"><button class="btn" onclick="vidFormOpen=!vidFormOpen;show('videos')">${vidFormOpen?'✕ Cerrar':'➕ Añadir vídeo'}</button></div>
+    ${canEdit?`<div style="margin-bottom:16px"><button class="btn" onclick="vidFormOpen=!vidFormOpen;show('videos')">${vidFormOpen?'✕ Cerrar':'+ Añadir vídeo'}</button></div>
       ${vidFormOpen?`<div class="panel" style="max-width:620px"><form class="box" onsubmit="return addVideo(event)" style="max-width:none">
         <label>Título</label><input id="vT" required placeholder="Ej: Cómo purgar un radiador">
         <label>Enlace del vídeo (YouTube u otro)</label><input id="vU" required placeholder="https://www.youtube.com/watch?v=...">
@@ -3805,12 +3887,12 @@ function asgRenderEditor(){
     <div class="panel"><h2 style="margin-top:0">🏠 Unidades</h2>
       <div class="asg-scroll"><table class="asg-table"><thead><tr><th style="min-width:150px">Unidad</th><th>Prioridad</th><th style="min-width:155px">Tipo</th><th>Nº pax</th><th>Extra / nota</th><th>Trabajador 1</th><th>Trabajador 2</th>${edit?'<th></th>':''}</tr></thead>
         <tbody id="asgUTbody">${asgUnidadRows()}</tbody></table></div>
-      ${edit?`<button class="btn ghost" style="margin-top:10px" onclick="asgAddUnidad()">➕ Añadir unidad</button>`:''}
+      ${edit?`<button class="btn ghost" style="margin-top:10px" onclick="asgAddUnidad()">+ Añadir unidad</button>`:''}
     </div>
     <div class="panel"><h2 style="margin-top:0">🧽 Zonas comunes</h2>
       <div class="asg-scroll"><table class="asg-table"><thead><tr><th style="min-width:200px">Área común</th><th>Trabajador 1</th><th>Trabajador 2</th>${edit?'<th></th>':''}</tr></thead>
         <tbody id="asgCTbody">${asgComunRows()}</tbody></table></div>
-      ${edit?`<button class="btn ghost" style="margin-top:10px" onclick="asgAddComun()">➕ Añadir zona común</button>`:''}
+      ${edit?`<button class="btn ghost" style="margin-top:10px" onclick="asgAddComun()">+ Añadir zona común</button>`:''}
     </div>
     <div class="panel"><h2 style="margin-top:0">📋 Resumen — personal llamado a trabajar</h2>
       <p style="font-size:12.5px;color:var(--suave);margin:-4px 0 12px">Este es el listado que se envía al grupo de WhatsApp del personal de limpieza.</p>
@@ -3824,7 +3906,7 @@ function asgRenderListado(){
     ${edit?`<div class="panel" style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
       <input id="asgTrabN" placeholder="Nombre y apellido del trabajador…" onkeydown="if(event.key==='Enter')asgAddTrab()" style="flex:1;min-width:220px;padding:9px 12px;border:1px solid var(--gris2);border-radius:8px;font-family:inherit;font-size:14px">
       <select id="asgTrabEq" style="padding:9px 12px;border:1px solid var(--gris2);border-radius:8px;font-family:inherit;font-size:14px"><option value="">Equipo…</option>${EQUIPOS.map(e=>`<option value="${esc(e)}">${esc(e)}</option>`).join('')}</select>
-      <button class="btn" onclick="asgAddTrab()">➕ Añadir trabajador</button></div>`:''}
+      <button class="btn" onclick="asgAddTrab()">+ Añadir trabajador</button></div>`:''}
     <div class="panel"><h2 style="margin-top:0">👥 Trabajadores (${ASG_TRAB_FULL.length})</h2>
       <table class="asg-table"><thead><tr><th>#</th><th>Nombre y apellido</th><th>Equipo</th>${edit?'<th></th>':''}</tr></thead>
       <tbody>${filas||`<tr><td colspan="${edit?4:3}" style="color:var(--suave)">Sin trabajadores. Añade el primero.</td></tr>`}</tbody></table></div>`;
@@ -3837,7 +3919,7 @@ function asgRenderPublicadas(){
     return `<div class="pubcard"><div class="pi"><b>📅 ${esc(fechaLarga(e.fecha))}${e.equipo?` <span class="asg-pill" style="background:#e7eef7;color:#1b3a5b;font-size:10.5px">${esc(e.equipo)}</span>`:''}</b><span>${(e.unidades||[]).length} unidad(es) · ${(e.comunes||[]).length} zona(s) común · ${r.length} personal</span></div>
       <div class="pa"><button class="btn ghost" onclick="asgPDF(${e.id})">📥 PDF</button>
         ${edit?`<details class="asg-kebab"><summary>⋮</summary><div class="asg-kebab-menu"><button onclick="asgEditar(${e.id})">✏️ Editar</button><button onclick="asgEliminar(${e.id})">🗑 Eliminar</button></div></details>`:''}</div></div>`; }).join('');
-  return sub+`${edit?`<button class="btn ghost" style="margin-bottom:14px" onclick="asgNueva()">➕ Nueva asignación</button>`:''}${items}`;
+  return sub+`${edit?`<button class="btn ghost" style="margin-bottom:14px" onclick="asgNueva()">+ Nueva asignación</button>`:''}${items}`;
 }
 async function pageAsignaciones(){
   asgEnsureStyle();
