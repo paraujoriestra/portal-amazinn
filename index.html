@@ -3221,7 +3221,7 @@ async function createKudo(e){e.preventDefault();const para=document.getElementBy
 let incFormOpen=false, incTab='bandeja', incSel=null, incTimerInt=null, incEditOpen=false, incNew=false;
 let incFilters={ambito:'',edificio:'',unidad:'',urgencia:'',estado:''};
 let MANT_EDIF=[], MANT_UNI=[], MANT_STAFF=[], MANT_TEAMS=[], MANT_PREV=[], INC=[], INC_FOTOS={};
-let prevFormOpen=false, prevEditId=null;
+let prevFormOpen=false, prevEditId=null, prevSel=null, prevTab='lista', prevCalRef=null;
 const INC_URG={alta:['Alta','b-red','🔴'],media:['Media','b-amber','🟠'],baja:['Baja','b-grey','🟢']};
 const INC_EST={pendiente:['Pendiente','b-grey'],asignada:['Asignada','b-blue'],en_curso:['En curso','b-amber'],pausada:['Pausada','b-amber'],a_medias:['A medias','b-amber'],terminada:['Terminada','b-green'],cancelada:['Cancelada','b-grey']};
 const INC_VIA={cliente_ota:'🌐 Cliente (OTA)',limpieza:'🧹 Limpieza',personal:'👤 Personal interno'};
@@ -3292,7 +3292,16 @@ function incEnsureStyle(){ if(document.getElementById('incStyle'))return; const 
   .kp-day-bar2 i{flex:1;border-radius:4px 4px 0 0;min-height:2px}
   .kp-day-bar2 .b1{background:var(--gris2)}.kp-day-bar2 .b2{background:var(--azul)}
   .kp-legend{display:flex;gap:16px;font-size:12px;color:var(--suave);margin-top:8px}
-  .kp-legend i{display:inline-block;width:11px;height:11px;border-radius:3px;margin-right:4px;vertical-align:middle}`;
+  .kp-legend i{display:inline-block;width:11px;height:11px;border-radius:3px;margin-right:4px;vertical-align:middle}
+  .cal-nav{display:flex;align-items:center;gap:14px;justify-content:center;margin:4px 0 12px}
+  .cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:6px}
+  .cal-head span{font-size:11px;font-weight:700;color:var(--suave);text-transform:uppercase;text-align:center;padding:2px}
+  .cal-cell{min-height:84px;background:#fff;border:1px solid var(--gris2);border-radius:8px;padding:5px;overflow:hidden}
+  .cal-cell.cal-empty{background:transparent;border:none}
+  .cal-cell.cal-today{border-color:var(--azul);box-shadow:0 0 0 1px var(--azul)}
+  .cal-d{font-size:12px;font-weight:700;color:var(--suave);margin-bottom:3px}
+  .cal-task{font-size:10.5px;background:#eef4fb;color:var(--azul);border-radius:5px;padding:2px 5px;margin-bottom:3px;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .cal-task.over{background:#fdecea;color:#c0392b}`;
   document.head.appendChild(s); }
 
 async function pageIncidencias(){
@@ -3728,7 +3737,61 @@ async function pagePreventivo(){
   MANT_PREV=pv.data||[]; MANT_EDIF=ed.data||[]; MANT_UNI=un.data||[]; MANT_STAFF=stf.data||[];
   MANT_STAFF.forEach(s=>{ s.team=s.org_equipo||s.equipo||''; });
   MANT_TEAMS=[...new Set(MANT_STAFF.map(s=>s.team).filter(Boolean))];
-  document.getElementById('main').innerHTML=`<div class="page-title">Mantenimiento preventivo</div><div class="page-sub">Tareas programadas y recurrentes (piscina, filtros, revisiones…)</div>${renderPrev()}`;
+  const tabs = prevSel!=null?'':`<div class="asg-tabs">
+    <button class="asg-tab ${prevTab!=='cal'?'on':''}" onclick="prevSetTab('lista')">📋 Lista</button>
+    <button class="asg-tab ${prevTab==='cal'?'on':''}" onclick="prevSetTab('cal')">📅 Calendario</button></div>`;
+  const body = prevSel!=null? renderPrevDetail(prevSel) : (prevTab==='cal'? renderPrevCal() : renderPrev());
+  document.getElementById('main').innerHTML=`<div class="page-title">Mantenimiento preventivo</div><div class="page-sub">Tareas programadas y recurrentes (piscina, filtros, revisiones…)</div>${tabs}${body}`;
+}
+function prevSetTab(t){ prevTab=t; prevFormOpen=false; prevSel=null; show('preventivo'); }
+function prevOpen(id){ prevSel=id; show('preventivo'); }
+function prevBack(){ prevSel=null; show('preventivo'); }
+function prevSetMonth(delta){ const base=prevCalRef?new Date(prevCalRef):new Date(); base.setDate(1); base.setMonth(base.getMonth()+delta); prevCalRef=base; show('preventivo'); }
+function renderPrevCal(){
+  const base = prevCalRef?new Date(prevCalRef):new Date(); base.setDate(1);
+  const y=base.getFullYear(), m=base.getMonth();
+  const monthName=base.toLocaleDateString('es-ES',{month:'long',year:'numeric'});
+  const startDow=(new Date(y,m,1).getDay()+6)%7;
+  const daysInMonth=new Date(y,m+1,0).getDate();
+  const todayISO=prevLocalIso(new Date());
+  const byDate={}; MANT_PREV.forEach(t=>{ if(t.proximo){ (byDate[t.proximo]=byDate[t.proximo]||[]).push(t); } });
+  let cells=''; for(let i=0;i<startDow;i++) cells+='<div class="cal-cell cal-empty"></div>';
+  for(let d=1; d<=daysInMonth; d++){
+    const iso=y+'-'+String(m+1).padStart(2,'0')+'-'+String(d).padStart(2,'0');
+    const tasks=byDate[iso]||[]; const isToday=iso===todayISO;
+    const chips=tasks.map(t=>`<div class="cal-task${iso<todayISO?' over':''}" onclick="prevOpen(${t.id})" title="${esc(t.titulo)}">${esc(t.titulo)}</div>`).join('');
+    cells+=`<div class="cal-cell${isToday?' cal-today':''}"><div class="cal-d">${d}</div>${chips}</div>`;
+  }
+  return `<div class="cal-nav"><button class="btn-sm ghost" onclick="prevSetMonth(-1)">←</button><b style="text-transform:capitalize;min-width:160px;text-align:center">${monthName}</b><button class="btn-sm ghost" onclick="prevSetMonth(1)">→</button></div>
+    <div class="cal-grid cal-head"><span>Lun</span><span>Mar</span><span>Mié</span><span>Jue</span><span>Vie</span><span>Sáb</span><span>Dom</span></div>
+    <div class="cal-grid">${cells}</div>`;
+}
+function renderPrevDetail(id){
+  const t=MANT_PREV.find(x=>String(x.id)===String(id));
+  if(!t) return `<button class="btn-sm ghost" onclick="prevBack()">← Volver</button><div class="panel" style="margin-top:12px">Tarea no encontrada.</div>`;
+  const canManage=incCan();
+  const today=new Date(); today.setHours(0,0,0,0);
+  const prox=t.proximo?new Date(t.proximo+'T00:00:00'):null;
+  const overdue=prox&&prox<today&&t.activo!==false;
+  const estado=(t.activo===false)?'<span class="badge b-grey">Inactiva</span>':overdue?'<span class="badge b-red urg-alarm">⏰ Vencida</span>':'<span class="badge b-green">Activa</span>';
+  const asg = t.asignado_a_nombre? esc(t.asignado_a_nombre):(t.asignado_equipo?esc(t.asignado_equipo):'Sin asignar');
+  const puedeTomar = incEsMant() && !t.asignado_a && t.activo!==false;
+  return `<button class="btn-sm ghost" onclick="prevBack()">← Volver</button>
+  <div class="panel" style="margin-top:12px">
+    <div class="inc-card-top">${estado}<span class="badge b-grey">cada ${t.frecuencia_dias} días</span></div>
+    <h2 style="margin:8px 0 2px">🗓️ ${esc(t.titulo)}</h2>
+    <div class="inc-kv"><b>Ubicación:</b> ${esc(t.edificio||'Cualquiera')}${t.unidad?' · '+esc(t.unidad):''}</div>
+    <div class="inc-kv"><b>Categoría:</b> ${incCatLabel(t.categoria)}</div>
+    <div class="inc-kv"><b>Próximo:</b> ${prox?prox.toLocaleDateString('es-ES'):'—'}</div>
+    <div class="inc-kv"><b>Asignada a:</b> ${asg}</div>
+    ${t.ultima?`<div class="inc-kv"><b>Última vez:</b> ${new Date(t.ultima+'T00:00:00').toLocaleDateString('es-ES')}</div>`:''}
+    ${t.notas?`<div class="inc-kv"><b>Notas:</b> ${esc(t.notas)}</div>`:''}
+    <div class="inc-final" style="margin-top:14px">
+      <button class="btn-ok" onclick="prevDone(${t.id})">✅ Hecho hoy</button>
+      ${puedeTomar?`<button class="btn-sm" onclick="prevTomar(${t.id})">✋ Tomar</button>`:''}
+      ${canManage?`<button class="btn-sm ghost" onclick="prevEdit(${t.id})">✏️ Editar</button><button class="btn-sm x" onclick="prevDelete(${t.id})">🗑 Borrar</button>`:''}
+    </div>
+  </div>`;
 }
 function renderPrev(){
   const canManage=incCan();
@@ -3757,7 +3820,7 @@ function prevCardHTML(t){
     <div class="inc-card-actions">
       <button class="btn-ok" onclick="prevDone(${t.id})">✅ Hecho hoy</button>
       ${puedeTomar?`<button class="btn-sm" onclick="prevTomar(${t.id})">✋ Tomar</button>`:''}
-      ${canManage?`<button class="btn-sm ghost" onclick="prevEdit(${t.id})">✏️ Editar</button><button class="btn-sm x" onclick="prevDelete(${t.id})">🗑</button>`:''}
+      <button class="btn-sm ghost" onclick="prevOpen(${t.id})">👁 Abrir</button>
     </div></div>`;
 }
 async function prevTomar(id){
@@ -3786,8 +3849,8 @@ function prevFormHTML(){
   </form></div>`;
 }
 function prevFormEdif(){ const ed=(document.getElementById('pEdif')||{}).value||''; const uni=document.getElementById('pUni'); if(!uni)return; const list=MANT_UNI.filter(u=>u.edificio===ed); uni.innerHTML=`<option value="">— Cualquiera —</option>`+list.map(u=>`<option>${esc(u.nombre)}${u.tipo==='comun'?' (zona común)':''}</option>`).join(''); }
-function prevNew(){ prevEditId=null; prevFormOpen=true; show('preventivo'); }
-function prevEdit(id){ prevEditId=id; prevFormOpen=true; show('preventivo'); }
+function prevNew(){ prevEditId=null; prevFormOpen=true; prevSel=null; prevTab='lista'; show('preventivo'); }
+function prevEdit(id){ prevEditId=id; prevFormOpen=true; prevSel=null; prevTab='lista'; show('preventivo'); }
 function prevCancel(){ prevFormOpen=false; prevEditId=null; show('preventivo'); }
 async function prevSave(e){
   e.preventDefault();
@@ -3809,7 +3872,7 @@ async function prevDone(id){
   await sb.from('mant_preventivo').update({ultima:prevLocalIso(today),proximo:prevLocalIso(next)}).eq('id',id);
   toast('✓ Hecho · reprogramada para '+next.toLocaleDateString('es-ES')); show('preventivo');
 }
-async function prevDelete(id){ if(!confirm('¿Eliminar esta tarea preventiva?'))return; const{error}=await sb.from('mant_preventivo').delete().eq('id',id); if(error){alert('Error: '+error.message);return;} toast('Eliminada'); show('preventivo'); }
+async function prevDelete(id){ if(!confirm('¿Eliminar esta tarea preventiva?'))return; const{error}=await sb.from('mant_preventivo').delete().eq('id',id); if(error){alert('Error: '+error.message);return;} prevSel=null; toast('Eliminada'); show('preventivo'); }
 
 /* ---------------- VIDEOS EXPLICATIVOS ---------------- */
 let vidFormOpen=false;
