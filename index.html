@@ -332,6 +332,7 @@
   .org-couple{display:inline-flex;gap:14px;align-items:flex-start;padding:9px;border:1px dashed var(--azul);border-radius:14px;background:rgba(31,78,121,.05)}
   .org-coltree{display:inline-flex;flex-direction:column;align-items:center}
   .org-coltree>ul{padding-top:18px}
+  .org-deptbox{display:inline-block;background:#fff;border:1px solid var(--gris2);border-radius:10px;padding:6px 16px;font-weight:700;font-size:12.5px;color:var(--azul);box-shadow:var(--sombra);white-space:nowrap}
   .org-co-wrap{position:relative;display:inline-block}
   .org-co-x{position:absolute;top:-9px;right:-9px;width:20px;height:20px;border-radius:50%;border:1px solid #e3b7b1;background:#fff;color:#c0392b;font-size:11px;line-height:1;cursor:pointer;opacity:0;transition:.15s;z-index:4}
   .org-co-wrap:hover .org-co-x{opacity:1}
@@ -1081,6 +1082,7 @@ const NAV=[
   {grp:'Atención al cliente', depts:['Atención al cliente']},
   {id:'mensajes',ic:'💬',t:'Mensajes y plantillas', depts:['Atención al cliente']},
   {id:'bitacora',ic:'📝',t:'Bitácoras', depts:['Atención al cliente'], lockRoles:['empleado','responsable']},
+  {id:'cierres',ic:'🧾',t:'Cierres de caja', depts:['Atención al cliente'], lockRoles:['empleado','responsable','direccion']},
   {grp:'Marketing'},
   {id:'marca',ic:'🎨',t:'Marca y recursos'},
   {id:'carteles',ic:'🪧',t:'Carteles'},
@@ -1325,6 +1327,7 @@ function show(id){
   else if(id==='catalogos'){ ld('<div class="page-title">Catálogos</div><div class="page-sub">Cargando…</div>'); pageCatalogos(); }
   else if(id==='mensajes'){ ld('<div class="page-title">Mensajes y plantillas</div><div class="page-sub">Cargando…</div>'); pageMensajes(); }
   else if(id==='bitacora'){ ld('<div class="page-title">Bitácora</div><div class="page-sub">Cargando…</div>'); pageBitacora(); }
+  else if(id==='cierres'){ m.innerHTML='<div class="page-title">Cierres de caja</div><div class="panel" style="color:var(--suave)">🧾 Sección en construcción. Estará disponible próximamente.</div>'; }
   else if(id==='formacion'){ ld('<div class="page-title">Formaciones</div><div class="page-sub">Cargando…</div>'); pageFormacion(); }
   else if(id==='kpis'){ ld('<div class="page-title">KPIs</div><div class="page-sub">Cargando…</div>'); pageKpis(); }
   else if(id==='auditoria'){ ld('<div class="page-title">Auditoría</div><div class="page-sub">Cargando…</div>'); pageAuditoria(); }
@@ -1896,6 +1899,15 @@ function renderOrg(){
     const ring=tc?`;box-shadow:0 0 0 2px ${tc}`:'';
     return `<div class="org-node${canEdit?' drag':''}" data-id="${p.id}" style="border-top:4px solid ${col};background:${bg}${ring}" ${canEdit?`draggable="true" ondragstart="orgDragStart(event,'${p.id}')"`:''} ${extra||''}>
       ${avP(p.nombre,p.color,34,p.foto,p.last_seen)}<div class="on-info"><b>${esc(p.nombre||'—')}</b><small>${sub(p)}</small>${dep?`<span class="onode-tag" style="background:${col};color:#fff">${esc(dep)}</span>`:''}${p.org_equipo?`<span class="onode-team" style="background:${tc}">${esc(p.org_equipo)}</span>`:''}</div></div>`;};
+  function kidsHTML(p,kids){
+    if(!kids.length) return '';
+    const parentDept=p.dept||'';
+    const distinct=[...new Set(kids.map(k=>k.dept||''))];
+    const agrupar = distinct.length>1 || (distinct.length===1 && distinct[0] && distinct[0]!==parentDept);
+    if(!agrupar) return `<ul>${kids.map(node).join('')}</ul>`;
+    const by={}; kids.forEach(k=>{const d=k.dept||'—';(by[d]=by[d]||[]).push(k);});
+    return `<ul>${Object.keys(by).map(d=>`<li><div class="org-deptbox" style="border-top:3px solid ${areaColor((by[d][0]||{}).area)}">🗂️ ${esc(d)}</div><ul>${by[d].map(node).join('')}</ul></li>`).join('')}</ul>`;
+  }
   function node(p){
     const kids=(children[p.id]||[]);
     const drop=canEdit?`ondragover="orgOver(event)" ondragleave="orgLeave(event)" ondrop="orgDrop(event,'${p.id}')"`:'';
@@ -1905,7 +1917,7 @@ function renderOrg(){
     const head=cos.length
       ? `<div class="org-couple">${pcard}${cos.map(c=>`<div class="org-co-wrap">${card(c)}${canEdit?`<button class="org-co-x" onclick="orgUnColider('${c.id}')" title="Quitar co-líder">✕</button>`:''}</div>`).join('')}</div>`
       : pcard;
-    return `<li>${head}${kids.length?`<ul>${kids.map(node).join('')}</ul>`:''}</li>`;
+    return `<li>${head}${kidsHTML(p,kids)}</li>`;
   }
   const roots=(children['__root__']||[]);
   const rootZone=canEdit?`<div class="org-rootzone" ondragover="orgOver(event)" ondragleave="orgLeave(event)" ondrop="orgDropRoot(event)">⬆ Suelta aquí para dejar a alguien en el nivel superior (sin jefe)</div>`:'';
