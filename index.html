@@ -1103,7 +1103,7 @@ const NAV=[
   {id:'permisos',ic:'🔐',t:'Permisos y accesos', roles:['admin']},
   {id:'aprobaciones',ic:'✅',t:'Aprobaciones', roles:['direccion','admin']},
   {id:'registros',ic:'🆕',t:'Registros pendientes', roles:['admin']},
-  {id:'admin',ic:'⚙️',t:'Administración', roles:['admin']},
+  {id:'admin',ic:'⚙️',t:'Usuarios', roles:['admin']},
   {id:'catalogos',ic:'🗂️',t:'Catálogos', owner:true},
 ];
 const CAN_MANAGE=['responsable','direccion','admin','propietario'];
@@ -1326,7 +1326,7 @@ function show(id){
   else if(id==='calendario'){ ld('<div class="page-title">Calendario</div><div class="page-sub">Cargando…</div>'); pageCalendario(); }
   else if(id==='cumple'){ ld('<div class="page-title">Cumpleaños</div><div class="page-sub">Cargando…</div>'); pageCumple(); }
   else if(id==='carteles'){ pageCarteles(); }
-  else if(id==='admin'){ ld('<div class="page-title">Administración</div><div class="page-sub">Cargando…</div>'); pageAdmin(); }
+  else if(id==='admin'){ ld('<div class="page-title">Usuarios</div><div class="page-sub">Cargando…</div>'); pageAdmin(); }
   else if(id==='registros'){ ld('<div class="page-title">Registros pendientes</div><div class="page-sub">Cargando…</div>'); pageRegistros(); }
   else if(id==='catalogos'){ ld('<div class="page-title">Catálogos</div><div class="page-sub">Cargando…</div>'); pageCatalogos(); }
   else if(id==='mensajes'){ ld('<div class="page-title">Mensajes y plantillas</div><div class="page-sub">Cargando…</div>'); pageMensajes(); }
@@ -2607,7 +2607,7 @@ function regFoto(id){
 /* ---------------- ADMINISTRACIÓN (usuarios) ---------------- */
 let userEditId=null, userFormOpen=false;
 async function pageAdmin(){
-  const{data}=await sb.from('profiles').select('*');
+  const{data}=await sb.from('profiles').select('*').neq('estado','rechazado');
   const us=(data||[]).slice().sort((a,b)=>(a.nombre||'').localeCompare(b.nombre||'')); ADMIN_US=us;
   if(userFormOpen){
     document.getElementById('main').innerHTML=`<div class="page-title">Editar empleado</div>
@@ -2627,7 +2627,7 @@ async function pageAdmin(){
     <td>${esc(u.dept||'—')}${u.area?`<br><small style="color:var(--suave)">${esc(u.area)}</small>`:''}${u.equipo?`<br><span class="badge b-grey" style="font-size:10px">👥 ${esc(u.equipo)}</span>`:''}</td>
     <td>${esc(u.posicion||'—')}</td><td><span class="badge ${badge}">${esc(rl(u.role))}</span></td><td>${u.vac||0}</td>
     <td>${accion}</td></tr>`;}).join('');
-  document.getElementById('main').innerHTML=`<div class="page-title">Administración</div><div class="page-sub">Gestión de empleados y roles</div>
+  document.getElementById('main').innerHTML=`<div class="page-title">Usuarios</div><div class="page-sub">Gestión de empleados y roles</div>
     <div class="panel" style="background:var(--azul-claro);border:none;font-size:13px">ℹ️ Para <b>crear</b> nuevos accesos, los empleados se registran desde la pantalla de inicio (o los añades en Supabase → Authentication). Aquí asignas su <b>departamento, rol, vacaciones y cumpleaños</b>.</div>
     <div class="panel"><table><thead><tr><th>Foto</th><th>Nombre / email</th><th>Departamento / área</th><th>Posición</th><th>Rol</th><th>Vac.</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`;
 }
@@ -3204,7 +3204,7 @@ const INC_EST={pendiente:['Pendiente','b-grey'],asignada:['Asignada','b-blue'],e
 const INC_VIA={cliente_ota:'🌐 Cliente (OTA)',limpieza:'🧹 Limpieza',personal:'👤 Personal interno'};
 function incCan(){ return CAN_MANAGE.includes(PROFILE.role); }
 function incEsMant(){ return PROFILE.dept==='Mantenimiento' || incCan(); }
-function incMyTeam(){ return PROFILE.org_equipo||''; }
+function incMyTeam(){ return PROFILE.org_equipo||PROFILE.equipo||''; }
 function setIncTab(t){ incTab=t; incSel=null; if(incTimerInt){clearInterval(incTimerInt);incTimerInt=null;} show('incidencias'); }
 function incOpen(id){ incSel=id; show('incidencias'); }
 function incBack(){ incSel=null; if(incTimerInt){clearInterval(incTimerInt);incTimerInt=null;} show('incidencias'); }
@@ -3273,10 +3273,11 @@ async function pageIncidencias(){
     sb.from('mant_edificios').select('*').order('orden').order('nombre'),
     sb.from('mant_unidades').select('*').order('orden').order('nombre'),
     sb.from('mant_fotos').select('*').order('id'),
-    sb.from('profiles').select('id,nombre,org_equipo,dept').eq('dept','Mantenimiento').eq('estado','aprobado'),
+    sb.from('profiles').select('id,nombre,org_equipo,equipo,dept').eq('dept','Mantenimiento').eq('estado','aprobado'),
   ]);
   MANT_EDIF=ed.data||[]; MANT_UNI=un.data||[]; MANT_STAFF=stf.data||[];
-  MANT_TEAMS=[...new Set(MANT_STAFF.map(s=>s.org_equipo).filter(Boolean))];
+  MANT_STAFF.forEach(s=>{ s.team=s.org_equipo||s.equipo||''; });
+  MANT_TEAMS=[...new Set(MANT_STAFF.map(s=>s.team).filter(Boolean))];
   INC_FOTOS={}; (fo.data||[]).forEach(f=>{(INC_FOTOS[f.incidencia_id]=INC_FOTOS[f.incidencia_id]||[]).push(f);});
   if(!incFilters.ambito){ incFilters.ambito = incEsMant()? (canManage?'todas':'mias') : 'reportadas'; }
   const tabs=`<div class="asg-tabs">
@@ -3355,7 +3356,7 @@ function incCardHTML(i){
     <div class="inc-card-loc">🏠 ${esc(i.edificio||'—')}${i.unidad?' · '+esc(i.unidad):''}</div>
     <div class="inc-card-desc">${esc((i.descripcion||'').slice(0,140))}${(i.descripcion||'').length>140?'…':''}</div>
     <div class="inc-card-meta">${asg} ${tom} ${nf?('· 📷 '+nf):''}</div>
-    <div class="inc-card-meta2">${INC_VIA[i.via]||'—'} · por ${esc(i.creado_por_nombre||'—')} · ${new Date(i.created_at).toLocaleString('es-ES',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}</div>
+    <div class="inc-card-meta2">${new Date(i.created_at).toLocaleString('es-ES',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}</div>
     <div class="inc-card-actions">
       ${puedeTomar?`<button class="btn-sm" onclick="incTomar(${i.id})">✋ Tomar</button>`:''}
       <button class="btn-sm ghost" onclick="incOpen(${i.id})">👁 Abrir</button>
@@ -3372,7 +3373,7 @@ function incFormHTML(){
   const edOpts=`<option value="">— Selecciona —</option>`+MANT_EDIF.map(e=>`<option>${esc(e.nombre)}</option>`).join('');
   const teams=MANT_TEAMS;
   const teamOpts=`<option value="*">Todos los equipos</option>`+teams.map(t=>`<option>${esc(t)}</option>`).join('');
-  const perOpts=`<option value="">Todo el equipo (que alguien la tome)</option>`+MANT_STAFF.map(s=>`<option value="${s.id}">${esc(s.nombre)}${s.org_equipo?' · '+esc(s.org_equipo):''}</option>`).join('');
+  const perOpts=`<option value="">Todo el equipo (que alguien la tome)</option>`+MANT_STAFF.map(s=>`<option value="${s.id}">${esc(s.nombre)}${s.team?' · '+esc(s.team):''}</option>`).join('');
   return `<div class="panel" style="max-width:680px"><form class="box" style="max-width:none" onsubmit="return incCreate(event)">
     <label>Vía de aviso</label>
     <select id="iVia"><option value="cliente_ota">🌐 Cliente (OTA)</option><option value="limpieza">🧹 Personal de limpieza</option><option value="personal" selected>👤 Personal interno</option></select>
@@ -3394,7 +3395,7 @@ function incFormHTML(){
   </form></div>`;
 }
 function incFormEdif(){ const ed=(document.getElementById('iEdif')||{}).value||''; const uni=document.getElementById('iUni'); if(!uni)return; const list=MANT_UNI.filter(u=>u.edificio===ed); uni.innerHTML=`<option value="">— Selecciona —</option>`+list.map(u=>`<option>${esc(u.nombre)}${u.tipo==='comun'?' (zona común)':''}</option>`).join(''); }
-function incFormEquipo(){ const t=(document.getElementById('iEquipo')||{}).value||'*'; const per=document.getElementById('iPersona'); if(!per)return; const list=MANT_STAFF.filter(s=> t==='*'?true:s.org_equipo===t); per.innerHTML=`<option value="">Todo el equipo (que alguien la tome)</option>`+list.map(s=>`<option value="${s.id}">${esc(s.nombre)}</option>`).join(''); }
+function incFormEquipo(){ const t=(document.getElementById('iEquipo')||{}).value||'*'; const per=document.getElementById('iPersona'); if(!per)return; const list=MANT_STAFF.filter(s=> t==='*'?true:s.team===t); per.innerHTML=`<option value="">Todo el equipo (que alguien la tome)</option>`+list.map(s=>`<option value="${s.id}">${esc(s.nombre)}</option>`).join(''); }
 async function incCreate(e){
   e.preventDefault();
   const g=id=>{const el=document.getElementById(id);return el?el.value:'';};
@@ -3486,7 +3487,7 @@ async function incCancelar(id){
   toast('Incidencia devuelta a pendiente'); incSel=null; show('incidencias');
 }
 function incToggleEdit(){ incEditOpen=!incEditOpen; show('incidencias'); }
-function incEditEquipo(){ const t=(document.getElementById('eEquipo')||{}).value||'*'; const per=document.getElementById('ePersona'); if(!per)return; const list=MANT_STAFF.filter(s=> t==='*'?true:s.org_equipo===t); per.innerHTML=`<option value="">Todo el equipo (que alguien la tome)</option>`+list.map(s=>`<option value="${s.id}">${esc(s.nombre)}</option>`).join(''); }
+function incEditEquipo(){ const t=(document.getElementById('eEquipo')||{}).value||'*'; const per=document.getElementById('ePersona'); if(!per)return; const list=MANT_STAFF.filter(s=> t==='*'?true:s.team===t); per.innerHTML=`<option value="">Todo el equipo (que alguien la tome)</option>`+list.map(s=>`<option value="${s.id}">${esc(s.nombre)}</option>`).join(''); }
 async function incSaveEdit(id){
   const i=INC.find(x=>String(x.id)===String(id)); if(!i)return;
   const g=x=>{const el=document.getElementById(x);return el?el.value:'';};
@@ -3522,7 +3523,7 @@ function renderIncDetail(id){
     const teams=MANT_TEAMS;
     const teamOpts=`<option value="*" ${i.asignado_equipo==='*'?'selected':''}>Todos los equipos</option>`+teams.map(t=>`<option ${i.asignado_equipo===t?'selected':''}>${esc(t)}</option>`).join('');
     const curTeam=i.asignado_equipo||'*';
-    const perList=MANT_STAFF.filter(s=> curTeam==='*'?true:s.org_equipo===curTeam);
+    const perList=MANT_STAFF.filter(s=> curTeam==='*'?true:s.team===curTeam);
     const perOpts=`<option value="">Todo el equipo (que alguien la tome)</option>`+perList.map(s=>`<option value="${s.id}" ${String(i.asignado_a)===String(s.id)?'selected':''}>${esc(s.nombre)}</option>`).join('');
     return `<div class="panel"><h3 class="inc-h3">✏️ Editar / reasignar</h3>
       <label>Urgencia</label><select id="eUrg"><option value="alta" ${i.urgencia==='alta'?'selected':''}>🔴 Alta</option><option value="media" ${i.urgencia==='media'?'selected':''}>🟠 Media</option><option value="baja" ${i.urgencia==='baja'?'selected':''}>🟢 Baja</option></select>
