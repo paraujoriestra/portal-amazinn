@@ -3219,9 +3219,9 @@ async function createKudo(e){e.preventDefault();const para=document.getElementBy
 /* ---------------- INCIDENCIAS ---------------- */
 /* ================= MANTENIMIENTO · INCIDENCIAS (v2) ================= */
 let incFormOpen=false, incTab='bandeja', incSel=null, incTimerInt=null, incEditOpen=false, incNew=false;
-let incFilters={ambito:'',edificio:'',unidad:'',urgencia:'',estado:''};
-let MANT_EDIF=[], MANT_UNI=[], MANT_STAFF=[], MANT_TEAMS=[], MANT_PREV=[], INC=[], INC_FOTOS={};
-let prevFormOpen=false, prevEditId=null, prevSel=null, prevTab='lista', prevCalRef=null;
+let incFilters={ambito:'',edificio:'',unidad:'',urgencia:'',estado:'',q:'',categoria:'',afecta:''};
+let MANT_EDIF=[], MANT_UNI=[], MANT_STAFF=[], MANT_TEAMS=[], MANT_PREV=[], PREV_INC=[], INC=[], INC_FOTOS={};
+let prevFormOpen=false, prevEditId=null, prevSel=null, prevTab='lista', prevCalRef=null, prevFilterCat='';
 const INC_URG={alta:['Alta','b-red','🔴'],media:['Media','b-amber','🟠'],baja:['Baja','b-grey','🟢']};
 const INC_EST={pendiente:['Pendiente','b-grey'],asignada:['Asignada','b-blue'],en_curso:['En curso','b-amber'],pausada:['Pausada','b-amber'],a_medias:['A medias','b-amber'],terminada:['Terminada','b-green'],cancelada:['Cancelada','b-grey']};
 const INC_VIA={cliente_ota:'🌐 Cliente (OTA)',limpieza:'🧹 Limpieza',personal:'👤 Personal interno'};
@@ -3301,6 +3301,7 @@ function incEnsureStyle(){ if(document.getElementById('incStyle'))return; const 
   .cal-cell.cal-today{border-color:var(--azul);box-shadow:0 0 0 1px var(--azul)}
   .cal-d{font-size:12px;font-weight:700;color:var(--suave);margin-bottom:3px}
   .cal-task{font-size:10.5px;background:#eef4fb;color:var(--azul);border-radius:5px;padding:2px 5px;margin-bottom:3px;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .cal-task.inc{background:#fff3e0;color:#b26a00}
   .cal-task.over{background:#fdecea;color:#c0392b}`;
   document.head.appendChild(s); }
 
@@ -3332,7 +3333,7 @@ async function pageIncidencias(){
   else if(incSel!=null){ body=renderIncDetail(incSel); }
   else if(incTab==='panel'&&canManage){ body=renderIncPanel(INC); }
   else if(incTab==='curso'){ body=renderIncCurso(); }
-  else if(incTab==='historial'){ body=renderIncList(true); }
+  else if(incTab==='historial'){ body=`<div style="margin-bottom:10px"><button class="btn-sm ghost" onclick="incExportCSV()">⬇️ Exportar CSV (todas)</button></div>`+renderIncList(true); }
   else { body=renderIncBandeja(); }
   document.getElementById('main').innerHTML=`<div class="page-title">Incidencias y mantenimiento</div><div class="page-sub">Reporta y haz seguimiento de averías por edificio y apartamento</div>${fullScreen?'':tabs}${body}`;
   if(incTimerInt){clearInterval(incTimerInt);incTimerInt=null;}
@@ -3340,7 +3341,21 @@ async function pageIncidencias(){
 }
 function incSetAmbito(a){ incFilters.ambito=a; show('incidencias'); }
 function incSetFilter(k,v){ incFilters[k]=v; if(k==='edificio') incFilters.unidad=''; show('incidencias'); }
-function incClearFilters(){ incFilters.edificio='';incFilters.unidad='';incFilters.urgencia='';incFilters.estado=''; show('incidencias'); }
+function incClearFilters(){ incFilters.edificio='';incFilters.unidad='';incFilters.urgencia='';incFilters.estado='';incFilters.q='';incFilters.categoria='';incFilters.afecta=''; show('incidencias'); }
+function incExportCSV(){
+  const cols=['Creada','Estado','Urgencia','Categoría','Edificio','Unidad','Descripción','Asignado','Realiza','Resuelta por','Resuelta','Tiempo(min)','Coste','Proveedor','Afecta huésped'];
+  const q=v=>'"'+String(v==null?'':v).replace(/"/g,'""')+'"';
+  const lines=[cols.join(';')];
+  (INC||[]).forEach(i=>{ lines.push([
+    new Date(i.created_at).toLocaleString('es-ES'), (INC_EST[i.estado]?INC_EST[i.estado][0]:i.estado), (INC_URG[i.urgencia]?INC_URG[i.urgencia][0]:i.urgencia),
+    incCatLabel(i.categoria), i.edificio||'', i.unidad||'', (i.descripcion||'').replace(/\n/g,' '),
+    i.asignado_a_nombre||(i.asignado_equipo==='*'?'Todos los equipos':(i.asignado_equipo||'')), i.tomada_por_nombre||'', i.resuelto_por_nombre||'',
+    i.resuelta_at?new Date(i.resuelta_at).toLocaleString('es-ES'):'', i.tiempo_seg?Math.round(i.tiempo_seg/60):'', i.coste!=null?i.coste:'', i.proveedor||'', i.afecta_huesped?'Sí':'No'
+  ].map(q).join(';')); });
+  const blob=new Blob(['﻿'+lines.join('\n')],{type:'text/csv;charset=utf-8'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='incidencias_'+new Date().toISOString().slice(0,10)+'.csv'; document.body.appendChild(a); a.click(); a.remove();
+  toast('✓ CSV exportado');
+}
 function renderIncBandeja(){
   const f=incFilters;
   const chips=[];
@@ -3352,15 +3367,24 @@ function renderIncBandeja(){
   const unOpts=`<option value="">Todas las unidades</option>`+uniList.map(u=>`<option ${f.unidad===u.nombre?'selected':''}>${esc(u.nombre)}</option>`).join('');
   const urgOpts=`<option value="">Toda urgencia</option>`+Object.entries(INC_URG).map(([k,v])=>`<option value="${k}" ${f.urgencia===k?'selected':''}>${v[2]} ${v[0]}</option>`).join('');
   const estOpts=`<option value="">Todo estado</option>`+['pendiente','asignada','en_curso','pausada','a_medias'].map(k=>`<option value="${k}" ${f.estado===k?'selected':''}>${INC_EST[k][0]}</option>`).join('');
+  const catOpts=`<option value="">Toda categoría</option>`+INC_CAT.map(([v,l])=>`<option value="${v}" ${f.categoria===v?'selected':''}>${l}</option>`).join('');
+  let banner='';
+  if(incCan()){ const pad=n=>(''+n).padStart(2,'0'); const tISO=(()=>{const d=new Date();return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());})();
+    const pend=INC.filter(x=>!['terminada','cancelada'].includes(x.estado)); const venc=pend.filter(incVencida).length; const urg=pend.filter(x=>x.urgencia==='alta').length; const sin=INC.filter(x=>x.estado==='pendiente'&&!x.asignado_a).length; const hoyRes=INC.filter(x=>x.estado==='terminada'&&(x.resuelta_at||'').slice(0,10)===tISO).length;
+    banner=`<div class="panel" style="background:#f4f8ff;border:1px solid #d7e6fb;margin-bottom:12px"><b>📋 Resumen de hoy</b> · <span style="color:#c0392b">⏰ ${venc} vencidas</span> · 🔴 ${urg} urgentes abiertas · 📭 ${sin} sin asignar · ✅ ${hoyRes} resueltas hoy</div>`; }
   return `
+    ${banner}
     <div style="margin-bottom:12px"><button class="btn" onclick="incNuevaOpen()">+ Nueva incidencia</button></div>
     <div class="inc-chips">${chipsHTML}</div>
     <div class="inc-filters">
+      <input type="search" placeholder="🔎 Buscar…" value="${esc(f.q||'')}" onchange="incSetFilter('q',this.value)" style="padding:7px 10px;border:1px solid var(--gris2);border-radius:8px;font-size:13px;font-family:inherit;min-width:150px">
       <select onchange="incSetFilter('edificio',this.value)">${edOpts}</select>
       <select onchange="incSetFilter('unidad',this.value)">${unOpts}</select>
+      <select onchange="incSetFilter('categoria',this.value)">${catOpts}</select>
       <select onchange="incSetFilter('urgencia',this.value)">${urgOpts}</select>
       <select onchange="incSetFilter('estado',this.value)">${estOpts}</select>
-      ${(f.edificio||f.unidad||f.urgencia||f.estado)?`<button class="inc-clear" onclick="incClearFilters()">✕ Limpiar</button>`:''}
+      <select onchange="incSetFilter('afecta',this.value)"><option value="">Huésped: todas</option><option value="si" ${f.afecta==='si'?'selected':''}>🛎️ Solo afecta a huésped</option></select>
+      ${(f.edificio||f.unidad||f.urgencia||f.estado||f.q||f.categoria||f.afecta)?`<button class="inc-clear" onclick="incClearFilters()">✕ Limpiar</button>`:''}
     </div>
     ${renderIncList(false)}`;
 }
@@ -3379,6 +3403,9 @@ function incFilteredList(hist){
     if(f.unidad && i.unidad!==f.unidad) return false;
     if(f.urgencia && i.urgencia!==f.urgencia) return false;
     if(f.estado && i.estado!==f.estado) return false;
+    if(f.categoria && (i.categoria||'')!==f.categoria) return false;
+    if(f.afecta==='si' && !i.afecta_huesped) return false;
+    if(f.q){ const q=f.q.toLowerCase(); const hay=((i.descripcion||'')+' '+(i.edificio||'')+' '+(i.unidad||'')+' '+incCatLabel(i.categoria)+' '+(i.creado_por_nombre||'')+' '+(i.tomada_por_nombre||'')).toLowerCase(); if(!hay.includes(q)) return false; }
     return true;
   });
   arr.sort((a,b)=>{
@@ -3683,6 +3710,11 @@ function renderIncPanel(I){
     const cr=x.creado_por_nombre||'—'; repPorPersona[cr]=(repPorPersona[cr]||0)+1; });
   term.forEach(x=>{ const r=x.resuelto_por_nombre||'—'; resPorPersona[r]=(resPorPersona[r]||0)+1; });
   const recurrentes=Object.entries(recCount).filter(([k,v])=>v>=2).sort((a,b)=>b[1]-a[1]).slice(0,8);
+  const techStats={};
+  I.forEach(x=>{ if(!['terminada','cancelada'].includes(x.estado)){ const w=x.tomada_por_nombre||x.asignado_a_nombre; if(w){(techStats[w]=techStats[w]||{act:0,res:0,seg:0,venc:0}).act++; if(incVencida(x))techStats[w].venc++;} } });
+  term.forEach(x=>{ const w=x.resuelto_por_nombre; if(w){(techStats[w]=techStats[w]||{act:0,res:0,seg:0,venc:0}); techStats[w].res++; techStats[w].seg+=(x.tiempo_seg||0);} });
+  const techRows=Object.entries(techStats).sort((a,b)=>b[1].res-a[1].res);
+  const techHTML=techRows.length?`<div class="asg-scroll"><table class="asg-table"><thead><tr><th>Técnico</th><th>Activas</th><th>⏰ Vencidas</th><th>Resueltas</th><th>Tiempo medio</th></tr></thead><tbody>${techRows.map(([k,v])=>`<tr><td><b>${esc(k)}</b></td><td>${v.act}</td><td${v.venc?' style="color:#c0392b;font-weight:700"':''}>${v.venc}</td><td>${v.res}</td><td>${v.res?incFmtT(v.seg/v.res):'—'}</td></tr>`).join('')}</tbody></table></div>`:'<div style="color:var(--suave);font-size:13px">Sin datos todavía</div>';
   const dias=[]; for(let i=13;i>=0;i--){ const d=new Date(today); d.setDate(today.getDate()-i); const k=iso(d); dias.push({label:pad(d.getDate())+'/'+pad(d.getMonth()+1),r:term.filter(x=>resDe(x)===k).length,c:I.filter(x=>fechaDe(x)===k).length}); }
   const maxDia=Math.max(1,...dias.map(x=>Math.max(x.r,x.c)));
   const rank=(obj,top)=>{ const arr=Object.entries(obj).sort((a,b)=>b[1]-a[1]).slice(0,top); const mx=Math.max(1,...arr.map(x=>x[1])); return arr.length?arr.map(([k,v])=>`<div class="kp-row"><span class="kp-k">${esc(k)}</span><span class="kp-bar"><i style="width:${Math.round(v/mx*100)}%"></i></span><b class="kp-v">${v}</b></div>`).join(''):'<div style="color:var(--suave);font-size:13px">Sin datos todavía</div>'; };
@@ -3690,6 +3722,7 @@ function renderIncPanel(I){
   const gastoHTML=gastoRows.length?gastoRows.map(([k,v])=>`<div class="kp-row"><span class="kp-k">${esc(k)}</span><span class="kp-bar"><i style="width:${Math.round(v/gastoMx*100)}%"></i></span><b class="kp-v">${incMoney(v)}</b></div>`).join(''):'<div style="color:var(--suave);font-size:13px">Sin coste registrado todavía</div>';
   const recHTML=recurrentes.length?recurrentes.map(([k,v])=>`<div class="kp-row"><span class="kp-k">${esc(k)}</span><b class="kp-v" style="color:#c0392b">${v}×</b></div>`).join(''):'<div style="color:var(--suave);font-size:13px">Sin patrones recurrentes 👍</div>';
   return `
+    <div style="margin-bottom:12px"><button class="btn-sm ghost" onclick="incExportCSV()">⬇️ Exportar CSV (todas)</button></div>
     <div class="kpi-cards">
       <div class="kpi"><div class="kpi-n" style="color:var(--rojo)">${pend.length}</div><div class="kpi-l">Pendientes</div></div>
       <div class="kpi"><div class="kpi-n">${sinAsignar}</div><div class="kpi-l">Sin asignar</div></div>
@@ -3720,7 +3753,8 @@ function renderIncPanel(I){
       <div class="panel"><h2>🚦 Por urgencia</h2>${rank({['🔴 Alta']:porUrg.alta,['🟠 Media']:porUrg.media,['🟢 Baja']:porUrg.baja},3)}</div>
       <div class="panel"><h2>📥 Por vía de aviso</h2>${rank(porVia,5)}</div>
     </div>
-    <div class="panel"><h2>🔁 Problemas recurrentes <small style="color:var(--suave);font-weight:400">· misma unidad y categoría 2+ veces</small></h2>${recHTML}</div>`;
+    <div class="panel"><h2>🔁 Problemas recurrentes <small style="color:var(--suave);font-weight:400">· misma unidad y categoría 2+ veces</small></h2>${recHTML}</div>
+    <div class="panel"><h2>👷 Rendimiento por técnico</h2>${techHTML}</div>`;
 }
 
 /* ---------------- MANTENIMIENTO PREVENTIVO ---------------- */
@@ -3729,12 +3763,14 @@ async function pagePreventivo(){
   asgEnsureStyle(); incEnsureStyle();
   const pv=await sb.from('mant_preventivo').select('*').order('proximo');
   if(pv.error){ document.getElementById('main').innerHTML=`<div class="page-title">Mantenimiento preventivo</div><div class="panel">No se pudo cargar. ¿Ejecutaste <b>supabase_mantenimiento.sql</b> en Supabase?<br><small style="color:var(--suave)">${esc(pv.error.message)}</small></div>`; return; }
-  const [ed,un,stf]=await Promise.all([
+  const [ed,un,stf,inc]=await Promise.all([
     sb.from('mant_edificios').select('*').order('orden').order('nombre'),
     sb.from('mant_unidades').select('*').order('orden').order('nombre'),
     sb.from('profiles').select('id,nombre,org_equipo,equipo,dept').eq('dept','Mantenimiento').eq('estado','aprobado'),
+    sb.from('mant_incidencias').select('id,urgencia,estado,created_at,edificio,unidad,descripcion'),
   ]);
   MANT_PREV=pv.data||[]; MANT_EDIF=ed.data||[]; MANT_UNI=un.data||[]; MANT_STAFF=stf.data||[];
+  PREV_INC=(inc.data||[]).filter(x=>!['terminada','cancelada'].includes(x.estado));
   MANT_STAFF.forEach(s=>{ s.team=s.org_equipo||s.equipo||''; });
   MANT_TEAMS=[...new Set(MANT_STAFF.map(s=>s.team).filter(Boolean))];
   const tabs = prevSel!=null?'':`<div class="asg-tabs">
@@ -3747,6 +3783,7 @@ function prevSetTab(t){ prevTab=t; prevFormOpen=false; prevSel=null; show('preve
 function prevOpen(id){ prevSel=id; show('preventivo'); }
 function prevBack(){ prevSel=null; show('preventivo'); }
 function prevSetMonth(delta){ const base=prevCalRef?new Date(prevCalRef):new Date(); base.setDate(1); base.setMonth(base.getMonth()+delta); prevCalRef=base; show('preventivo'); }
+function prevOpenInc(id){ incSel=id; incTab='bandeja'; show('incidencias'); }
 function renderPrevCal(){
   const base = prevCalRef?new Date(prevCalRef):new Date(); base.setDate(1);
   const y=base.getFullYear(), m=base.getMonth();
@@ -3755,14 +3792,17 @@ function renderPrevCal(){
   const daysInMonth=new Date(y,m+1,0).getDate();
   const todayISO=prevLocalIso(new Date());
   const byDate={}; MANT_PREV.forEach(t=>{ if(t.proximo){ (byDate[t.proximo]=byDate[t.proximo]||[]).push(t); } });
+  const byInc={}; PREV_INC.forEach(x=>{ const lim=SLA_H[x.urgencia]||72; const iso=prevLocalIso(new Date(new Date(x.created_at).getTime()+lim*3600000)); (byInc[iso]=byInc[iso]||[]).push(x); });
   let cells=''; for(let i=0;i<startDow;i++) cells+='<div class="cal-cell cal-empty"></div>';
   for(let d=1; d<=daysInMonth; d++){
     const iso=y+'-'+String(m+1).padStart(2,'0')+'-'+String(d).padStart(2,'0');
-    const tasks=byDate[iso]||[]; const isToday=iso===todayISO;
-    const chips=tasks.map(t=>`<div class="cal-task${iso<todayISO?' over':''}" onclick="prevOpen(${t.id})" title="${esc(t.titulo)}">${esc(t.titulo)}</div>`).join('');
-    cells+=`<div class="cal-cell${isToday?' cal-today':''}"><div class="cal-d">${d}</div>${chips}</div>`;
+    const isToday=iso===todayISO;
+    const chipsP=(byDate[iso]||[]).map(t=>`<div class="cal-task${iso<todayISO?' over':''}" onclick="prevOpen(${t.id})" title="Preventivo: ${esc(t.titulo)}">🗓️ ${esc(t.titulo)}</div>`).join('');
+    const chipsI=(byInc[iso]||[]).map(x=>{const lbl=(x.edificio||'')+(x.unidad?' '+x.unidad:'')||'Incidencia'; return `<div class="cal-task inc${iso<todayISO?' over':''}" onclick="prevOpenInc(${x.id})" title="Incidencia: ${esc(x.descripcion||'')}">🛠 ${esc(lbl)}</div>`;}).join('');
+    cells+=`<div class="cal-cell${isToday?' cal-today':''}"><div class="cal-d">${d}</div>${chipsP}${chipsI}</div>`;
   }
   return `<div class="cal-nav"><button class="btn-sm ghost" onclick="prevSetMonth(-1)">←</button><b style="text-transform:capitalize;min-width:160px;text-align:center">${monthName}</b><button class="btn-sm ghost" onclick="prevSetMonth(1)">→</button></div>
+    <div class="kp-legend" style="justify-content:center;margin:0 0 10px"><span><i style="background:#eef4fb"></i>🗓️ Preventivo</span><span><i style="background:#fff3e0"></i>🛠 Incidencia (fecha límite)</span></div>
     <div class="cal-grid cal-head"><span>Lun</span><span>Mar</span><span>Mié</span><span>Jue</span><span>Vie</span><span>Sáb</span><span>Dom</span></div>
     <div class="cal-grid">${cells}</div>`;
 }
@@ -3786,20 +3826,28 @@ function renderPrevDetail(id){
     <div class="inc-kv"><b>Asignada a:</b> ${asg}</div>
     ${t.ultima?`<div class="inc-kv"><b>Última vez:</b> ${new Date(t.ultima+'T00:00:00').toLocaleDateString('es-ES')}</div>`:''}
     ${t.notas?`<div class="inc-kv"><b>Notas:</b> ${esc(t.notas)}</div>`:''}
+    ${(t.checklist&&t.checklist.length)?`<h3 class="inc-h3">✔️ Checklist</h3>${t.checklist.map((c,ix)=>`<label style="display:flex;gap:8px;align-items:center;font-size:14px;margin:5px 0;cursor:pointer"><input type="checkbox" ${c.done?'checked':''} onchange="prevToggleChk(${t.id},${ix})"> ${esc(c.txt)}</label>`).join('')}`:''}
     <div class="inc-final" style="margin-top:14px">
       <button class="btn-ok" onclick="prevDone(${t.id})">✅ Hecho hoy</button>
       ${puedeTomar?`<button class="btn-sm" onclick="prevTomar(${t.id})">✋ Tomar</button>`:''}
+      <button class="btn-sm ghost" onclick="prevConvertir(${t.id})">🛠 Convertir en incidencia</button>
       ${canManage?`<button class="btn-sm ghost" onclick="prevEdit(${t.id})">✏️ Editar</button><button class="btn-sm x" onclick="prevDelete(${t.id})">🗑 Borrar</button>`:''}
     </div>
-  </div>`;
+  </div>
+  ${(t.historial&&t.historial.length)?`<div class="panel"><h3 class="inc-h3">🕒 Historial de ejecuciones</h3><ul class="inc-timeline">${t.historial.slice().reverse().map(h=>`<li><b>Realizada</b>${h.who?' · '+esc(h.who):''}<br><small>${h.t?new Date(h.t+'T00:00:00').toLocaleDateString('es-ES'):''}</small></li>`).join('')}</ul></div>`:''}`;
 }
+function prevSetCat(v){ prevFilterCat=v; show('preventivo'); }
 function renderPrev(){
   const canManage=incCan();
-  const tasks=MANT_PREV.slice().sort((a,b)=>((a.proximo||'9999')<(b.proximo||'9999')?-1:1));
+  let tasks=MANT_PREV.slice();
+  if(prevFilterCat) tasks=tasks.filter(t=>(t.categoria||'')===prevFilterCat);
+  tasks.sort((a,b)=>((a.proximo||'9999')<(b.proximo||'9999')?-1:1));
+  const catOpts=`<option value="">Todas las categorías</option>`+INC_CAT.map(([v,l])=>`<option value="${v}" ${prevFilterCat===v?'selected':''}>${l}</option>`).join('');
   const form = prevFormOpen? prevFormHTML() : '';
-  const cards = tasks.length? `<div class="inc-cards">${tasks.map(prevCardHTML).join('')}</div>` : '<div class="panel" style="color:var(--suave)">Sin tareas preventivas todavía.</div>';
+  const cards = tasks.length? `<div class="inc-cards">${tasks.map(prevCardHTML).join('')}</div>` : '<div class="panel" style="color:var(--suave)">No hay tareas en esta vista.</div>';
   return `<div style="font-size:12.5px;color:var(--suave);margin:0 0 12px">Tareas que se repiten. Pulsa <b>Hecho</b> y se reprograma sola para la próxima. Las <b style="color:#c0392b">vencidas parpadean</b>.</div>
     ${canManage?`<div style="margin:0 0 12px"><button class="btn" onclick="prevNew()">+ Nueva tarea preventiva</button></div>`:''}
+    <div class="inc-filters"><select onchange="prevSetCat(this.value)">${catOpts}</select></div>
     ${form}${cards}`;
 }
 function prevCardHTML(t){
@@ -3844,6 +3892,7 @@ function prevFormHTML(){
     <div class="row"><div><label>Próxima fecha</label><input id="pProx" type="date" value="${t.proximo||''}"></div>
     <div><label>Equipo</label><select id="pEquipo">${teamOpts}</select></div></div>
     <label>Persona (opcional)</label><select id="pPersona">${perOpts}</select>
+    <label>Checklist · un paso por línea (opcional)</label><textarea id="pChk" class="inc-note" placeholder="Revisar presión&#10;Limpiar prefiltro&#10;Comprobar fugas">${(t.checklist||[]).map(c=>esc(c.txt)).join('\n')}</textarea>
     <label>Notas (opcional)</label><textarea id="pNotas" class="inc-note">${esc(t.notas||'')}</textarea>
     <div class="inc-final" style="margin-top:12px"><button class="btn-ok" type="submit">${prevEditId?'Guardar':'Crear tarea'}</button><button class="btn-sm ghost" type="button" onclick="prevCancel()">Cancelar</button></div>
   </form></div>`;
@@ -3857,9 +3906,12 @@ async function prevSave(e){
   const g=x=>{const el=document.getElementById(x);return el?el.value:'';};
   const tit=(g('pTit')||'').trim(); if(!tit){alert('Pon un título.');return false;}
   const personaId=g('pPersona')||null; const persona=personaId?MANT_STAFF.find(s=>String(s.id)===String(personaId)):null;
+  const existing=prevEditId?MANT_PREV.find(x=>String(x.id)===String(prevEditId)):null;
+  const prevChk=(existing&&Array.isArray(existing.checklist))?existing.checklist:[];
+  const checklist=(g('pChk')||'').split('\n').map(s=>s.trim()).filter(Boolean).map(txt=>{const ex=prevChk.find(c=>c.txt===txt);return {txt,done:ex?!!ex.done:false};});
   const row={ titulo:tit, edificio:g('pEdif')||null, unidad:g('pUni')||null, categoria:g('pCat')||null,
     frecuencia_dias:Math.max(1,parseInt(g('pFreq'),10)||30), proximo:g('pProx')||null,
-    asignado_equipo:g('pEquipo')||null, asignado_a:personaId||null, asignado_a_nombre:persona?persona.nombre:null, notas:(g('pNotas')||'').trim()||null };
+    asignado_equipo:g('pEquipo')||null, asignado_a:personaId||null, asignado_a_nombre:persona?persona.nombre:null, notas:(g('pNotas')||'').trim()||null, checklist };
   let err;
   if(prevEditId){ const r=await sb.from('mant_preventivo').update(row).eq('id',prevEditId); err=r.error; }
   else { row.activo=true; const r=await sb.from('mant_preventivo').insert(row); err=r.error; }
@@ -3869,8 +3921,23 @@ async function prevSave(e){
 async function prevDone(id){
   const t=MANT_PREV.find(x=>String(x.id)===String(id)); if(!t)return;
   const today=new Date(); const next=new Date(); next.setDate(next.getDate()+(t.frecuencia_dias||30));
-  await sb.from('mant_preventivo').update({ultima:prevLocalIso(today),proximo:prevLocalIso(next)}).eq('id',id);
+  const hist=(Array.isArray(t.historial)?t.historial.slice():[]); hist.push({t:prevLocalIso(today),who:PROFILE.nombre});
+  const checklist=(t.checklist||[]).map(c=>({txt:c.txt,done:false}));
+  await sb.from('mant_preventivo').update({ultima:prevLocalIso(today),proximo:prevLocalIso(next),historial:hist,checklist}).eq('id',id);
   toast('✓ Hecho · reprogramada para '+next.toLocaleDateString('es-ES')); show('preventivo');
+}
+async function prevToggleChk(id,idx){
+  const t=MANT_PREV.find(x=>String(x.id)===String(id)); if(!t)return;
+  const ch=(t.checklist||[]).slice(); if(!ch[idx])return; ch[idx]={txt:ch[idx].txt,done:!ch[idx].done};
+  await sb.from('mant_preventivo').update({checklist:ch}).eq('id',id); show('preventivo');
+}
+async function prevConvertir(id){
+  const t=MANT_PREV.find(x=>String(x.id)===String(id)); if(!t)return;
+  if(!confirm('¿Crear una incidencia a partir de esta tarea preventiva?'))return;
+  const row={via:'personal',urgencia:'media',categoria:t.categoria||null,edificio:t.edificio||null,unidad:t.unidad||null,descripcion:'Detectado en revisión preventiva: '+t.titulo,asignado_equipo:t.asignado_equipo||'*',asignado_a:t.asignado_a||null,asignado_a_nombre:t.asignado_a_nombre||null,estado:t.asignado_a?'asignada':'pendiente',creado_por:ME.id,creado_por_nombre:PROFILE.nombre,historial:[{t:new Date().toISOString(),who:PROFILE.nombre,act:'Creada desde preventivo'}]};
+  const ins=await sb.from('mant_incidencias').insert(row).select('id').single();
+  if(ins.error){ alert('Error: '+ins.error.message); return; }
+  toast('✓ Incidencia creada'); prevSel=null; incSel=ins.data.id; incTab='bandeja'; show('incidencias');
 }
 async function prevDelete(id){ if(!confirm('¿Eliminar esta tarea preventiva?'))return; const{error}=await sb.from('mant_preventivo').delete().eq('id',id); if(error){alert('Error: '+error.message);return;} prevSel=null; toast('Eliminada'); show('preventivo'); }
 
