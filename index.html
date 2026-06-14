@@ -98,10 +98,10 @@
   .msg-file{display:inline-flex;align-items:center;gap:6px;margin-top:4px;padding:7px 11px;border-radius:9px;font-size:12.5px;text-decoration:none;background:rgba(0,0,0,.06);border:1px solid rgba(0,0,0,.12);color:inherit}
   .mbub.ot .msg-file{background:var(--gris);border-color:var(--gris2);color:var(--texto)}
   .msg-file:hover{filter:brightness(1.05)}
-  .msg-input{display:flex;gap:8px;padding:10px;border-top:1px solid var(--gris2);align-items:center}
-  .msg-input input{flex:1;padding:9px 12px;border:1px solid var(--gris2);font-family:inherit;font-size:13.5px}
+  .msg-input{display:flex;gap:6px;padding:10px;border-top:1px solid var(--gris2);align-items:center}
+  .msg-input input{flex:1;min-width:0;padding:9px 12px;border:1px solid var(--gris2);font-family:inherit;font-size:13.5px}
   .emoji-wrap{position:relative}
-  .emoji-btn{background:transparent;border:none;font-size:21px;cursor:pointer;padding:2px 4px;line-height:1}
+  .emoji-btn{background:transparent;border:none;font-size:17px;cursor:pointer;padding:2px 3px;line-height:1}
   .emoji-panel{display:none;position:absolute;bottom:38px;left:0;width:248px;max-height:180px;overflow-y:auto;background:#fff;border:1px solid var(--gris2);border-radius:10px;box-shadow:0 8px 26px rgba(0,0,0,.16);padding:8px;z-index:50;grid-template-columns:repeat(8,1fr);gap:2px}
   .emoji-panel.open{display:grid}
   .emoji-panel button{background:transparent;border:none;font-size:19px;cursor:pointer;padding:3px;border-radius:6px}
@@ -112,7 +112,12 @@
   .lec-grid{display:grid;grid-template-columns:1fr 1fr;gap:18px;padding:6px 18px 16px;font-size:13px}
   .lec-grid b{display:block;margin-bottom:6px;font-size:12px}
   .lec-grid div div{padding:2px 0}
-  @media(max-width:760px){.msg-layout{grid-template-columns:1fr;height:auto}.msg-contacts{max-height:170px}.msg-conv{height:380px}.lec-grid{grid-template-columns:1fr}}
+  @media(max-width:760px){
+    .msg-layout{grid-template-columns:1fr;height:auto}.msg-contacts{max-height:200px}.msg-conv{height:62vh;min-height:340px}.lec-grid{grid-template-columns:1fr}
+    .msg-input{gap:4px;padding:7px}.msg-input input{font-size:13px;padding:8px 10px}.msg-input .btn{padding:8px 11px;font-size:11px;letter-spacing:.3px}
+    .emoji-btn{font-size:15px;padding:2px}
+    .msgw-in{gap:5px;padding:8px}.msgw-in input{font-size:13px;padding:8px 10px}.msgw-in button{width:34px;height:34px;font-size:14px}
+  }
   /* ===== MÓVIL / RESPONSIVE ===== */
   .hamb{display:none;background:none;border:none;font-size:22px;margin-right:14px;cursor:pointer;color:var(--texto);line-height:1}
   .nav-backdrop{display:none}
@@ -664,7 +669,7 @@
   .msgw-back{cursor:pointer;font-size:20px;color:var(--azul);line-height:1}
   .msgw-thread{flex:1;min-height:0;overflow-y:auto;padding:12px 14px;background:var(--gris);display:flex;flex-direction:column;gap:8px}
   .msgw-in{display:flex;gap:8px;padding:10px;border-top:1px solid var(--gris2);align-items:center}
-  .msgw-in input{flex:1;padding:9px 12px;border:1px solid var(--gris2);border-radius:20px;font-family:inherit;font-size:13.5px;outline:none}
+  .msgw-in input{flex:1;min-width:0;padding:9px 12px;border:1px solid var(--gris2);border-radius:20px;font-family:inherit;font-size:13.5px;outline:none}
   .msgw-in input:focus{border-color:var(--azul)}
   .msgw-in button{border:none;background:var(--azul);color:#fff;width:38px;height:38px;border-radius:50%;cursor:pointer;font-size:15px}
   .chat-body{flex:1;overflow-y:auto;padding:14px;background:var(--gris);display:flex;flex-direction:column;gap:10px}
@@ -1057,38 +1062,38 @@ const NAV=[
   {id:'vacaciones',ic:'🌴',t:'Vacaciones'},
   {id:'bajas',ic:'🩺',t:'Notificar baja'},
   {id:'docs',ic:'📁',t:'Documentación'},
-  {id:'onboarding',ic:'🚀',t:'Onboarding'},
+  {id:'onboarding',ic:'🚀',t:'Onboarding', lockRoles:['empleado','responsable']},
   {id:'sugerencias',ic:'💡',t:'Sugerencias'},
   {id:'kudos',ic:'🏅',t:'Reconocimientos', roles:['responsable','direccion','admin']},
   {id:'cumple',ic:'🎂',t:'Cumpleaños'},
   {grp:'Recursos'},
   {id:'perfil',ic:'👤',t:'Mi perfil'},
   {id:'organigrama',ic:'🏢',t:'Organigrama'},
-  {id:'conexiones',ic:'🟢',t:'Conexiones', roles:['responsable','direccion','admin']},
   {id:'proveedores',ic:'🚚',t:'Proveedores'},
   {id:'propietarios',ic:'🏠',t:'Propietarios'},
   {id:'suministros',ic:'🔌',t:'Suministros'},
   {grp:'Limpieza'},
   {id:'asignaciones',ic:'🧹',t:'Asignaciones'},
-  {id:'limpTutoriales',ic:'🎥',t:'Tutoriales'},
+  {id:'limpTutoriales',ic:'🎥',t:'Tutoriales', lockRoles:['empleado','responsable']},
   {grp:'Mantenimiento'},
   {id:'incidencias',ic:'🛠️',t:'Incidencias'},
-  {id:'videos',ic:'🎥',t:'Videos explicativos'},
-  {id:'bitacora',ic:'📝',t:'Bitácoras'},
+  {id:'videos',ic:'🎥',t:'Videos explicativos', lockRoles:['empleado','responsable']},
   {grp:'Atención al cliente', depts:['Atención al cliente']},
   {id:'mensajes',ic:'💬',t:'Mensajes y plantillas', depts:['Atención al cliente']},
+  {id:'bitacora',ic:'📝',t:'Bitácoras', depts:['Atención al cliente'], lockRoles:['empleado','responsable']},
   {grp:'Marketing'},
   {id:'marca',ic:'🎨',t:'Marca y recursos'},
   {id:'carteles',ic:'🪧',t:'Carteles'},
   {grp:'Formación'},
-  {id:'tutoriales',ic:'🎓',t:'Tutoriales'},
-  {id:'formacion',ic:'📚',t:'Formaciones'},
+  {id:'tutoriales',ic:'🎓',t:'Tutoriales', lockRoles:['empleado','responsable']},
+  {id:'formacion',ic:'📚',t:'Formaciones', lockRoles:['empleado','responsable']},
   {grp:'Mi departamento'},
-  {id:'depto',ic:'🗂️',t:'Área de equipo'},
+  {id:'depto',ic:'🗂️',t:'Área de equipo', lockRoles:['empleado','responsable']},
   {grp:'Dirección', roles:['direccion','admin']},
   {id:'kpis',ic:'📊',t:'Tablero de KPIs', roles:['direccion','admin']},
   {id:'auditoria',ic:'🔒',t:'Auditoría', roles:['admin']},
   {grp:'Gestión', roles:['direccion','admin']},
+  {id:'conexiones',ic:'🟢',t:'Conexiones', roles:['responsable','direccion','admin']},
   {id:'permisos',ic:'🔐',t:'Permisos y accesos', roles:['admin']},
   {id:'aprobaciones',ic:'✅',t:'Aprobaciones', roles:['direccion','admin']},
   {id:'registros',ic:'🆕',t:'Registros pendientes', roles:['admin']},
@@ -1296,6 +1301,8 @@ function show(id){
   ensureGroupOpen(id); highlightNav();
   const m=document.getElementById('main');
   const ld=h=>{ if(!samePage) m.innerHTML=h; };   // placeholder solo al cambiar de página
+  const _lk=NAV.find(n=>n.id===id);   // secciones "Próximamente" según el rol
+  if(_lk && _lk.lockRoles && _lk.lockRoles.includes(PROFILE.role)){ m.innerHTML=`<div class="page-title">${esc(_lk.t)}</div><div class="panel" style="color:var(--suave)">🔒 La sección “${esc(_lk.t)}” estará disponible próximamente.</div>`; return; }
   if(id==='perfil'){ ld('<div class="page-title">Mi perfil</div><div class="page-sub">Cargando…</div>'); pagePerfil(); return; }
   if(id==='inicio'){ ld('<div class="page-sub">Cargando…</div>'); pageInicio(); return; }
   else if(id==='comunicados'){ ld('<div class="page-title">Comunicados</div><div class="page-sub">Cargando…</div>'); pageComunicados(); }
@@ -2555,8 +2562,15 @@ function regFoto(id){
 /* ---------------- ADMINISTRACIÓN (usuarios) ---------------- */
 let userEditId=null, userFormOpen=false;
 async function pageAdmin(){
-  const{data}=await sb.from('profiles').select('*').order('dept');
-  const us=data||[]; ADMIN_US=us;
+  const{data}=await sb.from('profiles').select('*');
+  const us=(data||[]).slice().sort((a,b)=>(a.nombre||'').localeCompare(b.nombre||'')); ADMIN_US=us;
+  if(userFormOpen){
+    document.getElementById('main').innerHTML=`<div class="page-title">Editar empleado</div>
+      <div class="page-sub">Modifica los datos de ${esc(userDraft.nombre||'la persona')} y guarda; volverás a la lista de empleados.</div>
+      <div style="margin-bottom:12px"><button class="btn ghost" onclick="userFormOpen=false;userEditId=null;show('admin')">← Volver a empleados</button></div>
+      ${userForm()}`;
+    return;
+  }
   const rl=r=>roleNice(r);
   const rows=us.map(u=>{
     const esOwner=u.role==='propietario';
@@ -2570,7 +2584,6 @@ async function pageAdmin(){
     <td>${accion}</td></tr>`;}).join('');
   document.getElementById('main').innerHTML=`<div class="page-title">Administración</div><div class="page-sub">Gestión de empleados y roles</div>
     <div class="panel" style="background:var(--azul-claro);border:none;font-size:13px">ℹ️ Para <b>crear</b> nuevos accesos, los empleados se registran desde la pantalla de inicio (o los añades en Supabase → Authentication). Aquí asignas su <b>departamento, rol, vacaciones y cumpleaños</b>.</div>
-    ${userFormOpen?userForm():''}
     <div class="panel"><table><thead><tr><th>Foto</th><th>Nombre / email</th><th>Departamento / área</th><th>Posición</th><th>Rol</th><th>Vac.</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`;
 }
 let userDraft={}, ADMIN_US=[];
