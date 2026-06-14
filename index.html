@@ -747,7 +747,7 @@
     body.nav-pinned .nav-pin button{opacity:1;transform:rotate(0)}
 
     /* --- Plegado: un solo icono por SECCIÓN, áreas ocultas --- */
-    body:not(.nav-pinned) nav.side:not(:hover) .nav-pin{justify-content:center;padding:8px 0 6px}
+    body:not(.nav-pinned) nav.side:not(:hover) .nav-pin{display:none}
     body:not(.nav-pinned) nav.side:not(:hover) .grp-items{display:none}
     body:not(.nav-pinned) nav.side:not(:hover) .grp-tog .grp-name,
     body:not(.nav-pinned) nav.side:not(:hover) .grp-tog .car{display:none}
@@ -3271,6 +3271,7 @@ function incEnsureStyle(){ if(document.getElementById('incStyle'))return; const 
   .inc-man{margin-top:8px}
   .inc-final{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px;align-items:center}
   .btn-ok{background:#1f9d55;color:#fff;border:none;border-radius:8px;padding:8px 14px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit}
+  .btn-orange{background:#e6730d!important;color:#fff!important;border:none!important}
   .inc-note{width:100%;min-height:96px;font-family:inherit;font-size:14px;padding:10px 12px;border:1px solid var(--gris2);border-radius:8px;resize:vertical;box-sizing:border-box}
   .inc-dot{display:inline-block;width:9px;height:9px;border-radius:50%;background:#e6a700;animation:incpulse 1s infinite;vertical-align:middle}
   @keyframes incpulse{0%,100%{opacity:1}50%{opacity:.2}}
@@ -3324,9 +3325,9 @@ async function pageIncidencias(){
   if(!incFilters.ambito){ incFilters.ambito = incEsMant()? (canManage?'todas':'mias') : 'reportadas'; }
   const tabs=`<div class="asg-tabs">
     <button class="asg-tab ${incTab==='bandeja'?'on':''}" onclick="setIncTab('bandeja')">📥 Bandeja</button>
-    <button class="asg-tab ${incTab==='historial'?'on':''}" onclick="setIncTab('historial')">📜 Historial</button>
+    <button class="asg-tab ${incTab==='historial'?'on':''}" onclick="setIncTab('historial')">📜 Realizadas</button>
     ${canManage?`<button class="asg-tab ${incTab==='panel'?'on':''}" onclick="setIncTab('panel')">📊 Panel</button>`:''}
-    <button class="btn" style="margin-left:auto;align-self:center" onclick="incNuevaOpen()">+ Nueva incidencia</button></div>`;
+    <button class="btn btn-orange" style="margin-left:auto;align-self:center" onclick="incNuevaOpen()">+ Nueva incidencia</button></div>`;
   let body; const fullScreen=(incSel!=null||incNew);
   if(incNew){ body=renderIncForm(); }
   else if(incSel!=null){ body=renderIncDetail(incSel); }
@@ -3464,10 +3465,10 @@ function incFormHTML(){
   const teamOpts=`<option value="*">Todos los equipos</option>`+teams.map(t=>`<option>${esc(t)}</option>`).join('');
   const perOpts=`<option value="">Todo el equipo (que alguien la tome)</option>`+MANT_STAFF.map(s=>`<option value="${s.id}">${esc(s.nombre)}${s.team?' · '+esc(s.team):''}</option>`).join('');
   return `<div class="panel" style="max-width:680px"><form class="box" style="max-width:none" onsubmit="return incCreate(event)">
-    <label>Vía de aviso</label>
-    <select id="iVia"><option value="cliente_ota">🌐 Cliente (OTA)</option><option value="limpieza">🧹 Personal de limpieza</option><option value="personal" selected>👤 Personal interno</option></select>
-    <label>Urgencia</label>
-    <select id="iUrg"><option value="alta">🔴 Alta · hoy mismo</option><option value="media" selected>🟠 Media · lo antes posible</option><option value="baja">🟢 Baja · cuando convenga</option></select>
+    <div class="row">
+      <div><label>Vía de aviso</label><select id="iVia"><option value="cliente_ota">🌐 Cliente (OTA)</option><option value="limpieza">🧹 Personal de limpieza</option><option value="personal" selected>👤 Personal interno</option></select></div>
+      <div><label>Urgencia</label><select id="iUrg"><option value="alta">🔴 Alta · hoy mismo</option><option value="media" selected>🟠 Media · lo antes posible</option><option value="baja">🟢 Baja · cuando convenga</option></select></div>
+    </div>
     <label>Categoría de la avería</label>
     <select id="iCat"><option value="">— Sin categoría —</option>${INC_CAT.map(([v,l])=>`<option value="${v}">${l}</option>`).join('')}</select>
     <div class="row">
