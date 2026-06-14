@@ -3321,8 +3321,8 @@ function renderIncBandeja(){
     ${renderIncList(false)}`;
 }
 function incFilteredList(hist){
-  const f=incFilters, me=ME.id;
-  return INC.filter(i=>{
+  const f=incFilters, me=ME.id; const urgRank={alta:0,media:1,baja:2};
+  const arr=INC.filter(i=>{
     const done=(i.estado==='terminada'||i.estado==='cancelada');
     if(hist){ if(!done) return false; } else { if(done) return false; }
     if(!hist){
@@ -3337,11 +3337,19 @@ function incFilteredList(hist){
     if(f.estado && i.estado!==f.estado) return false;
     return true;
   });
+  arr.sort((a,b)=>{
+    if(hist) return new Date(b.resuelta_at||b.updated_at||b.created_at)-new Date(a.resuelta_at||a.updated_at||a.created_at);
+    const ua=(urgRank[a.urgencia]!=null?urgRank[a.urgencia]:1), ub=(urgRank[b.urgencia]!=null?urgRank[b.urgencia]:1);
+    if(ua!==ub) return ua-ub;
+    return new Date(a.created_at)-new Date(b.created_at);
+  });
+  return arr;
 }
 function renderIncList(hist){
   const items=incFilteredList(hist);
   if(!items.length) return `<div class="panel" style="color:var(--suave)">No hay incidencias en esta vista.</div>`;
-  return `<div class="inc-cards">${items.map(incCardHTML).join('')}</div>`;
+  const hint = hist?'':`<div style="font-size:12.5px;color:var(--suave);margin:0 0 10px">⬇️ Ordenadas por prioridad: primero las <b style="color:#d33">🔴 Alta</b>, luego 🟠 Media y 🟢 Baja (dentro de cada una, las más antiguas primero).</div>`;
+  return `${hint}<div class="inc-cards">${items.map(incCardHTML).join('')}</div>`;
 }
 function incCardHTML(i){
   const u=INC_URG[i.urgencia]||INC_URG.media, e=INC_EST[i.estado]||INC_EST.pendiente;
