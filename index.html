@@ -2458,8 +2458,13 @@ function pageCatalogos(){
   const posList=CAT.posiciones.map(p=>`<div class="cat-row"><span>${esc(p)}</span><button class="cat-x" onclick="delPos('${p.replace(/'/g,"\\'")}')">🗑</button></div>`).join('')||'<div class="cat-empty">—</div>';
   const equipoList=CAT.equipos.map(e=>`<div class="cat-row"><span>${esc(e)}</span><button class="cat-x" onclick="delEquipo('${e.replace(/'/g,"\\'")}')">🗑</button></div>`).join('')||'<div class="cat-empty">Sin equipos todavía</div>';
   const ubicList=CAT.ubicaciones.map(u=>`<div class="cat-row"><span>${esc(u)}</span><button class="cat-x" onclick="delUbic('${u.replace(/'/g,"\\'")}')">🗑</button></div>`).join('')||'<div class="cat-empty">Sin ubicaciones todavía</div>';
-  const edifList=CAT.edificios.map(e=>`<div class="cat-row"><span>${esc(e)}</span><button class="cat-x" onclick="delEdif('${e.replace(/'/g,"\\'")}')">🗑</button></div>`).join('')||'<div class="cat-empty">Sin edificios todavía</div>';
-  const uniList=(CAT.unidades||[]).map(u=>`<div class="cat-row"><span>${esc(u.nombre)} <small style="color:var(--suave)">· ${esc(u.edificio)}${u.tipo==='comun'?' · zona común':''}</small></span><button class="cat-x" onclick="delUni('${(u.edificio||'').replace(/'/g,"\\'")}','${(u.nombre||'').replace(/'/g,"\\'")}')">🗑</button></div>`).join('')||'<div class="cat-empty">Sin unidades todavía</div>';
+  const edBlocks=CAT.edificios.map(ed=>{
+    const us=(CAT.unidades||[]).filter(u=>u.edificio===ed);
+    const chips=us.map(u=>`<span style="display:inline-flex;align-items:center;gap:5px;background:${u.tipo==='comun'?'#eef4fb':'var(--gris)'};border:1px solid ${u.tipo==='comun'?'#cfe0f2':'var(--gris2)'};${u.tipo==='comun'?'color:var(--azul);':''}border-radius:16px;padding:4px 6px 4px 11px;font-size:12.5px;margin:0 6px 6px 0">${esc(u.nombre)}<button onclick="delUni('${ed.replace(/'/g,"\\'")}','${(u.nombre||'').replace(/'/g,"\\'")}')" style="border:none;background:none;cursor:pointer;color:var(--suave);font-size:12px">✕</button></span>`).join('')||'<span style="color:var(--suave);font-size:12.5px">Sin unidades</span>';
+    return `<div style="border:1px solid var(--gris2);border-radius:10px;padding:11px 13px;margin-bottom:10px">
+      <div style="display:flex;align-items:center;margin-bottom:8px"><b>🏢 ${esc(ed)}</b><small style="color:var(--suave);margin-left:8px">· ${us.length} unidad${us.length===1?'':'es'}</small><button class="cat-x" style="margin-left:auto" onclick="delEdif('${ed.replace(/'/g,"\\'")}')">🗑</button></div>
+      <div>${chips}</div></div>`;
+  }).join('')||'<div class="cat-empty">Sin edificios todavía. Crea el primero arriba.</div>';
   const S='<span style="color:#1f9d55;font-weight:700">✓</span>', N='<span style="color:var(--gris2)">—</span>';
   const rolesTabla=[
     ['Empleado','Solo lo suyo','Ve los suyos',N,N,N,N],
@@ -2488,17 +2493,23 @@ function pageCatalogos(){
       <div class="panel"><h2>📍 Ubicaciones</h2><div class="cat-list">${ubicList}</div>
         <div class="cat-add"><input id="nUbic" placeholder="Nueva ubicación (ej: Recepción central)"><button class="btn" onclick="addUbic()">➕</button></div></div>
     </div>
-    <div class="cat-grid" style="margin-top:16px">
-      <div class="panel"><h2>🏢 Edificios <small style="color:var(--suave);font-weight:400">· Mantenimiento</small></h2>
-        <div class="cat-list">${edifList}</div>
-        <div class="cat-add"><input id="nEdif" placeholder="Nuevo edificio (ej: Altavida)"><button class="btn" onclick="addEdif()">➕</button></div></div>
-      <div class="panel"><h2>🏠 Unidades y zonas <small style="color:var(--suave);font-weight:400">· Mantenimiento</small></h2>
-        <div class="cat-list">${uniList}</div>
+    <div class="panel" style="margin-top:16px"><h2>🏢 Edificios y unidades <small style="color:var(--suave);font-weight:400">· Mantenimiento</small></h2>
+      <div class="cat-add" style="margin-bottom:6px">
+        <input id="nEdif" placeholder="Nombre del edificio (ej: Casa Diez)">
+        <input id="nEdifNum" type="number" min="0" placeholder="Nº apartamentos" style="max-width:150px">
+        <button class="btn" onclick="addEdif()">➕ Crear edificio</button>
+      </div>
+      <div style="font-size:12px;color:var(--suave);margin:0 0 14px">Se crean automáticamente: <b>Zona Común</b> + <b>Nº 1…N</b>. Luego puedes añadir o quitar unidades.</div>
+      ${edBlocks}
+      <div style="border-top:1px solid var(--gris2);margin-top:6px;padding-top:14px">
+        <div style="font-size:13px;font-weight:600;margin-bottom:8px">Añadir una unidad suelta</div>
         <div class="cat-add">
-          <select id="nUniEdif" style="max-width:150px">${CAT.edificios.map(e=>`<option>${esc(e)}</option>`).join('')||'<option value="">— crea un edificio —</option>'}</select>
-          <input id="nUniNom" placeholder="Apartamento o zona común">
+          <select id="nUniEdif" style="max-width:160px">${CAT.edificios.map(e=>`<option>${esc(e)}</option>`).join('')||'<option value="">— crea un edificio —</option>'}</select>
+          <input id="nUniNom" placeholder="Ej: Nº 12 o Ático">
           <select id="nUniTipo" style="max-width:130px"><option value="apartamento">Apartamento</option><option value="comun">Zona común</option></select>
-          <button class="btn" onclick="addUni()">➕</button></div></div>
+          <button class="btn" onclick="addUni()">➕</button>
+        </div>
+      </div>
     </div>
     <div class="panel" style="margin-top:16px"><h2>🔑 Roles y alcances (referencia)</h2>
       <div style="overflow-x:auto"><table class="rol-tabla"><thead><tr>
@@ -2517,7 +2528,7 @@ async function addEquipo(){ const n=(val('nEquipo')||'').trim(); if(!n)return; c
 async function delEquipo(n){ if(!confirm('¿Eliminar el equipo "'+n+'"?'))return; const{error}=await sb.from('equipos').delete().eq('nombre',n); if(error){alert(error.message);return;} catReload(); }
 async function addUbic(){ const n=(val('nUbic')||'').trim(); if(!n)return; const{error}=await sb.from('ubicaciones').insert({nombre:n}); if(error){alert(error.message);return;} toast('✓ Añadida'); catReload(); }
 async function delUbic(n){ if(!confirm('¿Eliminar la ubicación "'+n+'"?'))return; const{error}=await sb.from('ubicaciones').delete().eq('nombre',n); if(error){alert(error.message);return;} catReload(); }
-async function addEdif(){ const n=(val('nEdif')||'').trim(); if(!n)return; const{error}=await sb.from('mant_edificios').insert({nombre:n,orden:(CAT.edificios||[]).length+1}); if(error){alert(error.message);return;} toast('✓ Edificio añadido'); catReload(); }
+async function addEdif(){ const n=(val('nEdif')||'').trim(); if(!n)return; if((CAT.edificios||[]).includes(n)){alert('Ya existe un edificio con ese nombre.');return;} const cnt=Math.max(0,parseInt(val('nEdifNum'),10)||0); const{error}=await sb.from('mant_edificios').insert({nombre:n,orden:(CAT.edificios||[]).length+1}); if(error){alert(error.message);return;} const units=[{edificio:n,nombre:'Zona Común',tipo:'comun',orden:0}]; for(let k=1;k<=cnt;k++) units.push({edificio:n,nombre:'Nº '+k,tipo:'apartamento',orden:k}); const r=await sb.from('mant_unidades').insert(units); if(r.error){alert('Edificio creado, pero error al crear unidades: '+r.error.message);} toast('✓ Edificio creado'); catReload(); }
 async function delEdif(n){ if(!confirm('¿Eliminar el edificio "'+n+'" y sus unidades?'))return; await sb.from('mant_unidades').delete().eq('edificio',n); const{error}=await sb.from('mant_edificios').delete().eq('nombre',n); if(error){alert(error.message);return;} catReload(); }
 async function addUni(){ const e=(val('nUniEdif')||'').trim(); const n=(val('nUniNom')||'').trim(); const t=document.getElementById('nUniTipo').value; if(!e){alert('Crea primero un edificio.');return;} if(!n)return; const{error}=await sb.from('mant_unidades').insert({edificio:e,nombre:n,tipo:t,orden:(CAT.unidades||[]).filter(u=>u.edificio===e).length+1}); if(error){alert(error.message);return;} toast('✓ Unidad añadida'); catReload(); }
 async function delUni(e,n){ if(!confirm('¿Eliminar la unidad "'+n+'"?'))return; const{error}=await sb.from('mant_unidades').delete().eq('edificio',e).eq('nombre',n); if(error){alert(error.message);return;} catReload(); }
