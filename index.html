@@ -3254,6 +3254,10 @@ function incEnsureStyle(){ if(document.getElementById('incStyle'))return; const 
   @keyframes incpulse{0%,100%{opacity:1}50%{opacity:.2}}
   .inc-card.done{opacity:.6;filter:grayscale(.4)}
   .inc-card.done:hover{opacity:1;filter:none}
+  @keyframes incAlarm{0%,100%{box-shadow:0 1px 4px rgba(0,0,0,.06)}50%{box-shadow:0 0 0 4px rgba(211,51,51,.34)}}
+  .inc-card.urg-alta:not(.done){animation:incAlarm 1.3s ease-in-out infinite}
+  @keyframes urgBlink{50%{opacity:.35}}
+  .badge.urg-alarm{animation:urgBlink 1s steps(1,end) infinite}
   .inc-lb{position:fixed;inset:0;background:rgba(0,0,0,.86);display:flex;align-items:center;justify-content:center;z-index:9999;padding:30px;cursor:zoom-out}
   .inc-lb img{max-width:94%;max-height:94%;border-radius:8px;box-shadow:0 10px 40px rgba(0,0,0,.5)}
   .inc-lb .lb-x{position:absolute;top:16px;right:24px;color:#fff;font-size:30px;cursor:pointer;background:none;border:none}
@@ -3383,8 +3387,9 @@ function incCardHTML(i){
   const me=ME.id;
   const puedeTomar = incEsMant() && i.estado==='pendiente' && !i.asignado_a;
   const done=(i.estado==='terminada'||i.estado==='cancelada');
+  const alarm=(i.urgencia==='alta'&&!done);
   return `<div class="inc-card urg-${i.urgencia}${done?' done':''}">
-    <div class="inc-card-top"><span class="badge ${u[1]}">${u[2]} ${u[0]}</span><span class="badge ${e[1]}">${i.timer_ini?'<span class="inc-dot"></span> ':''}${e[0]}</span>${incVencida(i)?'<span class="badge b-red">⏰ Vencida</span>':''}${i.afecta_huesped?'<span class="badge b-amber">🛎️ Huésped</span>':''}${i.fuera_servicio?'<span class="badge b-red">⛔ Fuera de servicio</span>':''}</div>
+    <div class="inc-card-top"><span class="badge ${u[1]}${alarm?' urg-alarm':''}">${alarm?'🚨':u[2]} ${u[0]}</span><span class="badge ${e[1]}">${i.timer_ini?'<span class="inc-dot"></span> ':''}${e[0]}</span>${incVencida(i)?'<span class="badge b-red">⏰ Vencida</span>':''}${i.afecta_huesped?'<span class="badge b-amber">🛎️ Huésped</span>':''}${i.fuera_servicio?'<span class="badge b-red">⛔ Fuera de servicio</span>':''}</div>
     <div class="inc-card-loc">🏠 ${esc(i.edificio||'—')}${i.unidad?' · '+esc(i.unidad):''}${i.categoria?` <span style="font-weight:400;color:var(--suave);font-size:12px">· ${incCatLabel(i.categoria)}</span>`:''}</div>
     <div class="inc-card-desc">${esc((i.descripcion||'').slice(0,140))}${(i.descripcion||'').length>140?'…':''}</div>
     <div class="inc-card-meta">${asg} ${tom} ${nf?('· 📷 '+nf):''}</div>
