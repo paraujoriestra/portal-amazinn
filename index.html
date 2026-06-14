@@ -3196,9 +3196,9 @@ async function createKudo(e){e.preventDefault();const para=document.getElementBy
 
 /* ---------------- INCIDENCIAS ---------------- */
 /* ================= MANTENIMIENTO · INCIDENCIAS (v2) ================= */
-let incFormOpen=false, incTab='bandeja', incSel=null, incTimerInt=null, incEditOpen=false;
+let incFormOpen=false, incTab='bandeja', incSel=null, incTimerInt=null, incEditOpen=false, incNew=false;
 let incFilters={ambito:'',edificio:'',unidad:'',urgencia:'',estado:''};
-let MANT_EDIF=[], MANT_UNI=[], MANT_STAFF=[], INC=[], INC_FOTOS={};
+let MANT_EDIF=[], MANT_UNI=[], MANT_STAFF=[], MANT_TEAMS=[], INC=[], INC_FOTOS={};
 const INC_URG={alta:['Alta','b-red','🔴'],media:['Media','b-amber','🟠'],baja:['Baja','b-grey','🟢']};
 const INC_EST={pendiente:['Pendiente','b-grey'],asignada:['Asignada','b-blue'],en_curso:['En curso','b-amber'],pausada:['Pausada','b-amber'],a_medias:['A medias','b-amber'],terminada:['Terminada','b-green'],cancelada:['Cancelada','b-grey']};
 const INC_VIA={cliente_ota:'🌐 Cliente (OTA)',limpieza:'🧹 Limpieza',personal:'👤 Personal interno'};
@@ -3269,25 +3269,28 @@ async function pageIncidencias(){
   const inc=await sb.from('mant_incidencias').select('*').order('created_at',{ascending:false});
   if(inc.error){ document.getElementById('main').innerHTML=`<div class="page-title">Incidencias y mantenimiento</div><div class="panel">No se pudo cargar. ¿Ejecutaste <b>supabase_mantenimiento.sql</b> en Supabase?<br><small style="color:var(--suave)">${esc(inc.error.message)}</small></div>`; return; }
   INC=inc.data||[];
-  const [ed,un,fo,stf]=await Promise.all([
+  const [ed,un,fo,stf,eq]=await Promise.all([
     sb.from('mant_edificios').select('*').order('orden').order('nombre'),
     sb.from('mant_unidades').select('*').order('orden').order('nombre'),
     sb.from('mant_fotos').select('*').order('id'),
     sb.from('profiles').select('id,nombre,org_equipo,dept').eq('dept','Mantenimiento').eq('estado','aprobado'),
+    sb.from('equipos').select('nombre').order('nombre'),
   ]);
   MANT_EDIF=ed.data||[]; MANT_UNI=un.data||[]; MANT_STAFF=stf.data||[];
+  MANT_TEAMS=[...new Set([...(eq.data||[]).map(x=>x.nombre).filter(Boolean), ...MANT_STAFF.map(s=>s.org_equipo).filter(Boolean)])];
   INC_FOTOS={}; (fo.data||[]).forEach(f=>{(INC_FOTOS[f.incidencia_id]=INC_FOTOS[f.incidencia_id]||[]).push(f);});
   if(!incFilters.ambito){ incFilters.ambito = incEsMant()? (canManage?'todas':'mias') : 'reportadas'; }
   const tabs=`<div class="asg-tabs">
     <button class="asg-tab ${incTab==='bandeja'?'on':''}" onclick="setIncTab('bandeja')">📥 Bandeja</button>
     <button class="asg-tab ${incTab==='historial'?'on':''}" onclick="setIncTab('historial')">📜 Historial</button>
     ${canManage?`<button class="asg-tab ${incTab==='panel'?'on':''}" onclick="setIncTab('panel')">📊 Panel</button>`:''}</div>`;
-  let body;
-  if(incSel!=null){ body=renderIncDetail(incSel); }
+  let body; const fullScreen=(incSel!=null||incNew);
+  if(incNew){ body=renderIncForm(); }
+  else if(incSel!=null){ body=renderIncDetail(incSel); }
   else if(incTab==='panel'&&canManage){ body=renderIncPanel(INC); }
   else if(incTab==='historial'){ body=renderIncList(true); }
   else { body=renderIncBandeja(); }
-  document.getElementById('main').innerHTML=`<div class="page-title">Incidencias y mantenimiento</div><div class="page-sub">Reporta y haz seguimiento de averías por edificio y apartamento</div>${incSel!=null?'':tabs}${body}`;
+  document.getElementById('main').innerHTML=`<div class="page-title">Incidencias y mantenimiento</div><div class="page-sub">Reporta y haz seguimiento de averías por edificio y apartamento</div>${fullScreen?'':tabs}${body}`;
   if(incTimerInt){clearInterval(incTimerInt);incTimerInt=null;}
   if(incSel!=null){ const i=INC.find(x=>String(x.id)===String(incSel)); if(i&&i.timer_ini){ incTimerInt=setInterval(()=>{const el=document.getElementById('incTimerDisp'); if(el)el.textContent=incFmtT(incElapsed(i)); else {clearInterval(incTimerInt);incTimerInt=null;} },1000); } }
 }
@@ -3298,7 +3301,6 @@ function renderIncBandeja(){
   const f=incFilters;
   const chips=[];
   if(incEsMant()){ chips.push(['mias','🙋 Mías'],['equipo','👥 Mi equipo'],['sinasignar','📭 Sin asignar']); }
-  chips.push(['reportadas','📤 Reportadas por mí']);
   if(incCan()) chips.push(['todas','🗂️ Todas']);
   const chipsHTML=chips.map(([k,l])=>`<button class="inc-chip ${f.ambito===k?'on':''}" onclick="incSetAmbito('${k}')">${l}</button>`).join('');
   const edOpts=`<option value="">Todos los edificios</option>`+MANT_EDIF.map(e=>`<option ${f.edificio===e.nombre?'selected':''}>${esc(e.nombre)}</option>`).join('');
@@ -3307,8 +3309,7 @@ function renderIncBandeja(){
   const urgOpts=`<option value="">Toda urgencia</option>`+Object.entries(INC_URG).map(([k,v])=>`<option value="${k}" ${f.urgencia===k?'selected':''}>${v[2]} ${v[0]}</option>`).join('');
   const estOpts=`<option value="">Todo estado</option>`+['pendiente','asignada','en_curso','pausada','a_medias'].map(k=>`<option value="${k}" ${f.estado===k?'selected':''}>${INC_EST[k][0]}</option>`).join('');
   return `
-    <div style="margin-bottom:12px"><button class="btn" onclick="incFormOpen=!incFormOpen;show('incidencias')">${incFormOpen?'✕ Cerrar':'+ Nueva incidencia'}</button></div>
-    ${incFormOpen?incFormHTML():''}
+    <div style="margin-bottom:12px"><button class="btn" onclick="incNuevaOpen()">+ Nueva incidencia</button></div>
     <div class="inc-chips">${chipsHTML}</div>
     <div class="inc-filters">
       <select onchange="incSetFilter('edificio',this.value)">${edOpts}</select>
@@ -3362,9 +3363,16 @@ function incCardHTML(i){
       ${(incCan()||i.creado_por===me)?`<button class="btn-sm x" onclick="incDelete(${i.id})">🗑</button>`:''}
     </div></div>`;
 }
+function incNuevaOpen(){ incNew=true; incFormOpen=false; show('incidencias'); }
+function incNuevaCancel(){ incNew=false; show('incidencias'); }
+function renderIncForm(){
+  return `<button class="btn-sm ghost" onclick="incNuevaCancel()">← Cancelar</button>
+    <h2 style="margin:12px 0 4px">+ Nueva incidencia</h2>
+    ${incFormHTML()}`;
+}
 function incFormHTML(){
   const edOpts=`<option value="">— Selecciona —</option>`+MANT_EDIF.map(e=>`<option>${esc(e.nombre)}</option>`).join('');
-  const teams=[...new Set(MANT_STAFF.map(s=>s.org_equipo).filter(Boolean))];
+  const teams=MANT_TEAMS;
   const teamOpts=`<option value="*">Todos los equipos</option>`+teams.map(t=>`<option>${esc(t)}</option>`).join('');
   const perOpts=`<option value="">Todo el equipo (que alguien la tome)</option>`+MANT_STAFF.map(s=>`<option value="${s.id}">${esc(s.nombre)}${s.org_equipo?' · '+esc(s.org_equipo):''}</option>`).join('');
   return `<div class="panel" style="max-width:680px"><form class="box" style="max-width:none" onsubmit="return incCreate(event)">
@@ -3384,7 +3392,7 @@ function incFormHTML(){
       <div><label>Asignar a equipo</label><select id="iEquipo" onchange="incFormEquipo()">${teamOpts}</select></div>
       <div><label>Asignar a persona</label><select id="iPersona">${perOpts}</select></div>
     </div>
-    <div style="margin-top:10px"><button class="btn" type="submit">Crear incidencia</button></div>
+    <div class="inc-final" style="margin-top:12px"><button class="btn-ok" type="submit">Crear incidencia</button><button class="btn-sm ghost" type="button" onclick="incNuevaCancel()">Cancelar</button></div>
   </form></div>`;
 }
 function incFormEdif(){ const ed=(document.getElementById('iEdif')||{}).value||''; const uni=document.getElementById('iUni'); if(!uni)return; const list=MANT_UNI.filter(u=>u.edificio===ed); uni.innerHTML=`<option value="">— Selecciona —</option>`+list.map(u=>`<option>${esc(u.nombre)}${u.tipo==='comun'?' (zona común)':''}</option>`).join(''); }
@@ -3407,7 +3415,7 @@ async function incCreate(e){
   const quien=persona?persona.nombre:('el equipo '+(row.asignado_equipo==='*'?'de Mantenimiento':row.asignado_equipo));
   const urgTxt=row.urgencia==='alta'?'🔴 URGENTE · ':'';
   await notifyTeam('Mantenimiento','🛠️',`${urgTxt}Nueva incidencia en ${row.edificio||'—'}${row.unidad?' · '+row.unidad:''} (asignada a ${quien})`,'incidencias');
-  incFormOpen=false; toast('✓ Incidencia creada'); show('incidencias'); return false;
+  incFormOpen=false; incNew=false; toast('✓ Incidencia creada'); show('incidencias'); return false;
 }
 async function incUpload(incId, files, tipo){
   for(const f of (files||[])){
@@ -3513,7 +3521,7 @@ function renderIncDetail(id){
   const banner = (incEsMant() && !done && otraPersona)? `<div class="panel" style="background:#fff8e6;border:1px solid #f0d98a;margin-top:12px"><b>⚠️ Esta incidencia la lleva ${esc(quienLa)}.</b> Si la vas a realizar tú, reasígnatela.<div style="margin-top:8px"><button class="btn-sm" onclick="incReasignarme(${i.id})">🙋 Reasignármela a mí</button></div></div>` : '';
   // panel de edición
   const editPanel = (incEditOpen && puedeEditar)? (function(){
-    const teams=[...new Set(MANT_STAFF.map(s=>s.org_equipo).filter(Boolean))];
+    const teams=MANT_TEAMS;
     const teamOpts=`<option value="*" ${i.asignado_equipo==='*'?'selected':''}>Todos los equipos</option>`+teams.map(t=>`<option ${i.asignado_equipo===t?'selected':''}>${esc(t)}</option>`).join('');
     const curTeam=i.asignado_equipo||'*';
     const perList=MANT_STAFF.filter(s=> curTeam==='*'?true:s.org_equipo===curTeam);
