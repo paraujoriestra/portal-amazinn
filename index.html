@@ -3219,7 +3219,8 @@ async function createKudo(e){e.preventDefault();const para=document.getElementBy
 /* ---------------- INCIDENCIAS ---------------- */
 /* ================= MANTENIMIENTO · INCIDENCIAS (v2) ================= */
 let incFormOpen=false, incTab='bandeja', incSel=null, incTimerInt=null, incEditOpen=false, incNew=false;
-let incFilters={ambito:'',edificio:'',unidad:'',urgencia:'',estado:'',q:'',categoria:'',afecta:''};
+let incFilters={ambito:'',edificio:'',unidad:'',urgencia:'',estado:'',q:'',categoria:'',afecta:''}; let incFiltersOpen=false;
+function incToggleFilters(){ incFiltersOpen=!incFiltersOpen; show('incidencias'); }
 let MANT_EDIF=[], MANT_UNI=[], MANT_STAFF=[], MANT_TEAMS=[], MANT_PREV=[], PREV_INC=[], INC=[], INC_FOTOS={};
 let prevFormOpen=false, prevEditId=null, prevSel=null, prevTab='lista', prevCalRef=null, prevFilterCat='';
 const INC_URG={alta:['Alta','b-red','🔴'],media:['Media','b-amber','🟠'],baja:['Baja','b-grey','🟢']};
@@ -3372,17 +3373,19 @@ function renderIncBandeja(){
   if(incCan()){ const pad=n=>(''+n).padStart(2,'0'); const tISO=(()=>{const d=new Date();return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());})();
     const pend=INC.filter(x=>!['terminada','cancelada'].includes(x.estado)); const venc=pend.filter(incVencida).length; const urg=pend.filter(x=>x.urgencia==='alta').length; const sin=INC.filter(x=>x.estado==='pendiente'&&!x.asignado_a).length; const hoyRes=INC.filter(x=>x.estado==='terminada'&&(x.resuelta_at||'').slice(0,10)===tISO).length;
     banner=`<div class="panel" style="background:#f4f8ff;border:1px solid #d7e6fb;margin-bottom:12px"><b>📋 Resumen de hoy</b> · <span style="color:#c0392b">⏰ ${venc} vencidas</span> · 🔴 ${urg} urgentes abiertas · 📭 ${sin} sin asignar · ✅ ${hoyRes} resueltas hoy</div>`; }
+  const anyF=(f.edificio||f.unidad||f.urgencia||f.q||f.categoria||f.afecta);
   return `
     ${banner}
     <div class="inc-chips">${chipsHTML}</div>
-    <div class="inc-filters">
+    <div style="margin-bottom:12px"><button class="inc-chip ${(incFiltersOpen||anyF)?'on':''}" onclick="incToggleFilters()">🔎 Filtros${anyF?' •':''}</button></div>
+    ${incFiltersOpen?`<div class="inc-filters">
       <input type="search" placeholder="🔎 Buscar…" value="${esc(f.q||'')}" onchange="incSetFilter('q',this.value)" style="padding:7px 10px;border:1px solid var(--gris2);border-radius:8px;font-size:13px;font-family:inherit;min-width:150px">
       <select onchange="incSetFilter('edificio',this.value)">${edOpts}</select>
       <select onchange="incSetFilter('unidad',this.value)">${unOpts}</select>
       <select onchange="incSetFilter('categoria',this.value)">${catOpts}</select>
       <select onchange="incSetFilter('urgencia',this.value)">${urgOpts}</select>
-      ${(f.edificio||f.unidad||f.urgencia||f.estado||f.q||f.categoria||f.afecta)?`<button class="inc-clear" onclick="incClearFilters()">✕ Limpiar</button>`:''}
-    </div>
+      ${anyF?`<button class="inc-clear" onclick="incClearFilters()">✕ Limpiar</button>`:''}
+    </div>`:''}
     ${renderIncList(false)}`;
 }
 function incFilteredList(hist){
