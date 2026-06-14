@@ -1374,6 +1374,7 @@ async function pageInicio(){
   const MS=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
   const bdNext=(bd||[]).map(x=>{const a=(x.cumple||'').split('-');const mo=+a[1],da=+a[2];let nx=new Date(now.getFullYear(),mo-1,da);if(nx<new Date(now.getFullYear(),now.getMonth(),now.getDate()))nx=new Date(now.getFullYear()+1,mo-1,da);return{nombre:x.nombre,mo,da,dias:(nx-new Date(now.getFullYear(),now.getMonth(),now.getDate()))/864e5};}).sort((a,b)=>a.dias-b.dias).slice(0,3);
   const kudos=(kud||[]).map(k=>`<div style="font-size:13.5px;padding:7px 0;border-bottom:1px solid var(--gris)"><b>${esc(k.de_nombre)}</b> → <b style="color:var(--acento)">${esc(k.para_nombre)}</b>: ${esc(k.texto)}</div>`).join('')||'<div style="color:var(--suave);font-size:13.5px">Aún no hay reconocimientos.</div>';
+  const deptBlock=await inicioDeptBlock(p);
   document.getElementById('main').innerHTML=`
     <div style="display:flex;align-items:center;gap:18px;margin-bottom:18px">
       ${av(p.nombre,p.color,88,p.foto)}
@@ -1384,6 +1385,7 @@ async function pageInicio(){
       </div>
     </div>
     ${bday}
+    ${deptBlock}
     <div class="cards">
       <div class="card clic" onclick="show('horarios')"><h3>📅 Próximo turno</h3><div class="big" style="font-size:22px">${prox}</div><small style="color:var(--suave)">${esc(proxSub)}</small></div>
       <div class="card clic" onclick="show('vacaciones')"><h3>🌴 Vacaciones disponibles</h3><div class="big green">${p.vac||0} días</div><small style="color:var(--suave)">disponibles</small></div>
@@ -1408,6 +1410,24 @@ async function pageInicio(){
     </div>`;
 }
 function roleNice(r){return ({empleado:'Empleado',responsable:'Responsable',direccion:'Dirección',admin:'Administrador',propietario:'Propietario'})[r]||r;}
+async function inicioDeptBlock(p){
+  // Bloque de inicio según el departamento del usuario
+  if((p.dept||'')==='Mantenimiento'){
+    const {data}=await sb.from('mant_incidencias').select('id,estado,urgencia,created_at,asignado_a,tomada_por,asignado_equipo');
+    const list=(data||[]).filter(x=>!['terminada','cancelada'].includes(x.estado));
+    const team=p.org_equipo||p.equipo||'';
+    const mias=list.filter(x=>x.asignado_a===ME.id||x.tomada_por===ME.id);
+    const sinAsig=list.filter(x=>x.estado==='pendiente'&&!x.asignado_a&&(x.asignado_equipo==='*'||(team&&x.asignado_equipo===team)));
+    const venc=mias.filter(x=>{const lim={alta:24,media:72,baja:168}[x.urgencia]||72;return (Date.now()-new Date(x.created_at).getTime())/3600000>lim;}).length;
+    return `<div style="font-weight:700;color:var(--azul);margin:4px 0 8px">🛠️ Tu mantenimiento hoy</div>
+    <div class="cards">
+      <div class="card clic" onclick="show('incidencias')"><h3>🛠️ Incidencias asignadas a ti</h3><div class="big" style="font-size:30px">${mias.length}</div><small style="color:var(--suave)">pendientes por resolver</small></div>
+      <div class="card clic" onclick="show('incidencias')"><h3>📭 Sin asignar · tu equipo</h3><div class="big" style="font-size:30px">${sinAsig.length}</div><small style="color:var(--suave)">puedes tomarlas</small></div>
+      <div class="card clic" onclick="show('incidencias')"><h3>⏰ Tuyas vencidas</h3><div class="big" style="font-size:30px;color:var(--rojo)">${venc}</div><small style="color:var(--suave)">fuera de plazo</small></div>
+    </div>`;
+  }
+  return '';
+}
 
 /* ---------------- COMUNICADOS (datos reales · bandeja + filtros) ---------------- */
 const COM_COLOR={info:'#3b82f6',imp:'#d99100',urg:'#e23b3b'};
