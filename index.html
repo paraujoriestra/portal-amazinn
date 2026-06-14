@@ -3274,10 +3274,10 @@ function incEnsureStyle(){ if(document.getElementById('incStyle'))return; const 
   @keyframes incpulse{0%,100%{opacity:1}50%{opacity:.2}}
   .inc-card.done{opacity:.6;filter:grayscale(.4)}
   .inc-card.done:hover{opacity:1;filter:none}
-  @keyframes incAlarm{0%,100%{box-shadow:0 1px 4px rgba(0,0,0,.06)}50%{box-shadow:0 0 0 4px rgba(211,51,51,.34)}}
-  .inc-card.urg-alta:not(.done){animation:incAlarm 1.3s ease-in-out infinite}
-  @keyframes urgBlink{50%{opacity:.35}}
-  .badge.urg-alarm{animation:urgBlink 1s steps(1,end) infinite}
+  @keyframes incAlarm{0%,100%{box-shadow:0 0 0 0 rgba(211,51,51,.0);border-color:var(--gris2);background:#fff}50%{box-shadow:0 0 16px 4px rgba(211,51,51,.6);border-color:#d33;background:#fff4f3}}
+  .inc-card.urg-alta:not(.done){animation:incAlarm .9s ease-in-out infinite}
+  @keyframes urgBlink{0%,100%{opacity:1}50%{opacity:.25}}
+  .badge.urg-alarm{animation:urgBlink .7s steps(1,end) infinite}
   .inc-lb{position:fixed;inset:0;background:rgba(0,0,0,.86);display:flex;align-items:center;justify-content:center;z-index:9999;padding:30px;cursor:zoom-out}
   .inc-lb img{max-width:94%;max-height:94%;border-radius:8px;box-shadow:0 10px 40px rgba(0,0,0,.5)}
   .inc-lb .lb-x{position:absolute;top:16px;right:24px;color:#fff;font-size:30px;cursor:pointer;background:none;border:none}
