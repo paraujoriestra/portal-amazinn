@@ -882,20 +882,24 @@ const LOGO="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAWgAAAFCCAYAAADc0keFAA
 
 let DEPTS = ["Dirección","Recursos Humanos","Atención al cliente","Operaciones","Limpieza","Mantenimiento","Almacén","Recepción nocturna","Marketing"];
 // Estructura: Áreas › Departamentos › Posiciones › Equipos
-let CAT = { areas:[], deptos:[], posiciones:[], equipos:[], ubicaciones:[] };
+let CAT = { areas:[], deptos:[], posiciones:[], equipos:[], ubicaciones:[], edificios:[], unidades:[] };
 async function loadCatalogos(){
-  const [a,d,p,e,u] = await Promise.all([
+  const [a,d,p,e,u,ed,un] = await Promise.all([
     sb.from('areas').select('nombre').order('nombre'),
     sb.from('departamentos').select('nombre,area').order('nombre'),
     sb.from('posiciones').select('nombre').order('id'),
     sb.from('equipos').select('nombre').order('nombre'),
     sb.from('ubicaciones').select('nombre').order('nombre'),
+    sb.from('mant_edificios').select('nombre').order('orden').order('nombre'),
+    sb.from('mant_unidades').select('edificio,nombre,tipo').order('orden').order('nombre'),
   ]);
   CAT.areas      = (a.data||[]).map(x=>x.nombre);
   CAT.deptos     = d.data||[];
   CAT.posiciones = (p.data||[]).map(x=>x.nombre);
   CAT.equipos    = (e.data||[]).map(x=>x.nombre);
   CAT.ubicaciones= (u.data||[]).map(x=>x.nombre);
+  CAT.edificios  = (ed.data||[]).map(x=>x.nombre);
+  CAT.unidades   = un.data||[];
   if(CAT.deptos.length) DEPTS = CAT.deptos.map(x=>x.nombre);
 }
 function deptArea(nombre){ const d=CAT.deptos.find(x=>x.nombre===nombre); return d?d.area:''; }
@@ -2454,6 +2458,8 @@ function pageCatalogos(){
   const posList=CAT.posiciones.map(p=>`<div class="cat-row"><span>${esc(p)}</span><button class="cat-x" onclick="delPos('${p.replace(/'/g,"\\'")}')">🗑</button></div>`).join('')||'<div class="cat-empty">—</div>';
   const equipoList=CAT.equipos.map(e=>`<div class="cat-row"><span>${esc(e)}</span><button class="cat-x" onclick="delEquipo('${e.replace(/'/g,"\\'")}')">🗑</button></div>`).join('')||'<div class="cat-empty">Sin equipos todavía</div>';
   const ubicList=CAT.ubicaciones.map(u=>`<div class="cat-row"><span>${esc(u)}</span><button class="cat-x" onclick="delUbic('${u.replace(/'/g,"\\'")}')">🗑</button></div>`).join('')||'<div class="cat-empty">Sin ubicaciones todavía</div>';
+  const edifList=CAT.edificios.map(e=>`<div class="cat-row"><span>${esc(e)}</span><button class="cat-x" onclick="delEdif('${e.replace(/'/g,"\\'")}')">🗑</button></div>`).join('')||'<div class="cat-empty">Sin edificios todavía</div>';
+  const uniList=(CAT.unidades||[]).map(u=>`<div class="cat-row"><span>${esc(u.nombre)} <small style="color:var(--suave)">· ${esc(u.edificio)}${u.tipo==='comun'?' · zona común':''}</small></span><button class="cat-x" onclick="delUni('${(u.edificio||'').replace(/'/g,"\\'")}','${(u.nombre||'').replace(/'/g,"\\'")}')">🗑</button></div>`).join('')||'<div class="cat-empty">Sin unidades todavía</div>';
   const S='<span style="color:#1f9d55;font-weight:700">✓</span>', N='<span style="color:var(--gris2)">—</span>';
   const rolesTabla=[
     ['Empleado','Solo lo suyo','Ve los suyos',N,N,N,N],
@@ -2482,6 +2488,18 @@ function pageCatalogos(){
       <div class="panel"><h2>📍 Ubicaciones</h2><div class="cat-list">${ubicList}</div>
         <div class="cat-add"><input id="nUbic" placeholder="Nueva ubicación (ej: Recepción central)"><button class="btn" onclick="addUbic()">➕</button></div></div>
     </div>
+    <div class="cat-grid" style="margin-top:16px">
+      <div class="panel"><h2>🏢 Edificios <small style="color:var(--suave);font-weight:400">· Mantenimiento</small></h2>
+        <div class="cat-list">${edifList}</div>
+        <div class="cat-add"><input id="nEdif" placeholder="Nuevo edificio (ej: Altavida)"><button class="btn" onclick="addEdif()">➕</button></div></div>
+      <div class="panel"><h2>🏠 Unidades y zonas <small style="color:var(--suave);font-weight:400">· Mantenimiento</small></h2>
+        <div class="cat-list">${uniList}</div>
+        <div class="cat-add">
+          <select id="nUniEdif" style="max-width:150px">${CAT.edificios.map(e=>`<option>${esc(e)}</option>`).join('')||'<option value="">— crea un edificio —</option>'}</select>
+          <input id="nUniNom" placeholder="Apartamento o zona común">
+          <select id="nUniTipo" style="max-width:130px"><option value="apartamento">Apartamento</option><option value="comun">Zona común</option></select>
+          <button class="btn" onclick="addUni()">➕</button></div></div>
+    </div>
     <div class="panel" style="margin-top:16px"><h2>🔑 Roles y alcances (referencia)</h2>
       <div style="overflow-x:auto"><table class="rol-tabla"><thead><tr>
         <th>Rol</th><th>Alcance</th><th>Horarios</th><th>Aprobaciones</th><th>Comunicados</th><th>KPIs / Dirección</th><th>Admin / Catálogos</th></tr></thead>
@@ -2499,6 +2517,10 @@ async function addEquipo(){ const n=(val('nEquipo')||'').trim(); if(!n)return; c
 async function delEquipo(n){ if(!confirm('¿Eliminar el equipo "'+n+'"?'))return; const{error}=await sb.from('equipos').delete().eq('nombre',n); if(error){alert(error.message);return;} catReload(); }
 async function addUbic(){ const n=(val('nUbic')||'').trim(); if(!n)return; const{error}=await sb.from('ubicaciones').insert({nombre:n}); if(error){alert(error.message);return;} toast('✓ Añadida'); catReload(); }
 async function delUbic(n){ if(!confirm('¿Eliminar la ubicación "'+n+'"?'))return; const{error}=await sb.from('ubicaciones').delete().eq('nombre',n); if(error){alert(error.message);return;} catReload(); }
+async function addEdif(){ const n=(val('nEdif')||'').trim(); if(!n)return; const{error}=await sb.from('mant_edificios').insert({nombre:n,orden:(CAT.edificios||[]).length+1}); if(error){alert(error.message);return;} toast('✓ Edificio añadido'); catReload(); }
+async function delEdif(n){ if(!confirm('¿Eliminar el edificio "'+n+'" y sus unidades?'))return; await sb.from('mant_unidades').delete().eq('edificio',n); const{error}=await sb.from('mant_edificios').delete().eq('nombre',n); if(error){alert(error.message);return;} catReload(); }
+async function addUni(){ const e=(val('nUniEdif')||'').trim(); const n=(val('nUniNom')||'').trim(); const t=document.getElementById('nUniTipo').value; if(!e){alert('Crea primero un edificio.');return;} if(!n)return; const{error}=await sb.from('mant_unidades').insert({edificio:e,nombre:n,tipo:t,orden:(CAT.unidades||[]).filter(u=>u.edificio===e).length+1}); if(error){alert(error.message);return;} toast('✓ Unidad añadida'); catReload(); }
+async function delUni(e,n){ if(!confirm('¿Eliminar la unidad "'+n+'"?'))return; const{error}=await sb.from('mant_unidades').delete().eq('edificio',e).eq('nombre',n); if(error){alert(error.message);return;} catReload(); }
 
 /* ---------------- REGISTROS PENDIENTES (aprobación) ---------------- */
 async function pageRegistros(){
@@ -3162,24 +3184,343 @@ async function delKudo(id){
 async function createKudo(e){e.preventDefault();const para=document.getElementById('kPara').value;const t=document.getElementById('kT').value.trim();if(!t)return false;const{error}=await sb.from('kudos').insert({de_id:ME.id,de_nombre:PROFILE.nombre,para_nombre:para,texto:t});if(error){alert('Error: '+error.message);return false;}show('kudos');toast('✓ Reconocimiento enviado');return false;}
 
 /* ---------------- INCIDENCIAS ---------------- */
-let incFormOpen=false;
-const INC_EST2={Abierta:'b-red','En curso':'b-amber',Resuelta:'b-green'};
-const INC_PRIO2={Alta:'b-red',Media:'b-amber',Baja:'b-grey'};
+/* ================= MANTENIMIENTO · INCIDENCIAS (v2) ================= */
+let incFormOpen=false, incTab='bandeja', incSel=null, incTimerInt=null;
+let incFilters={ambito:'',edificio:'',unidad:'',urgencia:'',estado:''};
+let MANT_EDIF=[], MANT_UNI=[], MANT_STAFF=[], INC=[], INC_FOTOS={};
+const INC_URG={alta:['Alta','b-red','🔴'],media:['Media','b-amber','🟠'],baja:['Baja','b-grey','🟢']};
+const INC_EST={pendiente:['Pendiente','b-grey'],asignada:['Asignada','b-blue'],en_curso:['En curso','b-amber'],pausada:['Pausada','b-amber'],a_medias:['A medias','b-amber'],terminada:['Terminada','b-green'],cancelada:['Cancelada','b-grey']};
+const INC_VIA={cliente_ota:'🌐 Cliente (OTA)',limpieza:'🧹 Limpieza',personal:'👤 Personal interno'};
+function incCan(){ return CAN_MANAGE.includes(PROFILE.role); }
+function incEsMant(){ return PROFILE.dept==='Mantenimiento' || incCan(); }
+function incMyTeam(){ return PROFILE.org_equipo||''; }
+function setIncTab(t){ incTab=t; incSel=null; if(incTimerInt){clearInterval(incTimerInt);incTimerInt=null;} show('incidencias'); }
+function incOpen(id){ incSel=id; show('incidencias'); }
+function incBack(){ incSel=null; if(incTimerInt){clearInterval(incTimerInt);incTimerInt=null;} show('incidencias'); }
+function incFmtT(s){ s=Math.max(0,Math.floor(s||0)); const h=Math.floor(s/3600),m=Math.floor(s%3600/60),ss=s%60; return h?(h+'h '+m+'m'):(m?(m+'m '+ss+'s'):(ss+'s')); }
+function incElapsed(i){ return (i.tiempo_seg||0)+(i.timer_ini?Math.floor((Date.now()-new Date(i.timer_ini).getTime())/1000):0); }
+function incEnsureStyle(){ if(document.getElementById('incStyle'))return; const s=document.createElement('style'); s.id='incStyle'; s.textContent=`
+  .inc-chips{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px}
+  .inc-chip{background:#fff;border:1px solid var(--gris2);border-radius:20px;padding:6px 13px;font-size:13px;font-weight:600;color:var(--suave);cursor:pointer;font-family:inherit}
+  .inc-chip.on{background:var(--azul);color:#fff;border-color:var(--azul)}
+  .inc-filters{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px}
+  .inc-filters select{padding:7px 10px;border:1px solid var(--gris2);border-radius:8px;font-size:13px;font-family:inherit;background:#fff}
+  .inc-clear{background:none;border:1px solid var(--gris2);border-radius:8px;padding:7px 10px;font-size:13px;cursor:pointer;color:var(--suave)}
+  .inc-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px}
+  .inc-card{background:#fff;border:1px solid var(--gris2);border-left:4px solid var(--gris2);border-radius:12px;padding:13px 15px;box-shadow:var(--sombra)}
+  .inc-card.urg-alta{border-left-color:#d33}.inc-card.urg-media{border-left-color:#e6a700}.inc-card.urg-baja{border-left-color:#9aa3ad}
+  .inc-card-top{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+  .inc-live{font-size:11px;font-weight:700;color:#e6a700}
+  .inc-card-loc{font-weight:700;font-size:14.5px;margin:7px 0 3px;color:var(--texto)}
+  .inc-card-desc{font-size:13px;color:var(--texto);margin-bottom:7px}
+  .inc-card-meta{font-size:12.5px;color:var(--azul);font-weight:600}
+  .inc-tom{color:#2c6b39}
+  .inc-card-meta2{font-size:11.5px;color:var(--suave);margin-top:3px}
+  .inc-card-actions{display:flex;gap:6px;margin-top:10px;flex-wrap:wrap}
+  .btn-sm{background:var(--azul);color:#fff;border:none;border-radius:8px;padding:7px 12px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit}
+  .btn-sm.ghost{background:#fff;color:var(--azul);border:1px solid var(--azul)}
+  .btn-sm.x{background:#fff;color:#c0392b;border:1px solid var(--gris2)}
+  .inc-h3{font-size:13px;text-transform:uppercase;letter-spacing:.5px;color:var(--suave);margin:14px 0 8px}
+  .inc-kv{font-size:13.5px;margin:4px 0}
+  .inc-gal{display:flex;gap:8px;flex-wrap:wrap}
+  .inc-thumb{width:120px;height:90px;object-fit:cover;border-radius:8px;border:1px solid var(--gris2)}
+  .inc-timer{display:flex;align-items:center;gap:16px;background:var(--gris);border-radius:10px;padding:12px 16px;margin-bottom:10px;flex-wrap:wrap}
+  .inc-timer-disp{font-size:26px;font-weight:800;color:var(--azul);font-variant-numeric:tabular-nums}
+  .inc-man{margin-top:8px}
+  .inc-final{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
+  .kp-day-bar2{flex:1;display:flex;gap:2px;align-items:flex-end;width:82%;max-width:30px;height:100%}
+  .kp-day-bar2 i{flex:1;border-radius:4px 4px 0 0;min-height:2px}
+  .kp-day-bar2 .b1{background:var(--gris2)}.kp-day-bar2 .b2{background:var(--azul)}
+  .kp-legend{display:flex;gap:16px;font-size:12px;color:var(--suave);margin-top:8px}
+  .kp-legend i{display:inline-block;width:11px;height:11px;border-radius:3px;margin-right:4px;vertical-align:middle}`;
+  document.head.appendChild(s); }
+
 async function pageIncidencias(){
-  const {data}=await sb.from('incidencias').select('*').order('created_at',{ascending:false});
-  const I=data||[];
-  const {data:provs}=await sb.from('proveedores').select('nombre');
-  const provOpts=['<option value="">— Sin asignar —</option>'].concat((provs||[]).map(p=>`<option>${esc(p.nombre)}</option>`)).join('');
-  const ab=I.filter(x=>x.estado==='Abierta').length,enc=I.filter(x=>x.estado==='En curso').length,res=I.filter(x=>x.estado==='Resuelta').length;
-  const rows=I.map(i=>`<tr><td><b>${esc(i.titulo)}</b>${i.nota?`<br><small style="color:var(--suave)">${esc(i.nota)}</small>`:''}</td><td>${esc(i.propiedad||'')}</td><td><span class="badge ${INC_PRIO2[i.prioridad]||'b-grey'}">${esc(i.prioridad)}</span></td><td>${esc(i.proveedor||'—')}</td><td><select onchange="incEstado(${i.id},this.value)" style="padding:5px 8px;border:1px solid var(--gris2);font-size:12.5px">${Object.keys(INC_EST2).map(e=>`<option ${i.estado===e?'selected':''}>${e}</option>`).join('')}</select></td></tr>`).join('');
-  document.getElementById('main').innerHTML=`<div class="page-title">Incidencias y mantenimiento</div><div class="page-sub">Reporta y haz seguimiento de averías por propiedad</div>
-    <div class="cards" style="margin-bottom:18px"><div class="card"><h3>🔴 Abiertas</h3><div class="big" style="color:var(--rojo)">${ab}</div></div><div class="card"><h3>🟡 En curso</h3><div class="big" style="color:var(--amarillo)">${enc}</div></div><div class="card"><h3>🟢 Resueltas</h3><div class="big green">${res}</div></div></div>
-    <div style="margin-bottom:14px"><button class="btn" onclick="incFormOpen=!incFormOpen;show('incidencias')">${incFormOpen?'✕ Cerrar':'➕ Nueva incidencia'}</button></div>
-    ${incFormOpen?`<div class="panel" style="max-width:640px"><form class="box" onsubmit="return incCreate(event)" style="max-width:none"><label>Título</label><input id="iT" required placeholder="Ej: Aire acondicionado con ruido"><div class="row"><div><label>Propiedad / apartamento</label><input id="iP" required></div><div><label>Prioridad</label><select id="iPr"><option>Alta</option><option selected>Media</option><option>Baja</option></select></div></div><label>Proveedor (opcional)</label><select id="iProv">${provOpts}</select><label>Nota</label><textarea id="iN" rows="2"></textarea><div><button class="btn" type="submit">Crear incidencia</button></div></form></div>`:''}
-    <div class="panel"><table><thead><tr><th>Incidencia</th><th>Propiedad</th><th>Prioridad</th><th>Proveedor</th><th>Estado</th></tr></thead><tbody>${rows||'<tr><td colspan="5" style="color:var(--suave)">Sin incidencias.</td></tr>'}</tbody></table></div>`;
+  asgEnsureStyle(); incEnsureStyle();
+  const canManage=incCan();
+  const inc=await sb.from('mant_incidencias').select('*').order('created_at',{ascending:false});
+  if(inc.error){ document.getElementById('main').innerHTML=`<div class="page-title">Incidencias y mantenimiento</div><div class="panel">No se pudo cargar. ¿Ejecutaste <b>supabase_mantenimiento.sql</b> en Supabase?<br><small style="color:var(--suave)">${esc(inc.error.message)}</small></div>`; return; }
+  INC=inc.data||[];
+  const [ed,un,fo,stf]=await Promise.all([
+    sb.from('mant_edificios').select('*').order('orden').order('nombre'),
+    sb.from('mant_unidades').select('*').order('orden').order('nombre'),
+    sb.from('mant_fotos').select('*').order('id'),
+    sb.from('profiles').select('id,nombre,org_equipo,dept').eq('dept','Mantenimiento').eq('estado','aprobado'),
+  ]);
+  MANT_EDIF=ed.data||[]; MANT_UNI=un.data||[]; MANT_STAFF=stf.data||[];
+  INC_FOTOS={}; (fo.data||[]).forEach(f=>{(INC_FOTOS[f.incidencia_id]=INC_FOTOS[f.incidencia_id]||[]).push(f);});
+  if(!incFilters.ambito){ incFilters.ambito = incEsMant()? (canManage?'todas':'mias') : 'reportadas'; }
+  const tabs=`<div class="asg-tabs">
+    <button class="asg-tab ${incTab==='bandeja'?'on':''}" onclick="setIncTab('bandeja')">📥 Bandeja</button>
+    <button class="asg-tab ${incTab==='historial'?'on':''}" onclick="setIncTab('historial')">📜 Historial</button>
+    ${canManage?`<button class="asg-tab ${incTab==='panel'?'on':''}" onclick="setIncTab('panel')">📊 Panel</button>`:''}</div>`;
+  let body;
+  if(incSel!=null){ body=renderIncDetail(incSel); }
+  else if(incTab==='panel'&&canManage){ body=renderIncPanel(INC); }
+  else if(incTab==='historial'){ body=renderIncList(true); }
+  else { body=renderIncBandeja(); }
+  document.getElementById('main').innerHTML=`<div class="page-title">Incidencias y mantenimiento</div><div class="page-sub">Reporta y haz seguimiento de averías por edificio y apartamento</div>${incSel!=null?'':tabs}${body}`;
+  if(incTimerInt){clearInterval(incTimerInt);incTimerInt=null;}
+  if(incSel!=null){ const i=INC.find(x=>String(x.id)===String(incSel)); if(i&&i.timer_ini){ incTimerInt=setInterval(()=>{const el=document.getElementById('incTimerDisp'); if(el)el.textContent=incFmtT(incElapsed(i)); else {clearInterval(incTimerInt);incTimerInt=null;} },1000); } }
 }
-async function incCreate(e){e.preventDefault();const g=id=>{const el=document.getElementById(id);return el?el.value.trim():'';};if(!g('iT'))return false;const{error}=await sb.from('incidencias').insert({titulo:g('iT'),propiedad:g('iP'),prioridad:document.getElementById('iPr').value,proveedor:document.getElementById('iProv').value,estado:'Abierta',nota:g('iN'),creado_por:PROFILE.nombre});if(error){alert('Error: '+error.message);return false;}incFormOpen=false;show('incidencias');toast('✓ Incidencia creada');return false;}
-async function incEstado(id,est){await sb.from('incidencias').update({estado:est}).eq('id',id);show('incidencias');}
+function incSetAmbito(a){ incFilters.ambito=a; show('incidencias'); }
+function incSetFilter(k,v){ incFilters[k]=v; if(k==='edificio') incFilters.unidad=''; show('incidencias'); }
+function incClearFilters(){ incFilters.edificio='';incFilters.unidad='';incFilters.urgencia='';incFilters.estado=''; show('incidencias'); }
+function renderIncBandeja(){
+  const f=incFilters;
+  const chips=[];
+  if(incEsMant()){ chips.push(['mias','🙋 Mías'],['equipo','👥 Mi equipo'],['sinasignar','📭 Sin asignar']); }
+  chips.push(['reportadas','📤 Reportadas por mí']);
+  if(incCan()) chips.push(['todas','🗂️ Todas']);
+  const chipsHTML=chips.map(([k,l])=>`<button class="inc-chip ${f.ambito===k?'on':''}" onclick="incSetAmbito('${k}')">${l}</button>`).join('');
+  const edOpts=`<option value="">Todos los edificios</option>`+MANT_EDIF.map(e=>`<option ${f.edificio===e.nombre?'selected':''}>${esc(e.nombre)}</option>`).join('');
+  const uniList=MANT_UNI.filter(u=>!f.edificio||u.edificio===f.edificio);
+  const unOpts=`<option value="">Todas las unidades</option>`+uniList.map(u=>`<option ${f.unidad===u.nombre?'selected':''}>${esc(u.nombre)}</option>`).join('');
+  const urgOpts=`<option value="">Toda urgencia</option>`+Object.entries(INC_URG).map(([k,v])=>`<option value="${k}" ${f.urgencia===k?'selected':''}>${v[2]} ${v[0]}</option>`).join('');
+  const estOpts=`<option value="">Todo estado</option>`+['pendiente','asignada','en_curso','pausada','a_medias'].map(k=>`<option value="${k}" ${f.estado===k?'selected':''}>${INC_EST[k][0]}</option>`).join('');
+  return `
+    <div style="margin-bottom:12px"><button class="btn" onclick="incFormOpen=!incFormOpen;show('incidencias')">${incFormOpen?'✕ Cerrar':'➕ Nueva incidencia'}</button></div>
+    ${incFormOpen?incFormHTML():''}
+    <div class="inc-chips">${chipsHTML}</div>
+    <div class="inc-filters">
+      <select onchange="incSetFilter('edificio',this.value)">${edOpts}</select>
+      <select onchange="incSetFilter('unidad',this.value)">${unOpts}</select>
+      <select onchange="incSetFilter('urgencia',this.value)">${urgOpts}</select>
+      <select onchange="incSetFilter('estado',this.value)">${estOpts}</select>
+      ${(f.edificio||f.unidad||f.urgencia||f.estado)?`<button class="inc-clear" onclick="incClearFilters()">✕ Limpiar</button>`:''}
+    </div>
+    ${renderIncList(false)}`;
+}
+function incFilteredList(hist){
+  const f=incFilters, me=ME.id;
+  return INC.filter(i=>{
+    const done=(i.estado==='terminada'||i.estado==='cancelada');
+    if(hist){ if(!done) return false; } else { if(done) return false; }
+    if(!hist){
+      if(f.ambito==='reportadas'){ if(i.creado_por!==me) return false; }
+      else if(f.ambito==='mias'){ if(i.tomada_por!==me && i.asignado_a!==me) return false; }
+      else if(f.ambito==='equipo'){ const t=incMyTeam(); if(!(i.asignado_equipo==='*'||(t&&i.asignado_equipo===t))) return false; }
+      else if(f.ambito==='sinasignar'){ if(!(i.estado==='pendiente' && !i.asignado_a)) return false; const t=incMyTeam(); if(!(incCan()||i.asignado_equipo==='*'||(t&&i.asignado_equipo===t))) return false; }
+    }
+    if(f.edificio && i.edificio!==f.edificio) return false;
+    if(f.unidad && i.unidad!==f.unidad) return false;
+    if(f.urgencia && i.urgencia!==f.urgencia) return false;
+    if(f.estado && i.estado!==f.estado) return false;
+    return true;
+  });
+}
+function renderIncList(hist){
+  const items=incFilteredList(hist);
+  if(!items.length) return `<div class="panel" style="color:var(--suave)">No hay incidencias en esta vista.</div>`;
+  return `<div class="inc-cards">${items.map(incCardHTML).join('')}</div>`;
+}
+function incCardHTML(i){
+  const u=INC_URG[i.urgencia]||INC_URG.media, e=INC_EST[i.estado]||INC_EST.pendiente;
+  const nf=(INC_FOTOS[i.id]||[]).filter(x=>x.tipo!=='solucion').length;
+  const asg = i.asignado_a_nombre? ('→ '+esc(i.asignado_a_nombre)) : (i.asignado_equipo==='*'?'→ Todos los equipos':(i.asignado_equipo?('→ '+esc(i.asignado_equipo)):'→ Sin asignar'));
+  const tom = i.tomada_por_nombre?`<span class="inc-tom">· 🛠 ${esc(i.tomada_por_nombre)}</span>`:'';
+  const me=ME.id;
+  const puedeTomar = incEsMant() && i.estado==='pendiente' && !i.asignado_a;
+  return `<div class="inc-card urg-${i.urgencia}">
+    <div class="inc-card-top"><span class="badge ${u[1]}">${u[2]} ${u[0]}</span><span class="badge ${e[1]}">${e[0]}</span>${i.timer_ini?'<span class="inc-live">⏱ en curso</span>':''}</div>
+    <div class="inc-card-loc">🏠 ${esc(i.edificio||'—')}${i.unidad?' · '+esc(i.unidad):''}</div>
+    <div class="inc-card-desc">${esc((i.descripcion||'').slice(0,140))}${(i.descripcion||'').length>140?'…':''}</div>
+    <div class="inc-card-meta">${asg} ${tom} ${nf?('· 📷 '+nf):''}</div>
+    <div class="inc-card-meta2">${INC_VIA[i.via]||'—'} · por ${esc(i.creado_por_nombre||'—')} · ${new Date(i.created_at).toLocaleString('es-ES',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}</div>
+    <div class="inc-card-actions">
+      ${puedeTomar?`<button class="btn-sm" onclick="incTomar(${i.id})">✋ Tomar</button>`:''}
+      <button class="btn-sm ghost" onclick="incOpen(${i.id})">👁 Abrir</button>
+      ${(incCan()||i.creado_por===me)?`<button class="btn-sm x" onclick="incDelete(${i.id})">🗑</button>`:''}
+    </div></div>`;
+}
+function incFormHTML(){
+  const edOpts=`<option value="">— Selecciona —</option>`+MANT_EDIF.map(e=>`<option>${esc(e.nombre)}</option>`).join('');
+  const teams=[...new Set(MANT_STAFF.map(s=>s.org_equipo).filter(Boolean))];
+  const teamOpts=`<option value="*">Todos los equipos</option>`+teams.map(t=>`<option>${esc(t)}</option>`).join('');
+  const perOpts=`<option value="">Todo el equipo (que alguien la tome)</option>`+MANT_STAFF.map(s=>`<option value="${s.id}">${esc(s.nombre)}${s.org_equipo?' · '+esc(s.org_equipo):''}</option>`).join('');
+  return `<div class="panel" style="max-width:680px"><form class="box" style="max-width:none" onsubmit="return incCreate(event)">
+    <label>Vía de aviso</label>
+    <select id="iVia"><option value="cliente_ota">🌐 Cliente (OTA)</option><option value="limpieza">🧹 Personal de limpieza</option><option value="personal" selected>👤 Personal interno</option></select>
+    <label>Urgencia</label>
+    <select id="iUrg"><option value="alta">🔴 Alta · hoy mismo</option><option value="media" selected>🟠 Media · lo antes posible</option><option value="baja">🟢 Baja · cuando convenga</option></select>
+    <div class="row">
+      <div><label>Edificio</label><select id="iEdif" onchange="incFormEdif()">${edOpts}</select></div>
+      <div><label>Unidad / zona</label><select id="iUni"><option value="">— Selecciona edificio —</option></select></div>
+    </div>
+    <label>¿Cuál es la incidencia?</label>
+    <textarea id="iDesc" rows="3" required placeholder="Describe el problema con el máximo detalle"></textarea>
+    <label>Fotos / vídeo (opcional)</label>
+    <input id="iFotos" type="file" accept="image/*,video/*" multiple>
+    <div class="row">
+      <div><label>Asignar a equipo</label><select id="iEquipo" onchange="incFormEquipo()">${teamOpts}</select></div>
+      <div><label>Asignar a persona</label><select id="iPersona">${perOpts}</select></div>
+    </div>
+    <div style="margin-top:10px"><button class="btn" type="submit">Crear incidencia</button></div>
+  </form></div>`;
+}
+function incFormEdif(){ const ed=(document.getElementById('iEdif')||{}).value||''; const uni=document.getElementById('iUni'); if(!uni)return; const list=MANT_UNI.filter(u=>u.edificio===ed); uni.innerHTML=`<option value="">— Selecciona —</option>`+list.map(u=>`<option>${esc(u.nombre)}${u.tipo==='comun'?' (zona común)':''}</option>`).join(''); }
+function incFormEquipo(){ const t=(document.getElementById('iEquipo')||{}).value||'*'; const per=document.getElementById('iPersona'); if(!per)return; const list=MANT_STAFF.filter(s=> t==='*'?true:s.org_equipo===t); per.innerHTML=`<option value="">Todo el equipo (que alguien la tome)</option>`+list.map(s=>`<option value="${s.id}">${esc(s.nombre)}</option>`).join(''); }
+async function incCreate(e){
+  e.preventDefault();
+  const g=id=>{const el=document.getElementById(id);return el?el.value:'';};
+  const desc=(g('iDesc')||'').trim(); if(!desc){alert('Describe la incidencia.');return false;}
+  const personaId=g('iPersona')||null;
+  const persona=personaId?MANT_STAFF.find(s=>String(s.id)===String(personaId)):null;
+  const btn=e.target.querySelector('button[type=submit]'); if(btn){btn.disabled=true;btn.textContent='⏳ Guardando…';}
+  const row={ via:g('iVia'), urgencia:g('iUrg'), edificio:g('iEdif')||null, unidad:g('iUni')||null, descripcion:desc,
+    asignado_equipo:g('iEquipo')||'*', asignado_a:personaId||null, asignado_a_nombre:persona?persona.nombre:null,
+    estado: personaId?'asignada':'pendiente', creado_por:ME.id, creado_por_nombre:PROFILE.nombre };
+  const ins=await sb.from('mant_incidencias').insert(row).select('id').single();
+  if(ins.error){ alert('No se pudo crear: '+ins.error.message); if(btn){btn.disabled=false;btn.textContent='Crear incidencia';} return false; }
+  const id=ins.data.id;
+  await incUpload(id,(document.getElementById('iFotos')||{}).files||[],'reporte');
+  const quien=persona?persona.nombre:('el equipo '+(row.asignado_equipo==='*'?'de Mantenimiento':row.asignado_equipo));
+  const urgTxt=row.urgencia==='alta'?'🔴 URGENTE · ':'';
+  await notifyTeam('Mantenimiento','🛠️',`${urgTxt}Nueva incidencia en ${row.edificio||'—'}${row.unidad?' · '+row.unidad:''} (asignada a ${quien})`,'incidencias');
+  incFormOpen=false; toast('✓ Incidencia creada'); show('incidencias'); return false;
+}
+async function incUpload(incId, files, tipo){
+  for(const f of (files||[])){
+    if(f.size>25*1024*1024){ alert('"'+f.name+'" supera 25 MB y no se subió.'); continue; }
+    const path=incId+'/'+tipo+'/'+Date.now()+'_'+f.name.replace(/[^\w.\-]/g,'_');
+    const up=await sb.storage.from('mantenimiento').upload(path,f,{upsert:false});
+    if(up.error){ alert('No se pudo subir "'+f.name+'": '+up.error.message); continue; }
+    const {data:pub}=sb.storage.from('mantenimiento').getPublicUrl(path);
+    await sb.from('mant_fotos').insert({incidencia_id:incId,url:pub.publicUrl,path,tipo,mime:f.type,subido_por:PROFILE.nombre});
+  }
+}
+async function incTomar(id){
+  await sb.from('mant_incidencias').update({estado:'asignada',tomada_por:ME.id,tomada_por_nombre:PROFILE.nombre,updated_at:new Date().toISOString()}).eq('id',id);
+  toast('✓ Incidencia tomada'); incOpen(id);
+}
+async function incTimer(id,action){
+  const i=INC.find(x=>String(x.id)===String(id)); if(!i)return;
+  const now=Date.now(); const upd={updated_at:new Date().toISOString()};
+  if(action==='start'){ upd.timer_ini=new Date().toISOString(); upd.estado='en_curso'; if(!i.tomada_por){upd.tomada_por=ME.id;upd.tomada_por_nombre=PROFILE.nombre;} }
+  else if(action==='pause'){ const add=i.timer_ini?Math.floor((now-new Date(i.timer_ini).getTime())/1000):0; upd.tiempo_seg=(i.tiempo_seg||0)+add; upd.timer_ini=null; upd.estado='pausada'; }
+  await sb.from('mant_incidencias').update(upd).eq('id',id); show('incidencias');
+}
+async function incTiempoManual(id){
+  const v=document.getElementById('incManMin'); if(!v)return; const min=parseInt(v.value,10); if(isNaN(min)||min<0){alert('Pon un número de minutos válido.');return;}
+  await sb.from('mant_incidencias').update({tiempo_seg:min*60,timer_ini:null,updated_at:new Date().toISOString()}).eq('id',id);
+  toast('✓ Tiempo guardado'); show('incidencias');
+}
+async function incFinalizar(id,estadoFinal){
+  const i=INC.find(x=>String(x.id)===String(id)); if(!i)return;
+  const add=i.timer_ini?Math.floor((Date.now()-new Date(i.timer_ini).getTime())/1000):0;
+  const nota=(document.getElementById('incNota')||{}).value||i.nota_solucion||null;
+  const upd={tiempo_seg:(i.tiempo_seg||0)+add,timer_ini:null,nota_solucion:nota,updated_at:new Date().toISOString()};
+  if(estadoFinal==='terminada'){ upd.estado='terminada'; upd.resuelto_por_nombre=PROFILE.nombre; upd.resuelta_at=new Date().toISOString(); }
+  else { upd.estado='a_medias'; }
+  await sb.from('mant_incidencias').update(upd).eq('id',id);
+  await incUpload(id,(document.getElementById('incFotoSol')||{}).files||[],'solucion');
+  toast(estadoFinal==='terminada'?'✅ Incidencia terminada':'⏸️ Guardada a medias');
+  if(estadoFinal==='terminada'){ incSel=null; if(incTimerInt){clearInterval(incTimerInt);incTimerInt=null;} }
+  show('incidencias');
+}
+async function incCancelar(id){
+  if(!confirm('¿Cancelar y devolver la incidencia a pendiente para que otra persona la tome?'))return;
+  await sb.from('mant_incidencias').update({estado:'pendiente',tomada_por:null,tomada_por_nombre:null,timer_ini:null,updated_at:new Date().toISOString()}).eq('id',id);
+  toast('Incidencia devuelta a pendiente'); incSel=null; show('incidencias');
+}
+async function incDelete(id){
+  if(!confirm('¿Eliminar esta incidencia de forma permanente?'))return;
+  const {data:fotos}=await sb.from('mant_fotos').select('path').eq('incidencia_id',id);
+  const paths=(fotos||[]).map(f=>f.path).filter(Boolean); if(paths.length){ try{await sb.storage.from('mantenimiento').remove(paths);}catch(e){} }
+  await sb.from('mant_incidencias').delete().eq('id',id); incSel=null; toast('Eliminada'); show('incidencias');
+}
+function renderIncDetail(id){
+  const i=INC.find(x=>String(x.id)===String(id));
+  if(!i) return `<button class="btn-sm ghost" onclick="incBack()">← Volver</button><div class="panel" style="margin-top:12px">Incidencia no encontrada.</div>`;
+  const u=INC_URG[i.urgencia]||INC_URG.media, e=INC_EST[i.estado]||INC_EST.pendiente;
+  const fotos=INC_FOTOS[i.id]||[]; const fr=fotos.filter(x=>x.tipo!=='solucion'), fs=fotos.filter(x=>x.tipo==='solucion');
+  const me=ME.id;
+  const puedeTomar = incEsMant() && i.estado==='pendiente' && !i.asignado_a;
+  const puedeTrabajar = incEsMant() && (i.tomada_por===me || i.asignado_a===me || incCan()) && i.estado!=='terminada' && i.estado!=='cancelada';
+  const running=!!i.timer_ini;
+  const galeria=(arr,vacio)=> arr.length? `<div class="inc-gal">${arr.map(f=>{ const isVid=(f.mime||'').startsWith('video'); return isVid?`<video src="${esc(f.url)}" controls class="inc-thumb"></video>`:`<a href="${esc(f.url)}" target="_blank"><img src="${esc(f.url)}" class="inc-thumb"></a>`; }).join('')}</div>` : `<div style="color:var(--suave);font-size:13px">${vacio}</div>`;
+  const asg = i.asignado_a_nombre? esc(i.asignado_a_nombre) : (i.asignado_equipo==='*'?'Todos los equipos':(i.asignado_equipo?esc(i.asignado_equipo):'Sin asignar'));
+  return `
+  <button class="btn-sm ghost" onclick="incBack()">← Volver a la bandeja</button>
+  <div class="panel" style="margin-top:12px">
+    <div class="inc-card-top"><span class="badge ${u[1]}">${u[2]} ${u[0]}</span><span class="badge ${e[1]}">${e[0]}</span>${running?'<span class="inc-live">⏱ en curso</span>':''}</div>
+    <h2 style="margin:8px 0 2px">🏠 ${esc(i.edificio||'—')}${i.unidad?' · '+esc(i.unidad):''}</h2>
+    <div style="color:var(--suave);font-size:13px;margin-bottom:10px">${INC_VIA[i.via]||'—'} · reportada por <b>${esc(i.creado_por_nombre||'—')}</b> · ${new Date(i.created_at).toLocaleString('es-ES')}</div>
+    <p style="font-size:14.5px;white-space:pre-wrap">${esc(i.descripcion||'')}</p>
+    <div class="inc-kv"><b>Asignada a:</b> ${asg}${i.tomada_por_nombre?` · <b>realiza:</b> 🛠 ${esc(i.tomada_por_nombre)}`:''}</div>
+    <h3 class="inc-h3">📷 Fotos del reporte</h3>${galeria(fr,'Sin fotos de reporte.')}
+  </div>`
+  + ( (i.estado==='terminada')? `<div class="panel"><h3 class="inc-h3">✅ Resolución</h3>
+       <div class="inc-kv"><b>Resuelta por:</b> ${esc(i.resuelto_por_nombre||'—')} · ${i.resuelta_at?new Date(i.resuelta_at).toLocaleString('es-ES'):''}</div>
+       <div class="inc-kv"><b>Tiempo empleado:</b> ${incFmtT(i.tiempo_seg)}</div>
+       ${i.nota_solucion?`<div class="inc-kv"><b>Nota:</b> ${esc(i.nota_solucion)}</div>`:''}
+       <h3 class="inc-h3">📷 Fotos de la solución</h3>${galeria(fs,'Sin fotos de solución.')}</div>` : '')
+  + ( puedeTomar? `<div class="panel"><button class="btn" onclick="incTomar(${i.id})">✋ Tomar esta incidencia</button></div>`:'')
+  + ( puedeTrabajar? `<div class="panel">
+       <h3 class="inc-h3">🛠 Ejecutar y resolver</h3>
+       <div class="inc-timer"><div class="inc-timer-disp" id="incTimerDisp">${incFmtT(incElapsed(i))}</div>
+         <div class="inc-timer-btns">${running?`<button class="btn-sm" onclick="incTimer(${i.id},'pause')">⏸️ Pausar</button>`:`<button class="btn-sm" onclick="incTimer(${i.id},'start')">▶️ ${i.tiempo_seg?'Reanudar':'Iniciar'}</button>`}</div>
+       </div>
+       <div class="inc-man"><label>O introduce el tiempo manualmente (minutos)</label><div style="display:flex;gap:8px"><input id="incManMin" type="number" min="0" placeholder="Ej: 45" style="max-width:120px"><button class="btn-sm ghost" onclick="incTiempoManual(${i.id})">Guardar tiempo</button></div></div>
+       <label style="margin-top:12px;display:block">Fotos de la solución</label><input id="incFotoSol" type="file" accept="image/*,video/*" multiple>
+       <label style="margin-top:10px;display:block">Nota de la solución (opcional)</label><textarea id="incNota" rows="2">${esc(i.nota_solucion||'')}</textarea>
+       <div class="inc-final">
+         <button class="btn" onclick="incFinalizar(${i.id},'terminada')">✅ Marcar terminada</button>
+         <button class="btn-sm" onclick="incFinalizar(${i.id},'a_medias')">⏸️ Dejar a medias</button>
+         <button class="btn-sm x" onclick="incCancelar(${i.id})">✖️ Cancelar (vuelve a pendiente)</button>
+       </div>
+     </div>`:'');
+}
+function renderIncPanel(I){
+  const pad=n=>(''+n).padStart(2,'0'); const today=new Date();
+  const iso=d=>d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());
+  const todayISO=iso(today);
+  const fechaDe=x=>(x.created_at||'').slice(0,10);
+  const resDe=x=>(x.resuelta_at||'').slice(0,10);
+  const pend=I.filter(x=>['pendiente','asignada','en_curso','pausada','a_medias'].includes(x.estado));
+  const term=I.filter(x=>x.estado==='terminada');
+  const hoyNuevas=I.filter(x=>fechaDe(x)===todayISO).length;
+  const hoyResueltas=term.filter(x=>resDe(x)===todayISO).length;
+  const sinAsignar=I.filter(x=>x.estado==='pendiente'&&!x.asignado_a).length;
+  const urgentesAbiertas=pend.filter(x=>x.urgencia==='alta').length;
+  const tasa=I.length?Math.round(term.length/I.length*100):0;
+  let tmedio='—'; if(term.length){ tmedio=incFmtT(term.reduce((a,x)=>a+(x.tiempo_seg||0),0)/term.length); }
+  let antig='—'; if(pend.length){ antig=(pend.reduce((a,x)=>a+((today-new Date(x.created_at))/86400000),0)/pend.length).toFixed(1); }
+  const porEdif={},porUni={},porUrg={alta:0,media:0,baja:0},porVia={},repPorPersona={},resPorPersona={};
+  I.forEach(x=>{ const ed=(x.edificio||'(sin edificio)'); porEdif[ed]=(porEdif[ed]||0)+1;
+    const un=((x.edificio?x.edificio+' · ':'')+(x.unidad||'(sin unidad)')); porUni[un]=(porUni[un]||0)+1;
+    if(porUrg[x.urgencia]!==undefined)porUrg[x.urgencia]++;
+    const v=INC_VIA[x.via]||'—'; porVia[v]=(porVia[v]||0)+1;
+    const cr=x.creado_por_nombre||'—'; repPorPersona[cr]=(repPorPersona[cr]||0)+1; });
+  term.forEach(x=>{ const r=x.resuelto_por_nombre||'—'; resPorPersona[r]=(resPorPersona[r]||0)+1; });
+  const dias=[]; for(let i=13;i>=0;i--){ const d=new Date(today); d.setDate(today.getDate()-i); const k=iso(d); dias.push({label:pad(d.getDate())+'/'+pad(d.getMonth()+1),r:term.filter(x=>resDe(x)===k).length,c:I.filter(x=>fechaDe(x)===k).length}); }
+  const maxDia=Math.max(1,...dias.map(x=>Math.max(x.r,x.c)));
+  const rank=(obj,top)=>{ const arr=Object.entries(obj).sort((a,b)=>b[1]-a[1]).slice(0,top); const mx=Math.max(1,...arr.map(x=>x[1])); return arr.length?arr.map(([k,v])=>`<div class="kp-row"><span class="kp-k">${esc(k)}</span><span class="kp-bar"><i style="width:${Math.round(v/mx*100)}%"></i></span><b class="kp-v">${v}</b></div>`).join(''):'<div style="color:var(--suave);font-size:13px">Sin datos todavía</div>'; };
+  return `
+    <div class="kpi-cards">
+      <div class="kpi"><div class="kpi-n" style="color:var(--rojo)">${pend.length}</div><div class="kpi-l">Pendientes</div></div>
+      <div class="kpi"><div class="kpi-n">${sinAsignar}</div><div class="kpi-l">Sin asignar</div></div>
+      <div class="kpi"><div class="kpi-n" style="color:var(--rojo)">${urgentesAbiertas}</div><div class="kpi-l">Urgentes abiertas</div></div>
+      <div class="kpi"><div class="kpi-n" style="color:#2c6b39">${hoyResueltas}</div><div class="kpi-l">Resueltas hoy</div></div>
+      <div class="kpi"><div class="kpi-n">${hoyNuevas}</div><div class="kpi-l">Nuevas hoy</div></div>
+      <div class="kpi"><div class="kpi-n">${tasa}%</div><div class="kpi-l">Tasa de resolución</div></div>
+      <div class="kpi"><div class="kpi-n">${tmedio}</div><div class="kpi-l">Tiempo medio resolución</div></div>
+      <div class="kpi"><div class="kpi-n">${antig}</div><div class="kpi-l">Días medios pendiente</div></div>
+    </div>
+    <div class="panel"><h2>📈 Creadas vs resueltas · últimos 14 días</h2>
+      <div class="kp-days">${dias.map(x=>`<div class="kp-day"><div class="kp-day-bar2"><i class="b1" style="height:${Math.round(x.c/maxDia*100)}%" title="Creadas: ${x.c}"></i><i class="b2" style="height:${Math.round(x.r/maxDia*100)}%" title="Resueltas: ${x.r}"></i></div><small>${x.label}</small></div>`).join('')}</div>
+      <div class="kp-legend"><span><i style="background:var(--gris2)"></i>Creadas</span><span><i style="background:var(--azul)"></i>Resueltas</span></div></div>
+    <div class="kp-grid2">
+      <div class="panel"><h2>🏢 Por edificio</h2>${rank(porEdif,10)}</div>
+      <div class="panel"><h2>🏠 Por apartamento / zona</h2>${rank(porUni,10)}</div>
+      <div class="panel"><h2>📤 Reportes por persona</h2>${rank(repPorPersona,10)}</div>
+      <div class="panel"><h2>🛠 Resoluciones por persona</h2>${rank(resPorPersona,10)}</div>
+    </div>
+    <div class="kp-grid2">
+      <div class="panel"><h2>🚦 Por urgencia</h2>${rank({['🔴 Alta']:porUrg.alta,['🟠 Media']:porUrg.media,['🟢 Baja']:porUrg.baja},3)}</div>
+      <div class="panel"><h2>📥 Por vía de aviso</h2>${rank(porVia,5)}</div>
+    </div>`;
+}
 
 /* ---------------- VIDEOS EXPLICATIVOS ---------------- */
 let vidFormOpen=false;
@@ -3346,8 +3687,64 @@ function asgEnsureStyle(){ if(document.getElementById('asgStyle')) return; const
   .apz-table tr{page-break-inside:avoid}.apz-table thead{display:table-header-group}
   .apz-out{color:#a23b2c;font-weight:700}.apz-in{color:#2c6b39;font-weight:700}
   .apz-h3{font-size:13px;text-transform:uppercase;letter-spacing:1px;color:#555;margin:10px 0 8px;font-weight:800}
-  .apz-res{columns:3;font-size:12.5px;line-height:1.8}.apz-res div{break-inside:avoid}`;
+  .apz-res{columns:3;font-size:12.5px;line-height:1.8}.apz-res div{break-inside:avoid}
+  .kpi-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:16px}
+  .kpi{background:#fff;border:1px solid var(--gris2);border-radius:14px;padding:16px 18px;box-shadow:var(--sombra)}
+  .kpi-n{font-size:30px;font-weight:800;color:var(--azul);line-height:1}
+  .kpi-l{font-size:12px;color:var(--suave);margin-top:6px;font-weight:600;text-transform:uppercase;letter-spacing:.4px}
+  .kp-grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:14px}
+  .kp-grid2 .panel{margin:0}
+  .kp-row{display:flex;align-items:center;gap:10px;margin:7px 0}
+  .kp-k{flex:0 0 38%;font-size:13px;font-weight:600;color:var(--texto);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .kp-bar{flex:1;height:9px;background:var(--gris2);border-radius:6px;overflow:hidden}
+  .kp-bar i{display:block;height:100%;background:var(--azul);border-radius:6px}
+  .kp-v{flex:0 0 auto;font-size:13px;color:var(--azul);min-width:24px;text-align:right}
+  .kp-days{display:flex;align-items:flex-end;gap:6px;height:130px;padding-top:8px}
+  .kp-day{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;min-width:0}
+  .kp-day-bar{flex:1;width:60%;max-width:26px;display:flex;align-items:flex-end;background:var(--gris);border-radius:5px 5px 0 0;overflow:hidden}
+  .kp-day-bar i{width:100%;background:var(--azul);border-radius:5px 5px 0 0;min-height:2px}
+  .kp-day small{font-size:9.5px;color:var(--suave)}.kp-day b{font-size:11px;color:var(--azul)}
+  .kp-tipos{display:flex;gap:16px;flex-wrap:wrap;font-size:14px}
+  .kp-tipo{background:#fff;border:1px solid var(--gris2);border-radius:20px;padding:7px 14px}`;
   document.head.appendChild(s); }
+
+function renderAsgPanel(){
+  const pubs=ASG_PUBS||[];
+  const today=new Date(); const pad=n=>(''+n).padStart(2,'0');
+  const iso=d=>d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());
+  const todayISO=iso(today); const ym=todayISO.slice(0,7);
+  const d7=new Date(today); d7.setDate(today.getDate()-6); const d7ISO=iso(d7);
+  const units=[]; const assigns=[];
+  pubs.forEach(p=>{ (p.unidades||[]).forEach(u=>{
+    units.push({fecha:p.fecha,equipo:(p.equipo||'—'),unidad:((u.unidad||'').trim()||'(sin unidad)'),tipo:u.tipo});
+    [u.t1,u.t2].forEach(w=>{ if(w&&(''+w).trim()) assigns.push({worker:(''+w).trim(),fecha:p.fecha}); });
+  }); });
+  const cHoy=units.filter(u=>u.fecha===todayISO).length;
+  const c7=units.filter(u=>u.fecha>=d7ISO&&u.fecha<=todayISO).length;
+  const cMes=units.filter(u=>(u.fecha||'').slice(0,7)===ym).length;
+  const cTot=units.length;
+  const trabMes={},porTrab={},porUni={},porEq={},tipos={salida:0,salida_entrada:0,entrada:0};
+  assigns.forEach(a=>{ porTrab[a.worker]=(porTrab[a.worker]||0)+1; if((a.fecha||'').slice(0,7)===ym) trabMes[a.worker]=(trabMes[a.worker]||0)+1; });
+  units.forEach(u=>{ porUni[u.unidad]=(porUni[u.unidad]||0)+1; porEq[u.equipo]=(porEq[u.equipo]||0)+1; if(tipos[u.tipo]!==undefined)tipos[u.tipo]++; });
+  const dias=[]; for(let i=13;i>=0;i--){ const d=new Date(today); d.setDate(today.getDate()-i); const k=iso(d); dias.push({label:pad(d.getDate())+'/'+pad(d.getMonth()+1),n:units.filter(u=>u.fecha===k).length}); }
+  const maxDia=Math.max(1,...dias.map(x=>x.n));
+  const rank=(obj,top)=>{ const arr=Object.entries(obj).sort((a,b)=>b[1]-a[1]).slice(0,top); const mx=Math.max(1,...arr.map(x=>x[1])); return arr.length?arr.map(([k,v])=>`<div class="kp-row"><span class="kp-k">${esc(k)}</span><span class="kp-bar"><i style="width:${Math.round(v/mx*100)}%"></i></span><b class="kp-v">${v}</b></div>`).join(''):'<div style="color:var(--suave);font-size:13px">Sin datos todavía</div>'; };
+  return `
+    <div class="kpi-cards">
+      <div class="kpi"><div class="kpi-n">${cHoy}</div><div class="kpi-l">Limpiezas hoy</div></div>
+      <div class="kpi"><div class="kpi-n">${c7}</div><div class="kpi-l">Últimos 7 días</div></div>
+      <div class="kpi"><div class="kpi-n">${cMes}</div><div class="kpi-l">Este mes</div></div>
+      <div class="kpi"><div class="kpi-n">${cTot}</div><div class="kpi-l">Total acumulado</div></div>
+    </div>
+    <div class="panel"><h2>📈 Limpiezas por día · últimos 14 días</h2><div class="kp-days">${dias.map(x=>`<div class="kp-day"><div class="kp-day-bar"><i style="height:${Math.round(x.n/maxDia*100)}%"></i></div><small>${x.label}</small><b>${x.n}</b></div>`).join('')}</div></div>
+    <div class="kp-grid2">
+      <div class="panel"><h2>🏆 Por trabajador · este mes</h2>${rank(trabMes,10)}</div>
+      <div class="panel"><h2>🧮 Acumulado por trabajador</h2>${rank(porTrab,10)}</div>
+      <div class="panel"><h2>🏠 Apartamentos más limpiados</h2>${rank(porUni,10)}</div>
+      <div class="panel"><h2>👥 Por equipo</h2>${rank(porEq,8)}</div>
+    </div>
+    <div class="panel"><h2>🔄 Tipo de servicio · acumulado</h2><div class="kp-tipos"><span class="kp-tipo">🔴 Salida: <b>${tipos.salida}</b></span><span class="kp-tipo">🟠 Salida+Entrada: <b>${tipos.salida_entrada}</b></span><span class="kp-tipo">🟢 Entrada: <b>${tipos.entrada}</b></span></div></div>`;
+}
 
 function asgDatalists(){ return `<datalist id="asgUniDL">${ASG_UNI.map(x=>`<option value="${esc(x)}">`).join('')}</datalist>
   <datalist id="asgTrabDL">${asgTeamWorkers().map(x=>`<option value="${esc(x)}">`).join('')}</datalist>
@@ -3445,9 +3842,11 @@ async function pageAsignaciones(){
   const tabs=`<div class="page-title">Limpieza · Asignaciones</div><div class="asg-tabs">
     ${canEdit?`<button class="asg-tab ${asgTab==='asignaciones'?'on':''}" onclick="setAsgTab('asignaciones')">📋 Asignaciones</button>
     <button class="asg-tab ${asgTab==='listado'?'on':''}" onclick="setAsgTab('listado')">👥 Listado trabajadores</button>`:''}
-    <button class="asg-tab ${asgTab==='publicadas'?'on':''}" onclick="setAsgTab('publicadas')">🗂️ Publicadas</button></div>`;
+    <button class="asg-tab ${asgTab==='publicadas'?'on':''}" onclick="setAsgTab('publicadas')">🗂️ Publicadas</button>
+    ${canEdit?`<button class="asg-tab ${asgTab==='panel'?'on':''}" onclick="setAsgTab('panel')">📊 Panel</button>`:''}</div>`;
   let body;
   if(asgTab==='listado'&&canEdit) body=asgRenderListado();
+  else if(asgTab==='panel'&&canEdit) body=renderAsgPanel();
   else if(asgTab==='publicadas') body=asgRenderPublicadas();
   else body=asgRenderEditor();
   document.getElementById('main').innerHTML=tabs+body;
