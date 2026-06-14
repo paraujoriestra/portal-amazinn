@@ -3322,17 +3322,15 @@ async function pageIncidencias(){
   MANT_TEAMS=[...new Set(MANT_STAFF.map(s=>s.team).filter(Boolean))];
   INC_FOTOS={}; (fo.data||[]).forEach(f=>{(INC_FOTOS[f.incidencia_id]=INC_FOTOS[f.incidencia_id]||[]).push(f);});
   if(!incFilters.ambito){ incFilters.ambito = incEsMant()? (canManage?'todas':'mias') : 'reportadas'; }
-  const enCurso=INC.filter(i=>['en_curso','pausada','a_medias'].includes(i.estado)).length;
   const tabs=`<div class="asg-tabs">
     <button class="asg-tab ${incTab==='bandeja'?'on':''}" onclick="setIncTab('bandeja')">📥 Bandeja</button>
-    <button class="asg-tab ${incTab==='curso'?'on':''}" onclick="setIncTab('curso')">🛠️ En curso${enCurso?` (${enCurso})`:''}</button>
     <button class="asg-tab ${incTab==='historial'?'on':''}" onclick="setIncTab('historial')">📜 Historial</button>
-    ${canManage?`<button class="asg-tab ${incTab==='panel'?'on':''}" onclick="setIncTab('panel')">📊 Panel</button>`:''}</div>`;
+    ${canManage?`<button class="asg-tab ${incTab==='panel'?'on':''}" onclick="setIncTab('panel')">📊 Panel</button>`:''}
+    <button class="btn" style="margin-left:auto;align-self:center" onclick="incNuevaOpen()">+ Nueva incidencia</button></div>`;
   let body; const fullScreen=(incSel!=null||incNew);
   if(incNew){ body=renderIncForm(); }
   else if(incSel!=null){ body=renderIncDetail(incSel); }
   else if(incTab==='panel'&&canManage){ body=renderIncPanel(INC); }
-  else if(incTab==='curso'){ body=renderIncCurso(); }
   else if(incTab==='historial'){ body=`<div style="margin-bottom:10px"><button class="btn-sm ghost" onclick="incExportCSV()">⬇️ Exportar CSV (todas)</button></div>`+renderIncList(true); }
   else { body=renderIncBandeja(); }
   document.getElementById('main').innerHTML=`<div class="page-title">Incidencias y mantenimiento</div><div class="page-sub">Reporta y haz seguimiento de averías por edificio y apartamento</div>${fullScreen?'':tabs}${body}`;
@@ -3358,8 +3356,9 @@ function incExportCSV(){
 }
 function renderIncBandeja(){
   const f=incFilters;
+  const enCurso=INC.filter(i=>['en_curso','pausada','a_medias'].includes(i.estado)).length;
   const chips=[];
-  if(incEsMant()){ chips.push(['mias','🙋 Mías'],['equipo','👥 Mi equipo'],['sinasignar','📭 Sin asignar']); }
+  if(incEsMant()){ chips.push(['mias','🙋 Mías'],['equipo','👥 Mi equipo'],['curso','🛠️ En curso'+(enCurso?` (${enCurso})`:'')],['sinasignar','📭 Sin asignar']); }
   if(incCan()) chips.push(['todas','🗂️ Todas']);
   const chipsHTML=chips.map(([k,l])=>`<button class="inc-chip ${f.ambito===k?'on':''}" onclick="incSetAmbito('${k}')">${l}</button>`).join('');
   const edOpts=`<option value="">Todos los edificios</option>`+MANT_EDIF.map(e=>`<option ${f.edificio===e.nombre?'selected':''}>${esc(e.nombre)}</option>`).join('');
@@ -3374,7 +3373,6 @@ function renderIncBandeja(){
     banner=`<div class="panel" style="background:#f4f8ff;border:1px solid #d7e6fb;margin-bottom:12px"><b>📋 Resumen de hoy</b> · <span style="color:#c0392b">⏰ ${venc} vencidas</span> · 🔴 ${urg} urgentes abiertas · 📭 ${sin} sin asignar · ✅ ${hoyRes} resueltas hoy</div>`; }
   return `
     ${banner}
-    <div style="margin-bottom:12px"><button class="btn" onclick="incNuevaOpen()">+ Nueva incidencia</button></div>
     <div class="inc-chips">${chipsHTML}</div>
     <div class="inc-filters">
       <input type="search" placeholder="🔎 Buscar…" value="${esc(f.q||'')}" onchange="incSetFilter('q',this.value)" style="padding:7px 10px;border:1px solid var(--gris2);border-radius:8px;font-size:13px;font-family:inherit;min-width:150px">
@@ -3382,8 +3380,6 @@ function renderIncBandeja(){
       <select onchange="incSetFilter('unidad',this.value)">${unOpts}</select>
       <select onchange="incSetFilter('categoria',this.value)">${catOpts}</select>
       <select onchange="incSetFilter('urgencia',this.value)">${urgOpts}</select>
-      <select onchange="incSetFilter('estado',this.value)">${estOpts}</select>
-      <select onchange="incSetFilter('afecta',this.value)"><option value="">Huésped: todas</option><option value="si" ${f.afecta==='si'?'selected':''}>🛎️ Solo afecta a huésped</option></select>
       ${(f.edificio||f.unidad||f.urgencia||f.estado||f.q||f.categoria||f.afecta)?`<button class="inc-clear" onclick="incClearFilters()">✕ Limpiar</button>`:''}
     </div>
     ${renderIncList(false)}`;
@@ -3397,6 +3393,7 @@ function incFilteredList(hist){
       if(f.ambito==='reportadas'){ if(i.creado_por!==me) return false; }
       else if(f.ambito==='mias'){ if(i.tomada_por!==me && i.asignado_a!==me) return false; }
       else if(f.ambito==='equipo'){ const t=incMyTeam(); if(!(i.asignado_equipo==='*'||(t&&i.asignado_equipo===t))) return false; }
+      else if(f.ambito==='curso'){ if(!['en_curso','pausada','a_medias'].includes(i.estado)) return false; }
       else if(f.ambito==='sinasignar'){ if(!(i.estado==='pendiente' && !i.asignado_a)) return false; const t=incMyTeam(); if(!(incCan()||i.asignado_equipo==='*'||(t&&i.asignado_equipo===t))) return false; }
     }
     if(f.edificio && i.edificio!==f.edificio) return false;
