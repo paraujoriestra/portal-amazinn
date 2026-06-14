@@ -3269,15 +3269,14 @@ async function pageIncidencias(){
   const inc=await sb.from('mant_incidencias').select('*').order('created_at',{ascending:false});
   if(inc.error){ document.getElementById('main').innerHTML=`<div class="page-title">Incidencias y mantenimiento</div><div class="panel">No se pudo cargar. ¿Ejecutaste <b>supabase_mantenimiento.sql</b> en Supabase?<br><small style="color:var(--suave)">${esc(inc.error.message)}</small></div>`; return; }
   INC=inc.data||[];
-  const [ed,un,fo,stf,eq]=await Promise.all([
+  const [ed,un,fo,stf]=await Promise.all([
     sb.from('mant_edificios').select('*').order('orden').order('nombre'),
     sb.from('mant_unidades').select('*').order('orden').order('nombre'),
     sb.from('mant_fotos').select('*').order('id'),
     sb.from('profiles').select('id,nombre,org_equipo,dept').eq('dept','Mantenimiento').eq('estado','aprobado'),
-    sb.from('equipos').select('nombre').order('nombre'),
   ]);
   MANT_EDIF=ed.data||[]; MANT_UNI=un.data||[]; MANT_STAFF=stf.data||[];
-  MANT_TEAMS=[...new Set([...(eq.data||[]).map(x=>x.nombre).filter(Boolean), ...MANT_STAFF.map(s=>s.org_equipo).filter(Boolean)])];
+  MANT_TEAMS=[...new Set(MANT_STAFF.map(s=>s.org_equipo).filter(Boolean))];
   INC_FOTOS={}; (fo.data||[]).forEach(f=>{(INC_FOTOS[f.incidencia_id]=INC_FOTOS[f.incidencia_id]||[]).push(f);});
   if(!incFilters.ambito){ incFilters.ambito = incEsMant()? (canManage?'todas':'mias') : 'reportadas'; }
   const tabs=`<div class="asg-tabs">
@@ -3366,8 +3365,7 @@ function incCardHTML(i){
 function incNuevaOpen(){ incNew=true; incFormOpen=false; show('incidencias'); }
 function incNuevaCancel(){ incNew=false; show('incidencias'); }
 function renderIncForm(){
-  return `<button class="btn-sm ghost" onclick="incNuevaCancel()">← Cancelar</button>
-    <h2 style="margin:12px 0 4px">+ Nueva incidencia</h2>
+  return `<h2 style="margin:4px 0 4px">+ Nueva incidencia</h2>
     ${incFormHTML()}`;
 }
 function incFormHTML(){
