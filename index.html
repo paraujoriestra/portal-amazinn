@@ -3280,14 +3280,17 @@ async function pageIncidencias(){
   MANT_TEAMS=[...new Set(MANT_STAFF.map(s=>s.team).filter(Boolean))];
   INC_FOTOS={}; (fo.data||[]).forEach(f=>{(INC_FOTOS[f.incidencia_id]=INC_FOTOS[f.incidencia_id]||[]).push(f);});
   if(!incFilters.ambito){ incFilters.ambito = incEsMant()? (canManage?'todas':'mias') : 'reportadas'; }
+  const enCurso=INC.filter(i=>['en_curso','pausada','a_medias'].includes(i.estado)).length;
   const tabs=`<div class="asg-tabs">
     <button class="asg-tab ${incTab==='bandeja'?'on':''}" onclick="setIncTab('bandeja')">📥 Bandeja</button>
+    <button class="asg-tab ${incTab==='curso'?'on':''}" onclick="setIncTab('curso')">🛠️ En curso${enCurso?` (${enCurso})`:''}</button>
     <button class="asg-tab ${incTab==='historial'?'on':''}" onclick="setIncTab('historial')">📜 Historial</button>
     ${canManage?`<button class="asg-tab ${incTab==='panel'?'on':''}" onclick="setIncTab('panel')">📊 Panel</button>`:''}</div>`;
   let body; const fullScreen=(incSel!=null||incNew);
   if(incNew){ body=renderIncForm(); }
   else if(incSel!=null){ body=renderIncDetail(incSel); }
   else if(incTab==='panel'&&canManage){ body=renderIncPanel(INC); }
+  else if(incTab==='curso'){ body=renderIncCurso(); }
   else if(incTab==='historial'){ body=renderIncList(true); }
   else { body=renderIncBandeja(); }
   document.getElementById('main').innerHTML=`<div class="page-title">Incidencias y mantenimiento</div><div class="page-sub">Reporta y haz seguimiento de averías por edificio y apartamento</div>${fullScreen?'':tabs}${body}`;
@@ -3351,6 +3354,17 @@ function renderIncList(hist){
   const hint = hist?'':`<div style="font-size:12.5px;color:var(--suave);margin:0 0 10px">⬇️ Ordenadas por prioridad: primero las <b style="color:#d33">🔴 Alta</b>, luego 🟠 Media y 🟢 Baja (dentro de cada una, las más antiguas primero).</div>`;
   return `${hint}<div class="inc-cards">${items.map(incCardHTML).join('')}</div>`;
 }
+function renderIncCurso(){
+  const orderEst={en_curso:0,pausada:1,a_medias:2}, urgRank={alta:0,media:1,baja:2};
+  const items=INC.filter(i=>['en_curso','pausada','a_medias'].includes(i.estado)).sort((a,b)=>{
+    const oa=orderEst[a.estado], ob=orderEst[b.estado]; if(oa!==ob) return oa-ob;
+    const ua=(urgRank[a.urgencia]!=null?urgRank[a.urgencia]:1), ub=(urgRank[b.urgencia]!=null?urgRank[b.urgencia]:1); if(ua!==ub) return ua-ub;
+    return new Date(a.created_at)-new Date(b.created_at);
+  });
+  if(!items.length) return `<div class="panel" style="color:var(--suave)">No hay incidencias en curso ahora mismo. 👍</div>`;
+  const hint=`<div style="font-size:12.5px;color:var(--suave);margin:0 0 10px">Incidencias <b>empezadas y sin cerrar</b>: ⏱ en curso, ⏸️ pausadas y a medias. Revisa que ninguna se quede olvidada.</div>`;
+  return `${hint}<div class="inc-cards">${items.map(incCardHTML).join('')}</div>`;
+}
 function incCardHTML(i){
   const u=INC_URG[i.urgencia]||INC_URG.media, e=INC_EST[i.estado]||INC_EST.pendiente;
   const nf=(INC_FOTOS[i.id]||[]).filter(x=>x.tipo!=='solucion').length;
@@ -3364,7 +3378,7 @@ function incCardHTML(i){
     <div class="inc-card-loc">🏠 ${esc(i.edificio||'—')}${i.unidad?' · '+esc(i.unidad):''}</div>
     <div class="inc-card-desc">${esc((i.descripcion||'').slice(0,140))}${(i.descripcion||'').length>140?'…':''}</div>
     <div class="inc-card-meta">${asg} ${tom} ${nf?('· 📷 '+nf):''}</div>
-    <div class="inc-card-meta2">${new Date(i.created_at).toLocaleString('es-ES',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}</div>
+    <div class="inc-card-meta2">${new Date(i.created_at).toLocaleString('es-ES',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}${['en_curso','pausada','a_medias'].includes(i.estado)?' · ⏱ '+incFmtT(incElapsed(i)):''}</div>
     <div class="inc-card-actions">
       ${puedeTomar?`<button class="btn-sm" onclick="incTomar(${i.id})">✋ Tomar</button>`:''}
       <button class="btn-sm ghost" onclick="incOpen(${i.id})">👁 Abrir</button>
