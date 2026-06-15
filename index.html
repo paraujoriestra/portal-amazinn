@@ -574,6 +574,7 @@
   .cartel-pick .cp.on{background:var(--azul);color:#fff;border-color:var(--azul)}
   .cartel-wrap{display:grid;grid-template-columns:1fr 1fr;gap:24px;align-items:start}
   @media(max-width:820px){.cartel-wrap{grid-template-columns:1fr}}
+  @media(max-width:980px){.cot-grid{grid-template-columns:1fr !important}}
   .cartel{background:#fff;border:1px solid var(--gris2);width:100%;max-width:430px;aspect-ratio:1/1.414;margin:0 auto;display:flex;flex-direction:column;box-shadow:var(--sombra)}
   .cartel .c-top{padding:18px;text-align:center;border-bottom:5px solid var(--azul)}
   .cartel .c-top img{height:34px}
@@ -2649,12 +2650,12 @@ async function cotFormHTML(){
   const editBanner = cotEditId
     ? `<div style="background:#fff4e0;border:1px solid #f0c98a;border-radius:9px;padding:10px 12px;font-size:13px;display:flex;justify-content:space-between;align-items:center;gap:10px"><span>✏️ Editando la cotización <b>${esc(cotEditNum)}</b> (se conserva su número).</span><button type="button" class="btn ghost" style="padding:5px 12px" onclick="cotCancelEdit()">Cancelar</button></div>`
     : '';
-  return `<div style="display:grid;grid-template-columns:1.05fr .95fr;gap:22px;align-items:start" class="cot-grid">
+  return `<div style="display:grid;grid-template-columns:1.55fr 1fr;gap:20px;align-items:start" class="cot-grid">
     <div class="panel"><form class="box" onsubmit="return false" style="max-width:none">
       ${editBanner}
       ${society}
       <div class="row"><div><label>Fecha</label><input type="date" id="cotFecha" value="${esc(cotFechaVal)}" oninput="cotFechaVal=this.value;cotPreview()"></div>
-        <div><label>Número${cotEditId?'':' (se asigna al guardar)'}</label><input value="${numTxt}" readonly style="background:var(--gris);font-weight:700"></div></div>
+        <div><label>Número</label><input value="${numTxt}" readonly style="background:var(--gris);font-weight:700">${cotEditId?'':'<small style="color:var(--suave)">Se asigna al guardar</small>'}</div></div>
       <h2 style="margin:6px 0 0">Cliente</h2>
       <div><label>Nombre</label><input value="${esc(cotCli.nom)}" oninput="cotCli.nom=this.value;cotPreview()"></div>
       <div><label>Identificación (RUC / Cédula)</label><input value="${esc(cotCli.ruc)}" oninput="cotCli.ruc=this.value;cotPreview()"></div>
@@ -2732,23 +2733,42 @@ function cotDocHTML(d){
 }
 function cotPDF(){
   const src=document.getElementById('cotDoc'); if(!src){ alert('Primero genera la cotización.'); return; }
-  if(typeof html2pdf==='undefined'){ window.print(); return; }
+  const num=(src.getAttribute('data-num')||'Cotizacion').replace(/[^A-Za-z0-9_-]/g,'_');
+  const jsPDFlib=(window.jspdf&&window.jspdf.jsPDF)||window.jsPDF||(typeof jsPDF!=='undefined'?jsPDF:null);
+  if(typeof html2canvas==='undefined' || !jsPDFlib){ if(typeof html2pdf!=='undefined'){ html2pdf().set({margin:8,filename:'Cotizacion_'+num+'.pdf',jsPDF:{unit:'mm',format:'a4',orientation:'portrait'}}).from(src).save(); } else window.print(); return; }
   let wrap=document.getElementById('cotPrintWrap'); if(!wrap){ wrap=document.createElement('div'); wrap.id='cotPrintWrap'; document.body.appendChild(wrap); }
-  // Contenedor renderizado FUERA de pantalla (no display:none ni opacity:0) y a ancho A4 (794px ≈ 210mm)
+  // Render FUERA de pantalla a ancho A4 (794px ≈ 210mm); no display:none ni opacity:0
   wrap.style.cssText='position:fixed;left:-10000px;top:0;width:794px;background:#ffffff;z-index:-1';
   wrap.innerHTML=src.outerHTML;
   const doc=wrap.firstElementChild;
   if(doc){ doc.style.boxShadow='none'; doc.style.border='none'; doc.style.borderRadius='0'; doc.style.margin='0'; doc.style.width='100%'; doc.style.maxWidth='100%'; }
-  const num=(src.getAttribute('data-num')||'Cotizacion').replace(/[^A-Za-z0-9_-]/g,'_');
-  const done=()=>{ wrap.innerHTML=''; };
-  html2pdf().set({
-    margin:[10,10,12,10],
-    filename:'Cotizacion_'+num+'.pdf',
-    image:{type:'jpeg',quality:.98},
-    html2canvas:{scale:2,backgroundColor:'#ffffff',useCORS:true,windowWidth:794},
-    jsPDF:{unit:'mm',format:'a4',orientation:'portrait'},
-    pagebreak:{mode:['css','legacy'],avoid:['tr']}
-  }).from(doc).save().then(done,done);
+  html2canvas(doc,{scale:2,backgroundColor:'#ffffff',useCORS:true,windowWidth:794,width:794}).then(canvas=>{
+    const pdf=new jsPDFlib('p','mm','a4');
+    const margin=8, pw=210, ph=297, cw=pw-2*margin, pageH=ph-2*margin;
+    const imgH=canvas.height*cw/canvas.width;   // alto del documento ya escalado al ancho de página
+    const imgData=canvas.toDataURL('image/jpeg',0.98);
+    if(imgH<=pageH+0.5){
+      pdf.addImage(imgData,'JPEG',margin,margin,cw,imgH);                 // cabe en 1 hoja: completo
+    } else if(imgH<=pageH*1.7){
+      const s=pageH/imgH, wS=cw*s;                                        // un poco más largo: ajustar a 1 hoja
+      pdf.addImage(imgData,'JPEG',margin+(cw-wS)/2,margin,wS,pageH);
+    } else {
+      const pxPageH=canvas.width*pageH/cw;                               // muy largo: paginar limpio
+      const tmp=document.createElement('canvas'), ctx=tmp.getContext('2d');
+      let sY=0, page=0;
+      while(sY<canvas.height){
+        const sliceH=Math.min(pxPageH,canvas.height-sY);
+        tmp.width=canvas.width; tmp.height=sliceH;
+        ctx.fillStyle='#ffffff'; ctx.fillRect(0,0,tmp.width,tmp.height);
+        ctx.drawImage(canvas,0,sY,canvas.width,sliceH,0,0,canvas.width,sliceH);
+        if(page>0) pdf.addPage();
+        pdf.addImage(tmp.toDataURL('image/jpeg',0.98),'JPEG',margin,margin,cw,sliceH*cw/canvas.width);
+        sY+=sliceH; page++;
+      }
+    }
+    pdf.save('Cotizacion_'+num+'.pdf');
+    wrap.innerHTML='';
+  }).catch(e=>{ wrap.innerHTML=''; alert('No se pudo generar el PDF: '+(e&&e.message||e)); });
 }
 async function cotGuardar(){
   if(!cotRows.some(r=>(r.texto||'').trim()||Number(r.sin)>0)){ alert('Añade al menos un concepto con descripción o monto.'); return; }
