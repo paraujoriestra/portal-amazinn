@@ -1126,7 +1126,7 @@ function nextDays(n){const out=[],d=new Date();d.setHours(0,0,0,0);for(let i=0;i
 function isoD(x){return `${x.getFullYear()}-${String(x.getMonth()+1).padStart(2,'0')}-${String(x.getDate()).padStart(2,'0')}`;}
 function lblD(x){const ds=['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'],ms=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];return `${ds[x.getDay()]} ${x.getDate()} ${ms[x.getMonth()]}`;}
 function isWk(x){return x.getDay()===0||x.getDay()===6;}
-let horTab='mi', horOtherDept=null, horEditDept=null;
+let horTab='mi', horOtherDept=null, horEditDept=null, horOtherEquipo='';
 let ACCESS_DENY=new Set();  // ids de áreas ocultas para el usuario actual (config. de Permisos)
 async function loadAccesos(){ ACCESS_DENY=new Set(); if(isOwner()) return;   // el propietario siempre ve todo
   try{ const {data}=await sb.from('accesos').select('item_id,visible').eq('dept',PROFILE.dept||'').eq('role',PROFILE.role);
@@ -1615,7 +1615,8 @@ async function deleteCom(id){
 }
 /* ---------------- HORARIOS (datos reales) ---------------- */
 function setHorTab(t){horTab=t;show('horarios');}
-function setHorOther(d){horOtherDept=d;show('horarios');}
+function setHorOther(d){horOtherDept=d;horOtherEquipo='';show('horarios');}
+function setHorOtherEq(v){horOtherEquipo=v;show('horarios');}
 function setHorEditDept(d){horEditDept=d;show('horarios');}
 function horAllDepts(){ return (CAT.deptos&&CAT.deptos.length)?CAT.deptos.map(d=>d.nombre):DEPTS.slice(); }
 function horDeptSelector(selDept){
@@ -1627,7 +1628,7 @@ function horDeptSelector(selDept){
     <select onchange="setHorEditDept(this.value)" style="padding:9px 12px;border:1px solid var(--gris2);border-radius:9px;font-size:14px">${opts}</select></div>`;
 }
 function chip(v){const s=SH[v||""];return `<span class="cell-b" title="${s.l}" style="background:${s.c};color:#333">${v||'—'}</span>`;}
-async function teamOf(dept){const{data}=await sb.from('profiles').select('id,nombre').eq('dept',dept).order('nombre');return data||[];}
+async function teamOf(dept){const{data}=await sb.from('profiles').select('id,nombre,equipo,org_equipo').eq('dept',dept).eq('estado','aprobado').order('nombre');return (data||[]).map(p=>({id:p.id,nombre:p.nombre,team:p.org_equipo||p.equipo||''}));}
 async function turnosMap(dept){const{data}=await sb.from('turnos').select('*').eq('dept',dept);const m={};(data||[]).forEach(t=>m[t.empleado_id+'|'+t.fecha]=t);return m;}
 function isLibreTurno(t){ return /libre/i.test((t&&t.nombre)||''); }
 function horLegendFrom(rows){
@@ -1775,10 +1776,11 @@ async function horMine(days){
 function descargarHorarioPDF(){ const el=document.getElementById('miHorarioPrint'); if(!el) return;
   if(typeof html2pdf==='undefined'){ window.print(); return; }
   html2pdf().set({margin:6,filename:'Mi_horario_Amazinn.pdf',image:{type:'jpeg',quality:.98},html2canvas:{scale:2,backgroundColor:'#ffffff'},jsPDF:{unit:'mm',format:'a4',orientation:'portrait'}}).from(el).save(); }
-async function horTeam(dept,days){
+async function horTeam(dept,days,equipoFilter){
   if(!dept) return `<div class="panel">Sin departamento asignado.</div>`;
-  const team=await teamOf(dept);
-  if(!team.length) return `<div class="panel">No hay empleados en ${esc(dept)}.</div>`;
+  let team=await teamOf(dept);
+  if(equipoFilter) team=team.filter(e=>e.team===equipoFilter);
+  if(!team.length) return `<div class="panel">No hay empleados${equipoFilter?' en el equipo '+esc(equipoFilter):''} en ${esc(dept)}.</div>`;
   const map=await turnosMap(dept);
   const head=`<tr><th class="emp">Empleado</th>${days.map(d=>`<th class="${isWk(d)?'wknd':''}">${lblD(d)}</th>`).join('')}</tr>`;
   const rows=team.map(e=>`<tr><td class="emp">${e.id===ME.id?'<b style="color:var(--azul)">'+esc(e.nombre)+' (tú)</b>':esc(e.nombre)}</td>${days.map(d=>`<td class="${isWk(d)?'wknd':''}">${tchipRow(map[e.id+'|'+isoD(d)])}</td>`).join('')}</tr>`).join('');
@@ -1790,9 +1792,13 @@ async function horOthers(days){
   const depts=[...new Set((data||[]).map(p=>p.dept).filter(Boolean))].filter(d=>d!==PROFILE.dept);
   if(!depts.length) return `<div class="panel">No hay otros departamentos con empleados todavía.</div>`;
   if(!depts.includes(horOtherDept)) horOtherDept=depts[0];
-  const sel=`<div style="margin-bottom:14px"><label style="font-size:13px;font-weight:600;color:var(--suave);margin-right:8px">Departamento:</label>
-    <select onchange="setHorOther(this.value)" style="padding:9px 12px;border:1px solid var(--gris2);border-radius:9px;font-size:14px">${depts.map(d=>`<option ${d===horOtherDept?'selected':''}>${esc(d)}</option>`).join('')}</select></div>`;
-  return sel+await horTeam(horOtherDept,days);
+  const allTeam=await teamOf(horOtherDept);
+  const teams=[...new Set(allTeam.map(e=>e.team).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
+  if(horOtherEquipo && !teams.includes(horOtherEquipo)) horOtherEquipo='';
+  const eqSel = teams.length? `<label style="font-size:13px;font-weight:600;color:var(--suave);margin:0 8px 0 14px">Equipo:</label><select onchange="setHorOtherEq(this.value)" style="padding:9px 12px;border:1px solid var(--gris2);border-radius:9px;font-size:14px"><option value="">Todos los equipos</option>${teams.map(t=>`<option ${t===horOtherEquipo?'selected':''}>${esc(t)}</option>`).join('')}</select>`:'';
+  const sel=`<div style="margin-bottom:14px;display:flex;align-items:center;flex-wrap:wrap;gap:6px"><label style="font-size:13px;font-weight:600;color:var(--suave);margin-right:8px">Departamento:</label>
+    <select onchange="setHorOther(this.value)" style="padding:9px 12px;border:1px solid var(--gris2);border-radius:9px;font-size:14px">${depts.map(d=>`<option ${d===horOtherDept?'selected':''}>${esc(d)}</option>`).join('')}</select>${eqSel}</div>`;
+  return sel+await horTeam(horOtherDept,days,horOtherEquipo);
 }
 
 /* ---------------- ORGANIGRAMA (directorio desde perfiles) ---------------- */
