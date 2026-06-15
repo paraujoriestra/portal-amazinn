@@ -2758,9 +2758,9 @@ async function userSave(e){e.preventDefault();
 /* ---------------- MENSAJES Y PLANTILLAS ---------------- */
 const TPL_CAT={'Bienvenida':'b-green','Accesos':'b-red','Confirmación transporte':'b-blue','Confirmación extras':'b-blue','Mascotas':'b-amber','Early check in':'b-amber','Late check out':'b-amber','Aceptación de invitados':'b-grey','Piscina compartida':'b-blue'};
 const TPL_CATS=['Bienvenida','Accesos','Confirmación transporte','Confirmación extras','Mascotas','Early check in','Late check out','Aceptación de invitados','Piscina compartida'];
-let msgTab='ver', msgUnit=null, twoFAok=false, tplEditId=null, tplFormOpen=false, TPL_UNI=[];
+let msgTab='ver', msgUnit=null, twoFAok=false, tplEditId=null, tplFormOpen=false, TPL_UNI=[], msgProp='';
 function tplCancel(){ tplFormOpen=false; tplEditId=null; tplDraft={}; show('mensajes'); }
-function tplFormProp(){ const p=(document.getElementById('tProp')||{}).value||''; const sel=document.getElementById('tUni'); if(!sel)return; const list=p?TPL_UNI.filter(u=>u.prop===p):[]; sel.innerHTML=`<option value="">Todas las unidades</option>`+list.map(u=>`<option value="${u.id}">${esc(u.nombre)}</option>`).join(''); }
+function tplFormProp(){ const p=(document.getElementById('tProp')||{}).value||''; const sel=document.getElementById('tUni'); if(!sel)return; const entries=TPL_UNI.filter(u=>u.prop===p); const whole=p&&entries.length===1&&entries[0].kind==='e'; if(!p||whole){ sel.innerHTML='<option value="">Todas las unidades</option>'; sel.disabled=true; } else { sel.disabled=false; sel.innerHTML='<option value="">Todas las unidades</option>'+entries.filter(u=>u.kind==='u').map(u=>`<option value="${u.id}">${esc(u.nombre)}</option>`).join(''); } }
 function canMsg(){return PROFILE.dept==='Atención al cliente'||isAdmin();}
 function canMsgEdit(){return isAdmin()||(PROFILE.role==='responsable'&&PROFILE.dept==='Atención al cliente');}
 function fillTpl(c,u){return (c||'').split('{apartamento}').join(u.nombre).split('{numero}').join(u.numero).split('{codigo}').join(u.codigo).split('{wifi}').join(u.wifi||'').split('{propiedad}').join(u.prop);}
@@ -2778,17 +2778,35 @@ async function pageMensajes(){
   document.getElementById('main').innerHTML=`<div class="page-title">Mensajes y plantillas</div><div class="page-sub">Plantillas por apartamento para Atención al cliente</div>
     ${manage?`<div class="tabs">${tabs.map(t=>`<button class="${msgTab===t[0]?'on':''}" onclick="setMsgTab('${t[0]}')">${t[1]}</button>`).join('')}</div>`:''}${body}`;
 }
-async function loadUnidades(){const{data}=await sb.from('mant_unidades').select('*').order('edificio').order('orden').order('nombre');return (data||[]).map(u=>({id:u.id,nombre:u.nombre,prop:u.edificio,tipo:u.tipo,numero:u.numero||'',codigo:u.codigo||'',wifi:u.wifi||''}));}
+async function loadUnidades(){
+  const [ed,un]=await Promise.all([
+    sb.from('mant_edificios').select('*').order('orden').order('nombre'),
+    sb.from('mant_unidades').select('*').order('edificio').order('orden').order('nombre'),
+  ]);
+  const eds=ed.data||[], uns=un.data||[]; const out=[];
+  eds.forEach(e=>{
+    const apts=uns.filter(u=>u.edificio===e.nombre && u.tipo!=='comun');
+    if(apts.length){ apts.forEach(u=>out.push({id:u.id,raw:u.id,kind:'u',nombre:u.nombre,prop:e.nombre,tipo:'apartamento',numero:u.numero||'',codigo:u.codigo||'',wifi:u.wifi||''})); }
+    else { out.push({id:'E'+e.id,raw:e.id,kind:'e',nombre:e.nombre,prop:e.nombre,tipo:'apartamento',whole:true,numero:e.numero||'',codigo:e.codigo||'',wifi:e.wifi||''}); }
+  });
+  return out;
+}
 async function msgViewer(){
-  const uni=await loadUnidades();
-  const props=[...new Set(uni.map(u=>u.prop))];
-  const sel=`<div style="margin-bottom:16px"><label style="font-weight:600;font-size:14px;margin-right:8px">🏠 Apartamento:</label>
-    <select onchange="msgUnit=this.value;show('mensajes')" style="padding:10px 12px;border:1px solid var(--gris2);border-radius:9px;font-size:15px;min-width:240px">
-    <option value="">— Elige —</option>${props.map(p=>`<optgroup label="${esc(p)}">${uni.filter(u=>u.prop===p).map(u=>`<option value="${u.id}" ${u.id===msgUnit?'selected':''}>${esc(u.nombre)}</option>`).join('')}</optgroup>`).join('')}</select></div>`;
-  if(!msgUnit) return sel+`<div class="panel">Selecciona un apartamento para ver sus plantillas. ⚠️ El código de acceso es específico de cada uno.</div>`;
-  const u=uni.find(x=>x.id===msgUnit); if(!u) return sel+`<div class="panel">Apartamento no encontrado.</div>`;
+  const out=await loadUnidades();
+  const props=[...new Set(out.map(u=>u.prop))];
+  if(msgProp && !props.includes(msgProp)) msgProp='';
+  const entries=out.filter(u=>u.prop===msgProp);
+  const whole=!!msgProp && entries.length===1 && entries[0].kind==='e';
+  if(whole) msgUnit=entries[0].id;
+  const ss='padding:10px 12px;border:1px solid var(--gris2);border-radius:9px;font-size:15px;min-width:190px;font-family:inherit';
+  const propSel=`<select onchange="msgProp=this.value;msgUnit=null;show('mensajes')" style="${ss}"><option value="">— Propiedad —</option>${props.map(p=>`<option ${msgProp===p?'selected':''}>${esc(p)}</option>`).join('')}</select>`;
+  const aptEntries=entries.filter(u=>u.kind==='u');
+  const uniSel = (msgProp && !whole)? `<select onchange="msgUnit=this.value||null;show('mensajes')" style="${ss}"><option value="">— Nº / unidad —</option>${aptEntries.map(u=>`<option value="${u.id}" ${String(u.id)===String(msgUnit)?'selected':''}>${esc(u.nombre)}</option>`).join('')}</select>` : (whole?`<span style="color:var(--suave);font-size:13px;font-style:italic">Propiedad completa</span>`:'');
+  const sel=`<div style="margin-bottom:16px;display:flex;gap:10px;flex-wrap:wrap;align-items:center"><label style="font-weight:600;font-size:14px">🏠 Apartamento:</label>${propSel}${uniSel}</div>`;
+  if(!msgUnit) return sel+`<div class="panel">Selecciona <b>propiedad</b> (y nº si la tiene) para ver sus plantillas. ⚠️ El código de acceso es específico de cada uno.</div>`;
+  const u=out.find(x=>String(x.id)===String(msgUnit)); if(!u) return sel+`<div class="panel">Apartamento no encontrado.</div>`;
   const{data:tpls}=await sb.from('plantillas').select('*');
-  const mine=(tpls||[]).filter(t=>(t.unidades||[]).includes(u.id));
+  const mine=(tpls||[]).filter(t=>(t.unidades||[]).map(String).includes(String(u.id)));
   const banner=`<div class="acc-banner">📍 Estás viendo: <span class="big">${esc(u.nombre)}</span> · Nº <b>${esc(u.numero)}</b> · Código de acceso <span class="code">${esc(u.codigo)}</span><br><small>Verifica que es el apartamento de la reserva antes de enviar el mensaje.</small></div>`;
   const cards=mine.map(t=>{const filled=fillTpl(t.cuerpo,u);const cat=TPL_CAT[t.cat]||'b-grey';
     return `<div class="tpl-card ${t.cat==='Accesos'?'acc':''}"><div class="h"><span class="badge ${cat}">${esc(t.cat||'')}</span><b>${esc(t.titulo)}</b>
@@ -2819,30 +2837,32 @@ async function tplDup(id){const{data}=await sb.from('plantillas').select('*').eq
   const{error}=await sb.from('plantillas').insert({titulo:data.titulo+' (copia)',cat:data.cat,cuerpo:data.cuerpo,unidades:data.unidades,autor_nombre:PROFILE.nombre});
   if(error){alert(error.message);return;}auditLog('Duplicó la plantilla «'+data.titulo+'»','plantilla');show('mensajes');}
 async function tplForm(){
-  const t=tplDraft; const uni=await loadUnidades();
-  const apts=uni.filter(u=>u.tipo!=='comun'); TPL_UNI=apts;
-  const props=[...new Set(apts.map(u=>u.prop))];
+  const t=tplDraft; const out=await loadUnidades(); TPL_UNI=out;
+  const props=[...new Set(out.map(u=>u.prop))];
   // derivar selección actual al editar
-  const selIds=new Set(t.unidades||[]); let selProp='', selUni='';
-  if(selIds.size){ const sel=apts.filter(u=>selIds.has(u.id)); if(sel.length===1){ selProp=sel[0].prop; selUni=String(sel[0].id); } else { const ps=[...new Set(sel.map(u=>u.prop))]; if(ps.length===1) selProp=ps[0]; } }
+  const selIds=new Set((t.unidades||[]).map(String)); let selProp='', selUni='';
+  if(selIds.size){ const sel=out.filter(u=>selIds.has(String(u.id))); if(sel.length===1){ selProp=sel[0].prop; if(sel[0].kind==='u') selUni=String(sel[0].id); } else { const ps=[...new Set(sel.map(u=>u.prop))]; if(ps.length===1) selProp=ps[0]; } }
   const propOpts=`<option value="">Todas las propiedades</option>`+props.map(p=>`<option ${selProp===p?'selected':''}>${esc(p)}</option>`).join('');
-  const uniForProp = selProp? apts.filter(u=>u.prop===selProp):[];
-  const uniOpts=`<option value="">Todas las unidades</option>`+uniForProp.map(u=>`<option value="${u.id}" ${selUni===String(u.id)?'selected':''}>${esc(u.nombre)}</option>`).join('');
+  const selEntries=out.filter(u=>u.prop===selProp);
+  const selWhole=selProp && selEntries.length===1 && selEntries[0].kind==='e';
+  const uniOpts=`<option value="">Todas las unidades</option>`+selEntries.filter(u=>u.kind==='u').map(u=>`<option value="${u.id}" ${selUni===String(u.id)?'selected':''}>${esc(u.nombre)}</option>`).join('');
   return `<div class="panel" style="max-width:760px"><form class="box" onsubmit="return tplSave(event)" style="max-width:none">
     <div class="row"><div><label>Título</label><input id="tT" required value="${t.titulo?esc(t.titulo):''}"></div><div><label>Categoría</label><select id="tC">${TPL_CATS.map(c=>`<option ${t.cat===c?'selected':''}>${c}</option>`).join('')}</select></div></div>
     <label>Contenido</label><textarea id="tB" rows="6" required>${t.cuerpo?esc(t.cuerpo):''}</textarea>
     <small style="color:var(--suave)">Variables: {apartamento} {numero} {codigo} {wifi} {propiedad}</small>
     <div class="row" style="margin-top:10px"><div><label>Propiedad</label><select id="tProp" onchange="tplFormProp()">${propOpts}</select></div>
-    <div><label>Nº / unidad</label><select id="tUni">${uniOpts}</select></div></div>
+    <div><label>Nº / unidad <small style="color:var(--suave);font-weight:400">(vacío = propiedad completa)</small></label><select id="tUni" ${selWhole?'disabled':''}>${uniOpts}</select></div></div>
     <div style="margin-top:14px"><button class="btn" type="submit">${tplEditId?'Guardar':'Crear plantilla'}</button> <button class="btn ghost" type="button" onclick="tplCancel()">Cancelar</button></div></form></div>`;
 }
 async function tplSave(e){e.preventDefault();
   const prop=(document.getElementById('tProp')||{}).value||''; const uniSel=(document.getElementById('tUni')||{}).value||'';
+  const entries=TPL_UNI.filter(u=>u.prop===prop); const whole=prop && entries.length===1 && entries[0].kind==='e';
   let unidades=[];
-  if(uniSel){ unidades=[+uniSel]; }
-  else if(prop){ unidades=TPL_UNI.filter(u=>u.prop===prop).map(u=>u.id); }
+  if(whole){ unidades=[entries[0].id]; }
+  else if(uniSel){ unidades=[isNaN(+uniSel)?uniSel:+uniSel]; }
+  else if(prop){ unidades=entries.filter(u=>u.kind==='u').map(u=>u.id); }
   else { unidades=TPL_UNI.map(u=>u.id); }
-  if(!unidades.length){alert('No hay unidades en el catálogo. Crea edificios/unidades en Catálogos.');return false;}
+  if(!unidades.length){alert('No hay propiedades en el catálogo. Crea edificios/unidades en Catálogos.');return false;}
   const row={titulo:val('tT'),cat:document.getElementById('tC').value,cuerpo:document.getElementById('tB').value,unidades};
   let error;
   if(tplEditId){row.editor_nombre=PROFILE.nombre;row.edit_fecha=new Date().toLocaleDateString('es-ES');({error}=await sb.from('plantillas').update(row).eq('id',tplEditId));auditLog('Editó la plantilla «'+row.titulo+'»','plantilla');}
@@ -2865,7 +2885,7 @@ function verify2FA(){const v=(document.getElementById('twofa').value||'').trim()
 async function saveCodes(){
   const uni=await loadUnidades();let n=0;
   for(const u of uni){const num=val('n_'+u.id),cod=val('c_'+u.id);
-    if(num!==u.numero||cod!==u.codigo){await sb.from('mant_unidades').update({numero:num,codigo:cod}).eq('id',u.id);
+    if(num!==u.numero||cod!==u.codigo){const tbl=u.kind==='e'?'mant_edificios':'mant_unidades';await sb.from(tbl).update({numero:num,codigo:cod}).eq('id',u.raw);
       if(cod!==u.codigo)auditLog(`Cambió el código de acceso de ${u.nombre} (${u.codigo}→${cod})`,'codigo');n++;}}
   toast(n?`✓ ${n} cambio(s) guardados`:'Sin cambios');show('mensajes');
 }
