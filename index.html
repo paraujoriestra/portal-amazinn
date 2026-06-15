@@ -1646,7 +1646,7 @@ function horLegendFrom(rows){
   const items=Object.values(seen); if(!items.length) return '';
   return `<div class="legend">${items.map(({t})=>{const col=isLibreTurno(t)?'#bfe7c4':t.color; return `<span><i style="background:${col}"></i>${esc(t.nombre)}</span>`;}).join('')}</div>`;
 }
-function tchipRow(r){ if(!r||!r.tipo_id) return `<span class="cell-b" style="background:#f2f2f2;color:#bbb">—</span>`; const t=turnoTipo(r.tipo_id); if(!t) return `<span class="cell-b">·</span>`; const lib=isLibreTurno(t); const ini=r.hora_ini||t.hora_ini, fin=r.hora_fin||t.hora_fin; const h=ini?`${ini}–${fin}`:''; const col=lib?'#bfe7c4':t.color; return `<span class="cell-b" title="${esc(t.nombre)}${h?' '+esc(h):''}" style="background:${col};color:#333;display:inline-flex;flex-direction:column;align-items:center;line-height:1.1;padding:4px 7px"><b>${esc(abreviaTurno(t))}</b>${(h&&!lib)?`<small style="font-size:9px;font-weight:400;opacity:.85">${esc(h)}</small>`:''}</span>`; }
+function tchipRow(r){ if(!r||!r.tipo_id) return `<span class="cell-b" style="background:#f2f2f2;color:#bbb">—</span>`; const t=turnoTipo(r.tipo_id); if(!t) return `<span class="cell-b">·</span>`; const lib=isLibreTurno(t); const ini=r.hora_ini||t.hora_ini, fin=r.hora_fin||t.hora_fin; const h=ini?`${ini}–${fin}`:''; const col=lib?'#bfe7c4':t.color; return `<span class="cell-b" title="${esc(t.nombre)}${h?' '+esc(h):''}" style="background:${col};color:#333;display:inline-block;text-align:center;line-height:1.15;padding:4px 7px"><b style="display:block">${esc(abreviaTurno(t))}</b>${(h&&!lib)?`<small style="display:block;font-size:9px;font-weight:400;opacity:.85">${esc(h)}</small>`:''}</span>`; }
 
 async function pageHorarios(){
   await loadTurnosTipo();
@@ -1746,9 +1746,10 @@ async function horGrid(){
       <button class="btn ghost" onclick="horCopyPrev()">📋 Copiar semana anterior</button>
       <button class="btn ghost" onclick="horResumen()">📊 Horas y cobertura</button>
       <button class="btn ghost" onclick="horClearGrid()">↩ Cambiar alcance/fechas</button>
+      <button class="btn ghost" onclick="horPDF()">📥 Descargar PDF</button>
       <span style="font-size:12.5px;color:var(--suave);align-self:center">${people.length} persona(s) · ${days.length} día(s) · 🌴/🤕 = ausencia aprobada</span></div>
     <div id="horResumenBox"></div>
-    <div class="grid-wrap"><table class="sched"><thead>${head}</thead><tbody>${rows}</tbody></table></div></div>`;
+    <div id="horSched" class="grid-wrap"><table class="sched"><thead>${head}</thead><tbody>${rows}</tbody></table></div></div>`;
 }
 function horFillRow(emp,val){ if(val==='__')return; document.querySelectorAll('.tcell2[data-emp="'+emp+'"]').forEach(c=>{ if([...c.options].some(o=>String(o.value)===String(val))) c.value=val; }); }
 function horFillDayOff(emp,dow){
@@ -1847,17 +1848,49 @@ async function horTeam(dept,days,equipoFilter){
 }
 function horPDF(){
   const src=document.getElementById('horSched'); if(!src){ window.print(); return; }
-  let wrap=document.getElementById('horPrint'); if(!wrap){ wrap=document.createElement('div'); wrap.id='horPrint'; wrap.style.cssText='position:absolute;left:0;top:0;z-index:-1;opacity:0'; document.body.appendChild(wrap); }
+  const tt=(src.getAttribute('data-pdftitle')||'Horario').replace(/[·\\/:]/g,'-').replace(/\s+/g,'_').replace(/_+/g,'_').replace(/^_|_$/g,'');
+  const fname=(tt||'Horario')+'.pdf';
+  const jsPDFlib=(window.jspdf&&window.jspdf.jsPDF)||window.jsPDF||(typeof jsPDF!=='undefined'?jsPDF:null);
+  let wrap=document.getElementById('horPrint'); if(!wrap){ wrap=document.createElement('div'); wrap.id='horPrint'; document.body.appendChild(wrap); }
+  // contenedor ABSOLUTE fuera de pantalla (no fixed, no opacity:0)
+  wrap.style.cssText='position:absolute;left:-10000px;top:0;background:#ffffff';
   wrap.innerHTML=`<div id="horPrintInner" style="display:inline-block;background:#fff;padding:18px 22px;box-sizing:border-box;font-family:inherit">${src.innerHTML}</div>`;
   const ttl=wrap.querySelector('.hor-pdf-title'); if(ttl) ttl.style.display='block';
   wrap.querySelectorAll('.grid-wrap').forEach(g=>{ g.style.overflow='visible'; g.style.maxWidth='none'; g.style.width='auto'; });
   const el=document.getElementById('horPrintInner');
-  const w=Math.max(900, el.scrollWidth+4);
-  if(typeof html2pdf==='undefined'){ window.print(); return; }
-  const tt=(src.getAttribute('data-pdftitle')||'Horario').replace(/[·\\/:]/g,'-').replace(/\s+/g,'_').replace(/_+/g,'_').replace(/^_|_$/g,'');
-  const fname=(tt||'Horario')+'.pdf';
-  const done=()=>{ wrap.innerHTML=''; };
-  html2pdf().set({margin:6,filename:fname,image:{type:'jpeg',quality:.98},html2canvas:{scale:2,backgroundColor:'#ffffff',windowWidth:w+60,width:w,scrollX:0,scrollY:0},jsPDF:{unit:'mm',format:'a4',orientation:'landscape'},pagebreak:{mode:['css','legacy']}}).from(el).save().then(done,done);
+  // Fallback si no hay html2canvas/jsPDF como globales
+  if(typeof html2canvas==='undefined' || !jsPDFlib){
+    if(typeof html2pdf!=='undefined'){ const w=Math.max(900,el.scrollWidth+4); html2pdf().set({margin:6,filename:fname,image:{type:'jpeg',quality:.98},html2canvas:{scale:2,backgroundColor:'#ffffff',windowWidth:w+60,width:w,scrollX:0,scrollY:0},jsPDF:{unit:'mm',format:'a4',orientation:'landscape'},pagebreak:{mode:['css','legacy']}}).from(el).save().then(()=>{wrap.innerHTML='';},()=>{wrap.innerHTML='';}); }
+    else { wrap.innerHTML=''; window.print(); }
+    return;
+  }
+  const go=()=>{
+    const W=Math.ceil(Math.max(el.scrollWidth, el.getBoundingClientRect().width))+2;
+    const H=Math.ceil(Math.max(el.scrollHeight, el.getBoundingClientRect().height))+2;
+    html2canvas(el,{scale:2,backgroundColor:'#ffffff',useCORS:true,windowWidth:W+40,windowHeight:Math.max(1600,H+200),scrollX:0,scrollY:0}).then(canvas=>{
+      const pdf=new jsPDFlib('l','mm','a4');
+      const margin=8, pw=297, ph=210, cw=pw-2*margin, pageH=ph-2*margin;   // A4 horizontal
+      const imgData=canvas.toDataURL('image/jpeg',0.98);
+      const fullH=canvas.height*cw/canvas.width;   // alto escalado al ancho de página
+      if(fullH<=pageH+0.5){
+        pdf.addImage(imgData,'JPEG',margin,margin,cw,fullH);
+      } else {
+        const pxPageH=Math.floor(canvas.width*pageH/cw);
+        const tmp=document.createElement('canvas'), ctx=tmp.getContext('2d'); let sY=0, page=0;
+        while(sY<canvas.height){
+          const sliceH=Math.min(pxPageH,canvas.height-sY);
+          tmp.width=canvas.width; tmp.height=sliceH;
+          ctx.fillStyle='#ffffff'; ctx.fillRect(0,0,tmp.width,tmp.height);
+          ctx.drawImage(canvas,0,sY,canvas.width,sliceH,0,0,canvas.width,sliceH);
+          if(page>0) pdf.addPage();
+          pdf.addImage(tmp.toDataURL('image/jpeg',0.98),'JPEG',margin,margin,cw,sliceH*cw/canvas.width);
+          sY+=sliceH; page++;
+        }
+      }
+      pdf.save(fname); wrap.innerHTML='';
+    }).catch(e=>{ wrap.innerHTML=''; alert('No se pudo generar el PDF: '+(e&&e.message||e)); });
+  };
+  if(document.fonts&&document.fonts.ready){ document.fonts.ready.then(()=>setTimeout(go,80)); } else setTimeout(go,80);
 }
 async function horOthers(days){
   const{data}=await sb.from('profiles').select('dept');
