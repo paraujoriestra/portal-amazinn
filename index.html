@@ -2734,43 +2734,24 @@ function cotDocHTML(d){
 function cotPDF(){
   const src=document.getElementById('cotDoc'); if(!src){ alert('Primero genera la cotización.'); return; }
   const num=(src.getAttribute('data-num')||'Cotizacion').replace(/[^A-Za-z0-9_-]/g,'_');
-  const jsPDFlib=(window.jspdf&&window.jspdf.jsPDF)||window.jsPDF||(typeof jsPDF!=='undefined'?jsPDF:null);
-  if(typeof html2canvas==='undefined' || !jsPDFlib){ if(typeof html2pdf!=='undefined'){ html2pdf().set({margin:8,filename:'Cotizacion_'+num+'.pdf',jsPDF:{unit:'mm',format:'a4',orientation:'portrait'}}).from(src).save(); } else window.print(); return; }
+  if(typeof html2pdf==='undefined'){ window.print(); return; }
   let wrap=document.getElementById('cotPrintWrap'); if(!wrap){ wrap=document.createElement('div'); wrap.id='cotPrintWrap'; document.body.appendChild(wrap); }
-  // Render FUERA de pantalla a ancho A4 (794px ≈ 210mm). ABSOLUTE (no fixed): si fuera fixed,
+  // Render FUERA de pantalla a ancho A4 (794px ≈ 210mm). ABSOLUTE (NUNCA fixed): con fixed,
   // html2canvas solo captura la altura de la pantalla y el documento sale recortado.
   wrap.style.cssText='position:absolute;left:-10000px;top:0;width:794px;background:#ffffff';
   wrap.innerHTML=src.outerHTML;
   const doc=wrap.firstElementChild;
-  if(doc){ doc.style.boxShadow='none'; doc.style.border='none'; doc.style.borderRadius='0'; doc.style.margin='0'; doc.style.width='100%'; doc.style.maxWidth='100%'; }
-  const fullH=Math.ceil((doc&&doc.scrollHeight)||wrap.scrollHeight)+4;   // captura TODA la altura
-  html2canvas(doc,{scale:2,backgroundColor:'#ffffff',useCORS:true,windowWidth:794,width:794,windowHeight:fullH,height:fullH,scrollX:0,scrollY:0}).then(canvas=>{
-    const pdf=new jsPDFlib('p','mm','a4');
-    const margin=8, pw=210, ph=297, cw=pw-2*margin, pageH=ph-2*margin;
-    const imgH=canvas.height*cw/canvas.width;   // alto del documento ya escalado al ancho de página
-    const imgData=canvas.toDataURL('image/jpeg',0.98);
-    if(imgH<=pageH+0.5){
-      pdf.addImage(imgData,'JPEG',margin,margin,cw,imgH);                 // cabe en 1 hoja: completo
-    } else if(imgH<=pageH*1.7){
-      const s=pageH/imgH, wS=cw*s;                                        // un poco más largo: ajustar a 1 hoja
-      pdf.addImage(imgData,'JPEG',margin+(cw-wS)/2,margin,wS,pageH);
-    } else {
-      const pxPageH=canvas.width*pageH/cw;                               // muy largo: paginar limpio
-      const tmp=document.createElement('canvas'), ctx=tmp.getContext('2d');
-      let sY=0, page=0;
-      while(sY<canvas.height){
-        const sliceH=Math.min(pxPageH,canvas.height-sY);
-        tmp.width=canvas.width; tmp.height=sliceH;
-        ctx.fillStyle='#ffffff'; ctx.fillRect(0,0,tmp.width,tmp.height);
-        ctx.drawImage(canvas,0,sY,canvas.width,sliceH,0,0,canvas.width,sliceH);
-        if(page>0) pdf.addPage();
-        pdf.addImage(tmp.toDataURL('image/jpeg',0.98),'JPEG',margin,margin,cw,sliceH*cw/canvas.width);
-        sY+=sliceH; page++;
-      }
-    }
-    pdf.save('Cotizacion_'+num+'.pdf');
-    wrap.innerHTML='';
-  }).catch(e=>{ wrap.innerHTML=''; alert('No se pudo generar el PDF: '+(e&&e.message||e)); });
+  if(doc){ doc.style.boxShadow='none'; doc.style.border='none'; doc.style.borderRadius='0'; doc.style.margin='0'; doc.style.width='794px'; doc.style.maxWidth='794px'; }
+  const done=()=>{ wrap.innerHTML=''; };
+  // Sin overrides de tamaño en html2canvas: mide la altura COMPLETA y html2pdf pagina si hace falta.
+  html2pdf().set({
+    margin:[8,8,8,8],
+    filename:'Cotizacion_'+num+'.pdf',
+    image:{type:'jpeg',quality:.98},
+    html2canvas:{scale:2,backgroundColor:'#ffffff',useCORS:true},
+    jsPDF:{unit:'mm',format:'a4',orientation:'portrait'},
+    pagebreak:{mode:['css','legacy']}
+  }).from(doc).save().then(done,done);
 }
 async function cotGuardar(){
   if(!cotRows.some(r=>(r.texto||'').trim()||Number(r.sin)>0)){ alert('Añade al menos un concepto con descripción o monto.'); return; }
