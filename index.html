@@ -1072,6 +1072,7 @@ const NAV=[
   {id:'kudos',ic:'🏅',t:'Reconocimientos', roles:['responsable','direccion','admin']},
   {id:'cumple',ic:'🎂',t:'Cumpleaños'},
   {grp:'Recursos'},
+  {id:'cotizaciones',ic:'🧾',t:'Cotizaciones', roles:['admin']},
   {id:'perfil',ic:'👤',t:'Mi perfil'},
   {id:'organigrama',ic:'🏢',t:'Organigrama'},
   {id:'proveedores',ic:'🚚',t:'Proveedores'},
@@ -1327,6 +1328,7 @@ function show(id){
   else if(id==='calendario'){ ld('<div class="page-title">Calendario</div><div class="page-sub">Cargando…</div>'); pageCalendario(); }
   else if(id==='cumple'){ ld('<div class="page-title">Cumpleaños</div><div class="page-sub">Cargando…</div>'); pageCumple(); }
   else if(id==='carteles'){ pageCarteles(); }
+  else if(id==='cotizaciones'){ ld('<div class="page-title">Cotizaciones</div><div class="page-sub">Cargando…</div>'); pageCotizaciones(); }
   else if(id==='admin'){ ld('<div class="page-title">Usuarios</div><div class="page-sub">Cargando…</div>'); pageAdmin(); }
   else if(id==='registros'){ ld('<div class="page-title">Registros pendientes</div><div class="page-sub">Cargando…</div>'); pageRegistros(); }
   else if(id==='catalogos'){ ld('<div class="page-title">Catálogos</div><div class="page-sub">Cargando…</div>'); pageCatalogos(); }
@@ -2610,6 +2612,178 @@ function pageCarteles(){const t=CARTELES[cartelTpl];
       <div><div style="font-size:12px;color:var(--suave);margin-bottom:6px">Vista previa</div><div id="cartelPrint">${cartelHTML(t.titulo,t.cuerpo,'',t.color,t.icon)}</div></div></div>`;
 }
 function updateCartel(){const t=CARTELES[cartelTpl];document.getElementById('cartelPrint').innerHTML=cartelHTML(val('caT'),document.getElementById('caB').value,val('caU'),t.color,t.icon);}
+
+/* ---------------- COTIZACIONES (Propietario + Admin) ---------------- */
+const COT_EMISORES={
+  emerica:{ nombre:'Emerica Inc SA', ruc:'155649119-2-2017 DV 94', dir:'Calle Boquete, San Felipe, Ciudad de Panamá', email:'contabilidadpa@amazinnplaces.com',
+    banco:{cuenta:'Emerica Inc', banco:'Banco General', tipo:'Cuenta de Ahorros', num:'04-10-00-001234-2', email:'contabilidadpa@amazinnplaces.com'} },
+  integra:{ nombre:'Integra Services Group SA', ruc:'155716639-2-2021 DV97', dir:'Calle Boquete, San Felipe, Panamá', email:'contabilidadpa@amazinnplaces.com',
+    banco:{cuenta:'Integra Services Group', banco:'Banco General', tipo:'Cuenta de Ahorros', num:'03-10-01-140811-2', email:'contabilidadpa@amazinnplaces.com'} }
+};
+const COT_ITBMS=0.07;
+let cotTab='crear', cotEmisor='emerica', cotSeqPreview=1, cotFechaVal='', cotNotas='';
+let cotCli={nom:'',ruc:'',tel:'',mail:''};
+let cotRows=[{texto:'',cant:1,sin:0,con:0,man:false}];
+let cotHist=[], cotHistFiltro='todos', cotHistQuery='';
+function cotMoney(n){ n=Number(n)||0; return '$'+n.toLocaleString('es-PA',{minimumFractionDigits:2,maximumFractionDigits:2}); }
+function cotNum(seq){ return 'COT'+String(seq).padStart(4,'0'); }
+async function cotNextSeq(emisor){ const {data}=await sb.from('cotizaciones').select('seq').eq('emisor',emisor).order('seq',{ascending:false}).limit(1); return ((data&&data[0]&&data[0].seq)||0)+1; }
+function cotSetEmisor(k){ cotEmisor=k; pageCotizaciones(); }
+
+async function pageCotizaciones(){
+  if(!isAdmin()){ document.getElementById('main').innerHTML='<div class="page-title">Cotizaciones</div><div class="panel" style="color:var(--suave)">Solo el Propietario y los Administradores pueden acceder a esta sección.</div>'; return; }
+  const tabs=`<div style="display:flex;gap:8px;margin-bottom:16px">
+    <button class="btn ${cotTab==='crear'?'':'ghost'}" onclick="cotTab='crear';pageCotizaciones()">➕ Nueva cotización</button>
+    <button class="btn ${cotTab==='hist'?'':'ghost'}" onclick="cotTab='hist';pageCotizaciones()">📚 Histórico</button></div>`;
+  const body = cotTab==='crear' ? await cotFormHTML() : await cotHistHTML();
+  document.getElementById('main').innerHTML=`<div class="page-title">Cotizaciones</div><div class="page-sub">Genera y guarda cotizaciones · Emerica Inc · Integra Services Group</div>${tabs}${body}`;
+}
+
+async function cotFormHTML(){
+  cotSeqPreview=await cotNextSeq(cotEmisor);
+  if(!cotFechaVal) cotFechaVal=isoD(new Date());
+  const emisorBtns=Object.entries(COT_EMISORES).map(([k,v])=>`<button type="button" class="cp ${k===cotEmisor?'on':''}" onclick="cotSetEmisor('${k}')">${esc(v.nombre)}</button>`).join('');
+  return `<div style="display:grid;grid-template-columns:1.05fr .95fr;gap:22px;align-items:start" class="cot-grid">
+    <div class="panel"><form class="box" onsubmit="return false" style="max-width:none">
+      <div><label>Sociedad que cotiza</label><div class="cartel-pick">${emisorBtns}</div></div>
+      <div class="row"><div><label>Fecha</label><input type="date" id="cotFecha" value="${esc(cotFechaVal)}" oninput="cotFechaVal=this.value;cotPreview()"></div>
+        <div><label>Número (se asigna al guardar)</label><input value="${cotNum(cotSeqPreview)}" readonly style="background:var(--gris);font-weight:700"></div></div>
+      <h2 style="margin:6px 0 0">Cliente</h2>
+      <div><label>Nombre</label><input value="${esc(cotCli.nom)}" oninput="cotCli.nom=this.value;cotPreview()"></div>
+      <div><label>Identificación (RUC / Cédula)</label><input value="${esc(cotCli.ruc)}" oninput="cotCli.ruc=this.value;cotPreview()"></div>
+      <div class="row"><div><label>Nº de teléfono</label><input value="${esc(cotCli.tel)}" oninput="cotCli.tel=this.value;cotPreview()"></div>
+        <div><label>Email</label><input value="${esc(cotCli.mail)}" oninput="cotCli.mail=this.value;cotPreview()"></div></div>
+      <h2 style="margin:6px 0 0">Conceptos</h2>
+      <div id="cotRows">${cotRowsHTML()}</div>
+      <div><button type="button" class="btn ghost" onclick="cotAddRow()">➕ Añadir concepto</button></div>
+      <div><label>Notas (opcional)</label><textarea rows="2" placeholder="Condiciones, validez de la oferta, etc." oninput="cotNotas=this.value;cotPreview()">${esc(cotNotas)}</textarea></div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap"><button type="button" class="btn" onclick="cotGuardar()">💾 Guardar cotización</button>
+        <button type="button" class="btn ghost" onclick="cotPDF()">📥 Descargar PDF</button></div>
+    </form></div>
+    <div><div style="font-size:12px;color:var(--suave);margin-bottom:6px">Vista previa</div><div id="cotPrintBox">${cotDocHTML(cotGather())}</div></div></div>`;
+}
+function cotRowsHTML(){
+  return cotRows.map((r,i)=>`<div style="border:1px solid var(--gris2);border-radius:10px;padding:10px;margin-bottom:8px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"><b style="font-size:12px;color:var(--suave)">Concepto ${i+1}</b>${cotRows.length>1?`<button type="button" class="cat-x" onclick="cotDelRow(${i})">🗑</button>`:''}</div>
+    <textarea rows="2" placeholder="Descripción del servicio / producto" oninput="cotEdit(${i},'texto',this.value)">${esc(r.texto)}</textarea>
+    <div class="row" style="margin-top:6px"><div><label style="font-size:11px">Cantidad</label><input type="number" min="0" step="1" value="${esc(String(r.cant))}" oninput="cotEdit(${i},'cant',this.value)"></div>
+      <div><label style="font-size:11px">Monto sin ITBMS</label><input type="number" min="0" step="0.01" value="${esc(String(r.sin))}" oninput="cotEdit(${i},'sin',this.value)"></div>
+      <div><label style="font-size:11px">Monto con ITBMS</label><input type="number" min="0" step="0.01" id="cotCon${i}" value="${esc(String(r.con))}" oninput="cotEdit(${i},'con',this.value)"></div></div></div>`).join('');
+}
+function cotEdit(i,field,value){
+  const r=cotRows[i]; if(!r) return;
+  if(field==='texto') r.texto=value;
+  else if(field==='cant') r.cant=value;
+  else if(field==='sin'){ r.sin=value; r.con=+(Number(value)*(1+COT_ITBMS)).toFixed(2); r.man=false; const c=document.getElementById('cotCon'+i); if(c) c.value=r.con; }
+  else if(field==='con'){ r.con=value; r.man=true; }
+  cotPreview();
+}
+function cotAddRow(){ cotRows.push({texto:'',cant:1,sin:0,con:0,man:false}); document.getElementById('cotRows').innerHTML=cotRowsHTML(); cotPreview(); }
+function cotDelRow(i){ cotRows.splice(i,1); if(!cotRows.length) cotRows.push({texto:'',cant:1,sin:0,con:0,man:false}); document.getElementById('cotRows').innerHTML=cotRowsHTML(); cotPreview(); }
+function cotGather(){
+  let ts=0,tc=0; const rows=cotRows.map(r=>{const sin=Number(r.sin)||0,con=Number(r.con)||0;ts+=sin;tc+=con;return{texto:r.texto||'',cant:r.cant,sin,con};});
+  return {emisor:cotEmisor,fecha:cotFechaVal||isoD(new Date()),numero:cotNum(cotSeqPreview),cli:{...cotCli},rows,totSin:ts,totCon:tc,notas:cotNotas};
+}
+function cotPreview(){ const box=document.getElementById('cotPrintBox'); if(box) box.innerHTML=cotDocHTML(cotGather()); }
+function cotDocHTML(d){
+  const e=esc, em=COT_EMISORES[d.emisor]||COT_EMISORES.emerica, b=em.banco;
+  const fechaTxt=d.fecha?new Date(d.fecha+'T00:00:00').toLocaleDateString('es-PA',{day:'2-digit',month:'long',year:'numeric'}):'';
+  const cli=d.cli||{};
+  const cliBlock=(cli.nom||cli.ruc||cli.tel||cli.mail)
+    ? `<div style="line-height:1.6">${cli.nom?`<b>${e(cli.nom)}</b><br>`:''}${cli.ruc?`Identificación: ${e(cli.ruc)}<br>`:''}${cli.tel?`Tel: ${e(cli.tel)}<br>`:''}${cli.mail?`${e(cli.mail)}`:''}</div>`
+    : '<span style="color:#bbbbbb">Sin datos de cliente</span>';
+  const rows=(d.rows||[]).map(r=>`<tr>
+    <td style="padding:8px 10px;border-bottom:1px solid #e5e7eb;font-size:13px;vertical-align:top">${e(r.texto)||'<span style=\"color:#bbb\">—</span>'}</td>
+    <td style="padding:8px 10px;border-bottom:1px solid #e5e7eb;text-align:center;font-size:13px;vertical-align:top">${e(String(r.cant||''))}</td>
+    <td style="padding:8px 10px;border-bottom:1px solid #e5e7eb;text-align:right;font-size:13px;vertical-align:top">${cotMoney(r.sin)}</td>
+    <td style="padding:8px 10px;border-bottom:1px solid #e5e7eb;text-align:right;font-size:13px;vertical-align:top">${cotMoney(r.con)}</td></tr>`).join('');
+  const itbms=(Number(d.totCon)||0)-(Number(d.totSin)||0);
+  return `<div id="cotDoc" data-num="${e(d.numero||'')}" style="background:#ffffff;color:#222222;padding:30px 32px;border:1px solid #e5e7eb;border-radius:6px;font-family:inherit;width:760px;max-width:100%;margin:0 auto;box-shadow:var(--sombra)">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:20px;border-bottom:3px solid #1f4e79;padding-bottom:16px">
+      <div style="max-width:60%"><img src="${LOGO}" alt="Amazinn Places" style="height:30px;margin-bottom:8px">
+        <div style="font-weight:800;font-size:16px;color:#1f4e79">${e(em.nombre)}</div>
+        <div style="font-size:12px;color:#555555;line-height:1.5">RUC: ${e(em.ruc)}<br>${e(em.dir)}<br>${e(em.email)}</div></div>
+      <div style="text-align:right"><div style="font-size:22px;font-weight:900;color:#1f4e79;letter-spacing:1px">COTIZACIÓN</div>
+        <div style="font-size:15px;font-weight:700;margin-top:4px">${e(d.numero||'')}</div>
+        <div style="font-size:12px;color:#555555;margin-top:2px">Fecha: ${e(fechaTxt)}</div></div></div>
+    <div style="margin:16px 0;font-size:13px"><div style="font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:#1f4e79;font-weight:700;margin-bottom:4px">Cliente</div>${cliBlock}</div>
+    <table style="width:100%;border-collapse:collapse;margin-top:6px"><thead><tr style="background:#1f4e79;color:#ffffff">
+      <th style="padding:9px 10px;text-align:left;font-size:12px">Concepto</th>
+      <th style="padding:9px 10px;text-align:center;font-size:12px;width:64px">Cant.</th>
+      <th style="padding:9px 10px;text-align:right;font-size:12px;width:120px">Sin ITBMS</th>
+      <th style="padding:9px 10px;text-align:right;font-size:12px;width:120px">Con ITBMS</th></tr></thead>
+      <tbody>${rows||'<tr><td colspan="4" style="padding:14px;text-align:center;color:#bbb">Sin conceptos</td></tr>'}</tbody></table>
+    <div style="display:flex;justify-content:flex-end;margin-top:14px"><table style="font-size:13px">
+      <tr><td style="padding:4px 18px 4px 0;color:#555555">Total sin ITBMS</td><td style="padding:4px 0;text-align:right;font-weight:700">${cotMoney(d.totSin)}</td></tr>
+      <tr><td style="padding:4px 18px 4px 0;color:#555555">ITBMS (7%)</td><td style="padding:4px 0;text-align:right">${cotMoney(itbms)}</td></tr>
+      <tr><td style="padding:7px 18px 0 0;font-weight:800;color:#1f4e79;font-size:15px;border-top:2px solid #1f4e79">Total con ITBMS</td><td style="padding:7px 0 0;text-align:right;font-weight:800;color:#1f4e79;font-size:15px;border-top:2px solid #1f4e79">${cotMoney(d.totCon)}</td></tr></table></div>
+    ${d.notas?`<div style="margin-top:16px;font-size:12px;color:#555555"><b>Notas:</b> ${e(d.notas)}</div>`:''}
+    <div style="margin-top:20px;border:1px solid #e5e7eb;border-radius:10px;padding:14px 16px;background:#f8fafc">
+      <div style="font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:#1f4e79;font-weight:700;margin-bottom:6px">Datos para el pago</div>
+      <div style="font-size:13px;line-height:1.7"><b>Nombre de la cuenta:</b> ${e(b.cuenta)}<br><b>Banco:</b> ${e(b.banco)}<br><b>Tipo de cuenta:</b> ${e(b.tipo)}<br><b>Nº de cuenta:</b> ${e(b.num)}<br><b>Email:</b> ${e(b.email)}</div></div>
+    <div style="margin-top:18px;text-align:center;font-size:11px;color:#888888;border-top:1px solid #e5e7eb;padding-top:10px">Amazinn Places · ${e(em.nombre)}</div></div>`;
+}
+function cotPDF(){
+  const src=document.getElementById('cotDoc'); if(!src){ alert('Primero genera la cotización.'); return; }
+  if(typeof html2pdf==='undefined'){ window.print(); return; }
+  let wrap=document.getElementById('cotPrintWrap'); if(!wrap){ wrap=document.createElement('div'); wrap.id='cotPrintWrap'; wrap.style.cssText='position:absolute;left:0;top:0;z-index:-1;opacity:0'; document.body.appendChild(wrap); }
+  wrap.innerHTML=`<div id="cotPrintInner" style="display:inline-block;background:#ffffff">${src.outerHTML}</div>`;
+  const doc=wrap.querySelector('#cotDoc'); if(doc){ doc.style.boxShadow='none'; doc.style.border='none'; doc.style.margin='0'; doc.style.width='760px'; doc.style.maxWidth='760px'; }
+  const el=document.getElementById('cotPrintInner');
+  const w=Math.max(760, el.scrollWidth+2);
+  const num=(src.getAttribute('data-num')||'Cotizacion').replace(/[^A-Za-z0-9_-]/g,'_');
+  const done=()=>{ wrap.innerHTML=''; };
+  html2pdf().set({margin:8,filename:'Cotizacion_'+num+'.pdf',image:{type:'jpeg',quality:.98},html2canvas:{scale:2,backgroundColor:'#ffffff',windowWidth:w+40,width:w,scrollX:0,scrollY:0},jsPDF:{unit:'mm',format:'a4',orientation:'portrait'},pagebreak:{mode:['css','legacy']}}).from(el).save().then(done,done);
+}
+async function cotGuardar(){
+  if(!cotRows.some(r=>(r.texto||'').trim()||Number(r.sin)>0)){ alert('Añade al menos un concepto con descripción o monto.'); return; }
+  const d=cotGather();
+  let seq=await cotNextSeq(cotEmisor);
+  const payload=()=>({ emisor:cotEmisor, seq, numero:cotNum(seq), fecha:d.fecha||isoD(new Date()),
+    cliente_nombre:d.cli.nom||null, cliente_ruc:d.cli.ruc||null, cliente_tel:d.cli.tel||null, cliente_email:d.cli.mail||null,
+    conceptos:d.rows, total_sin:d.totSin, total_con:d.totCon, notas:d.notas||null, creado_por_nombre:(PROFILE&&PROFILE.nombre)||'' });
+  let {error}=await sb.from('cotizaciones').insert(payload());
+  if(error && /duplicate|unique|llave dupl/i.test(error.message||'')){ seq=await cotNextSeq(cotEmisor); ({error}=await sb.from('cotizaciones').insert(payload())); }
+  if(error){ alert('No se pudo guardar: '+error.message); return; }
+  alert('Cotización '+cotNum(seq)+' guardada correctamente.');
+  cotRows=[{texto:'',cant:1,sin:0,con:0,man:false}]; cotCli={nom:'',ruc:'',tel:'',mail:''}; cotNotas=''; cotFechaVal='';
+  cotTab='hist'; pageCotizaciones();
+}
+async function cotHistHTML(){
+  const {data}=await sb.from('cotizaciones').select('*').order('created_at',{ascending:false});
+  cotHist=data||[];
+  let list=cotHist;
+  if(cotHistFiltro!=='todos') list=list.filter(c=>c.emisor===cotHistFiltro);
+  const q=cotHistQuery.trim().toLowerCase();
+  if(q) list=list.filter(c=>(c.numero||'').toLowerCase().includes(q)||(c.cliente_nombre||'').toLowerCase().includes(q));
+  const filtBtns=`<select onchange="cotHistFiltro=this.value;pageCotizaciones()" style="padding:9px 12px;border:1px solid var(--gris2);border-radius:9px;font-size:14px">
+      <option value="todos" ${cotHistFiltro==='todos'?'selected':''}>Todas las sociedades</option>
+      <option value="emerica" ${cotHistFiltro==='emerica'?'selected':''}>Emerica Inc SA</option>
+      <option value="integra" ${cotHistFiltro==='integra'?'selected':''}>Integra Services Group SA</option></select>`;
+  const rows=list.map(c=>`<tr>
+    <td style="padding:9px 10px;border-bottom:1px solid var(--gris);font-weight:700">${esc(c.numero)}</td>
+    <td style="padding:9px 10px;border-bottom:1px solid var(--gris)">${COT_EMISORES[c.emisor]?esc(COT_EMISORES[c.emisor].nombre):esc(c.emisor)}</td>
+    <td style="padding:9px 10px;border-bottom:1px solid var(--gris)">${c.fecha?new Date(c.fecha+'T00:00:00').toLocaleDateString('es-PA'):''}</td>
+    <td style="padding:9px 10px;border-bottom:1px solid var(--gris)">${esc(c.cliente_nombre||'—')}</td>
+    <td style="padding:9px 10px;border-bottom:1px solid var(--gris);text-align:right;font-weight:700">${cotMoney(c.total_con)}</td>
+    <td style="padding:9px 10px;border-bottom:1px solid var(--gris);text-align:right"><button class="btn ghost" style="padding:6px 12px" onclick="cotVer(${c.id})">👁 Ver / PDF</button></td></tr>`).join('')
+    || `<tr><td colspan="6" style="padding:18px;text-align:center;color:var(--suave)">No hay cotizaciones todavía.</td></tr>`;
+  return `<div class="panel">
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px">${filtBtns}
+      <input placeholder="Buscar nº o cliente…" value="${esc(cotHistQuery)}" oninput="cotHistQuery=this.value" onkeyup="if(event.key==='Enter')pageCotizaciones()" style="flex:1;min-width:180px;padding:9px 12px;border:1px solid var(--gris2);border-radius:9px;font-size:14px">
+      <button class="btn ghost" onclick="pageCotizaciones()">Buscar</button></div>
+    <div class="grid-wrap"><table style="width:100%;border-collapse:collapse;font-size:14px"><thead><tr style="text-align:left;color:var(--suave);font-size:12px">
+      <th style="padding:6px 10px">Nº</th><th style="padding:6px 10px">Sociedad</th><th style="padding:6px 10px">Fecha</th><th style="padding:6px 10px">Cliente</th><th style="padding:6px 10px;text-align:right">Total</th><th></th></tr></thead>
+      <tbody>${rows}</tbody></table></div></div>
+    <div id="cotViewBox" style="margin-top:18px"></div>`;
+}
+function cotVer(id){
+  const c=cotHist.find(x=>String(x.id)===String(id)); if(!c) return;
+  const d={emisor:c.emisor,fecha:c.fecha,numero:c.numero,cli:{nom:c.cliente_nombre,ruc:c.cliente_ruc,tel:c.cliente_tel,mail:c.cliente_email},rows:(c.conceptos||[]),totSin:c.total_sin,totCon:c.total_con,notas:c.notas};
+  const box=document.getElementById('cotViewBox'); if(!box) return;
+  box.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><div style="font-weight:700;color:var(--azul)">Cotización ${esc(c.numero)}</div><button class="btn ghost" onclick="cotPDF()">📥 Descargar PDF</button></div>${cotDocHTML(d)}`;
+  box.scrollIntoView({behavior:'smooth',block:'start'});
+}
 
 /* ---------------- CATÁLOGOS (Propietario) ---------------- */
 function pageCatalogos(){
