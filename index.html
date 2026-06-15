@@ -2737,12 +2737,14 @@ function cotPDF(){
   const jsPDFlib=(window.jspdf&&window.jspdf.jsPDF)||window.jsPDF||(typeof jsPDF!=='undefined'?jsPDF:null);
   if(typeof html2canvas==='undefined' || !jsPDFlib){ if(typeof html2pdf!=='undefined'){ html2pdf().set({margin:8,filename:'Cotizacion_'+num+'.pdf',jsPDF:{unit:'mm',format:'a4',orientation:'portrait'}}).from(src).save(); } else window.print(); return; }
   let wrap=document.getElementById('cotPrintWrap'); if(!wrap){ wrap=document.createElement('div'); wrap.id='cotPrintWrap'; document.body.appendChild(wrap); }
-  // Render FUERA de pantalla a ancho A4 (794px ≈ 210mm); no display:none ni opacity:0
-  wrap.style.cssText='position:fixed;left:-10000px;top:0;width:794px;background:#ffffff;z-index:-1';
+  // Render FUERA de pantalla a ancho A4 (794px ≈ 210mm). ABSOLUTE (no fixed): si fuera fixed,
+  // html2canvas solo captura la altura de la pantalla y el documento sale recortado.
+  wrap.style.cssText='position:absolute;left:-10000px;top:0;width:794px;background:#ffffff';
   wrap.innerHTML=src.outerHTML;
   const doc=wrap.firstElementChild;
   if(doc){ doc.style.boxShadow='none'; doc.style.border='none'; doc.style.borderRadius='0'; doc.style.margin='0'; doc.style.width='100%'; doc.style.maxWidth='100%'; }
-  html2canvas(doc,{scale:2,backgroundColor:'#ffffff',useCORS:true,windowWidth:794,width:794}).then(canvas=>{
+  const fullH=Math.ceil((doc&&doc.scrollHeight)||wrap.scrollHeight)+4;   // captura TODA la altura
+  html2canvas(doc,{scale:2,backgroundColor:'#ffffff',useCORS:true,windowWidth:794,width:794,windowHeight:fullH,height:fullH,scrollX:0,scrollY:0}).then(canvas=>{
     const pdf=new jsPDFlib('p','mm','a4');
     const margin=8, pw=210, ph=297, cw=pw-2*margin, pageH=ph-2*margin;
     const imgH=canvas.height*cw/canvas.width;   // alto del documento ya escalado al ancho de página
