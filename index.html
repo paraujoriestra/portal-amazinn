@@ -2750,7 +2750,8 @@ function cotPDF(){
   }
   const go=()=>{
     const H=Math.ceil(Math.max(doc.scrollHeight, doc.getBoundingClientRect().height))+2;   // altura COMPLETA real
-    html2canvas(doc,{scale:2,backgroundColor:'#ffffff',useCORS:true,width:794,windowWidth:794,height:H,windowHeight:H,scrollX:0,scrollY:0}).then(canvas=>{
+    // ventana virtual MUY alta para que html2canvas NUNCA recorte por la altura de pantalla
+    html2canvas(doc,{scale:2,backgroundColor:'#ffffff',useCORS:true,windowWidth:794,windowHeight:Math.max(2400,H+200),scrollX:0,scrollY:0}).then(canvas=>{
       const pdf=new jsPDFlib('p','mm','a4');
       const margin=8, pw=210, ph=297, cw=pw-2*margin, pageH=ph-2*margin;   // ancho útil = 194mm
       const imgData=canvas.toDataURL('image/jpeg',0.98);
@@ -2817,7 +2818,7 @@ async function cotHistHTML(){
     <td style="padding:9px 10px;border-bottom:1px solid var(--gris)">${c.fecha?new Date(c.fecha+'T00:00:00').toLocaleDateString('es-PA'):''}</td>
     <td style="padding:9px 10px;border-bottom:1px solid var(--gris)">${esc(c.cliente_nombre||'—')}</td>
     <td style="padding:9px 10px;border-bottom:1px solid var(--gris);text-align:right;font-weight:700">${cotMoney(c.total_con)}</td>
-    <td style="padding:9px 10px;border-bottom:1px solid var(--gris);text-align:right;white-space:nowrap"><button class="btn ghost" style="padding:6px 10px" onclick="cotVer(${c.id})">👁 Ver / PDF</button> <button class="btn ghost" style="padding:6px 10px" onclick="cotEditar(${c.id})">✏️ Editar</button></td></tr>`).join('')
+    <td style="padding:9px 10px;border-bottom:1px solid var(--gris);text-align:right;white-space:nowrap"><button class="btn ghost" style="padding:6px 10px" onclick="cotVer(${c.id})">👁 Ver</button> <button class="btn ghost" style="padding:6px 10px" onclick="cotDescargar(${c.id})">📥 Descargar PDF</button></td></tr>`).join('')
     || `<tr><td colspan="6" style="padding:18px;text-align:center;color:var(--suave)">No hay cotizaciones todavía.</td></tr>`;
   return `<div class="panel">
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px">${filtBtns}
@@ -2846,6 +2847,14 @@ function cotEditar(id){
 }
 function cotResetForm(){ cotEditId=null; cotEditNum=''; cotEmisor='emerica'; cotFechaVal=''; cotNotas=''; cotCli={nom:'',ruc:'',tel:'',mail:''}; cotRows=[{texto:'',cant:1,sin:0,con:0,man:false}]; }
 function cotCancelEdit(){ cotResetForm(); cotTab='hist'; pageCotizaciones(); }
+function cotDescargar(id){
+  const c=cotHist.find(x=>String(x.id)===String(id)); if(!c) return;
+  const d={emisor:c.emisor,fecha:c.fecha,numero:c.numero,cli:{nom:c.cliente_nombre,ruc:c.cliente_ruc,tel:c.cliente_tel,mail:c.cliente_email},rows:(c.conceptos||[]),totSin:c.total_sin,totCon:c.total_con,notas:c.notas};
+  const box=document.getElementById('cotViewBox'); const prev=box?box.innerHTML:'';
+  if(box) box.innerHTML='<div style="position:absolute;left:-10000px;top:0">'+cotDocHTML(d)+'</div>';
+  cotPDF();                 // cotPDF clona #cotDoc de forma síncrona
+  if(box) box.innerHTML=prev;   // restauramos la vista anterior
+}
 
 /* ---------------- CATÁLOGOS (Propietario) ---------------- */
 function pageCatalogos(){
