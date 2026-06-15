@@ -890,7 +890,7 @@ async function loadCatalogos(){
     sb.from('posiciones').select('nombre').order('id'),
     sb.from('equipos').select('nombre').order('nombre'),
     sb.from('ubicaciones').select('nombre').order('nombre'),
-    sb.from('mant_edificios').select('nombre').order('orden').order('nombre'),
+    sb.from('mant_edificios').select('nombre').order('nombre'),
     sb.from('mant_unidades').select('edificio,nombre,tipo').order('orden').order('nombre'),
   ]);
   CAT.areas      = (a.data||[]).map(x=>x.nombre);
@@ -2788,7 +2788,7 @@ async function pageMensajes(){
 }
 async function loadUnidades(){
   const [ed,un]=await Promise.all([
-    sb.from('mant_edificios').select('*').order('orden').order('nombre'),
+    sb.from('mant_edificios').select('*').order('nombre'),
     sb.from('mant_unidades').select('*').order('edificio').order('orden').order('nombre'),
   ]);
   const eds=ed.data||[], uns=un.data||[]; const out=[];
@@ -3362,7 +3362,7 @@ async function pageIncidencias(){
   if(inc.error){ document.getElementById('main').innerHTML=`<div class="page-title">Incidencias y mantenimiento</div><div class="panel">No se pudo cargar. ¿Ejecutaste <b>supabase_mantenimiento.sql</b> en Supabase?<br><small style="color:var(--suave)">${esc(inc.error.message)}</small></div>`; return; }
   INC=inc.data||[];
   const [ed,un,fo,stf]=await Promise.all([
-    sb.from('mant_edificios').select('*').order('orden').order('nombre'),
+    sb.from('mant_edificios').select('*').order('nombre'),
     sb.from('mant_unidades').select('*').order('orden').order('nombre'),
     sb.from('mant_fotos').select('*').order('id'),
     sb.from('profiles').select('id,nombre,org_equipo,equipo,dept').eq('dept','Mantenimiento').eq('estado','aprobado'),
@@ -3817,7 +3817,7 @@ async function pagePreventivo(){
   const pv=await sb.from('mant_preventivo').select('*').order('proximo');
   if(pv.error){ document.getElementById('main').innerHTML=`<div class="page-title">Mantenimiento preventivo</div><div class="panel">No se pudo cargar. ¿Ejecutaste <b>supabase_mantenimiento.sql</b> en Supabase?<br><small style="color:var(--suave)">${esc(pv.error.message)}</small></div>`; return; }
   const [ed,un,stf,inc]=await Promise.all([
-    sb.from('mant_edificios').select('*').order('orden').order('nombre'),
+    sb.from('mant_edificios').select('*').order('nombre'),
     sb.from('mant_unidades').select('*').order('orden').order('nombre'),
     sb.from('profiles').select('id,nombre,org_equipo,equipo,dept').eq('dept','Mantenimiento').eq('estado','aprobado'),
     sb.from('mant_incidencias').select('id,urgencia,estado,created_at,edificio,unidad,descripcion'),
