@@ -2335,9 +2335,9 @@ function fichHora(f){ return f.ts? new Date(f.ts).toLocaleTimeString('es-ES',{ho
 function fichFmtDur(min){ min=Math.max(0,Math.round(min)); const h=Math.floor(min/60),m=min%60; return h?(m?h+'h '+m+'m':h+'h'):m+'m'; }
 function fichSessions(list){ const s=[...list].sort((a,b)=>fichTsVal(a)-fichTsVal(b)); const out=[]; let open=null; s.forEach(f=>{ if(f.tipo==='entrada'){ open={ent:f,sal:null}; out.push(open); } else { if(open&&!open.sal){ open.sal=f; open=null; } else out.push({ent:null,sal:f}); } }); return out; }
 function fichMins(list){ let t=0; fichSessions(list).forEach(x=>{ if(x.ent&&x.sal) t+=(fichTsVal(x.sal)-fichTsVal(x.ent))/60000; }); return t; }
+function fichGestor(){ return ['direccion','admin','propietario'].includes(PROFILE.role); }
 async function pageFichaje(){
-  const isMgr=CAN_MANAGE.includes(PROFILE.role)||esRRHH();
-  const tabs=[['fichar','⏱️ Fichar'],['historial','🕘 Mi historial']]; if(isMgr) tabs.push(['equipo','👥 Equipo']);
+  const tabs=[['fichar','⏱️ Fichar']]; if(fichGestor()) tabs.push(['historial','🕘 Mi historial'],['equipo','👥 Equipo']);
   if(!tabs.some(t=>t[0]===fichTab)) fichTab='fichar';
   let body;
   if(fichTab==='fichar') body=await fichFichar();
@@ -2351,14 +2351,17 @@ async function fichFichar(){
   const{data:mine}=await sb.from('fichajes').select('*').eq('user_id',ME.id).eq('fecha',today);
   const mias=(mine||[]).sort((a,b)=>fichTsVal(a)-fichTsVal(b));
   const ult=mias[mias.length-1]||null; const dentro=ult?ult.tipo==='entrada':false;
+  const gestor=fichGestor();
   const worked=fichMins(mias);
-  // turno de hoy (cruce)
+  // turno de hoy (cruce) — solo para gestores
   let cruce='';
-  const{data:tn}=await sb.from('turnos').select('*').eq('empleado_id',ME.id).eq('fecha',today);
-  const turno=(tn||[])[0]; const tp=turno?turnoTipo(turno.tipo_id):null;
-  if(tp){ const ini=turno.hora_ini||tp.hora_ini; const ent=mias.find(x=>x.tipo==='entrada');
-    if(ini&&ent){ const plan=new Date(today+'T'+ini).getTime(); const real=fichTsVal(ent); const diff=Math.round((real-plan)/60000); cruce= diff>10? `<div style="color:#c0392b;font-size:13px;margin-top:6px">⏰ Entraste ${diff} min tarde (turno ${ini})</div>` : `<div style="color:#2c6b39;font-size:13px;margin-top:6px">✓ Turno ${ini}${turno.hora_fin?'–'+turno.hora_fin:''}</div>`; }
-    else if(ini&&!ent){ cruce=`<div style="color:var(--suave);font-size:13px;margin-top:6px">Tu turno de hoy empieza a las ${ini}.</div>`; }
+  if(gestor){
+    const{data:tn}=await sb.from('turnos').select('*').eq('empleado_id',ME.id).eq('fecha',today);
+    const turno=(tn||[])[0]; const tp=turno?turnoTipo(turno.tipo_id):null;
+    if(tp){ const ini=turno.hora_ini||tp.hora_ini; const ent=mias.find(x=>x.tipo==='entrada');
+      if(ini&&ent){ const plan=new Date(today+'T'+ini).getTime(); const real=fichTsVal(ent); const diff=Math.round((real-plan)/60000); cruce= diff>10? `<div style="color:#c0392b;font-size:13px;margin-top:6px">⏰ Entraste ${diff} min tarde (turno ${ini})</div>` : `<div style="color:#2c6b39;font-size:13px;margin-top:6px">✓ Turno ${ini}${turno.hora_fin?'–'+turno.hora_fin:''}</div>`; }
+      else if(ini&&!ent){ cruce=`<div style="color:var(--suave);font-size:13px;margin-top:6px">Tu turno de hoy empieza a las ${ini}.</div>`; }
+    }
   }
   const status=dentro?`<div style="font-size:20px;font-weight:800;color:var(--acento)">🟢 Estás fichado (dentro)</div><div style="color:var(--suave);font-size:13px">Entrada a las ${fichHora(ult)}${ult.lugar?' en '+esc(ult.lugar):''}</div>`
     :(ult?`<div style="font-size:20px;font-weight:800;color:var(--suave)">⚪ Fuera de turno</div><div style="color:var(--suave);font-size:13px">Última salida a las ${fichHora(ult)}</div>`:`<div style="font-size:20px;font-weight:800;color:var(--suave)">⚪ Aún no has fichado hoy</div>`);
@@ -2366,10 +2369,10 @@ async function fichFichar(){
     <div style="font-size:12px;color:#aaa;margin-bottom:8px">Simulación: elige el QR que escaneas</div><div class="qr-choices">${FICHA_LUGARES.map(l=>`<button onclick="doFichar('${l}')">${esc(l)}</button>`).join('')}</div>
     <div style="margin-top:12px"><button class="btn ghost" style="color:#fff;border-color:#555" onclick="fichScanOpen=false;show('fichaje')">Cancelar</button></div></div>`:'';
   return `<div class="panel" style="max-width:560px;text-align:center">${status}
-    <div style="margin:10px 0;font-size:13px;color:var(--suave)">Trabajado hoy: <b style="color:var(--azul)">${fichFmtDur(worked)}</b></div>${cruce}
+    ${gestor?`<div style="margin:10px 0;font-size:13px;color:var(--suave)">Trabajado hoy: <b style="color:var(--azul)">${fichFmtDur(worked)}</b></div>${cruce}`:'<div style="margin:6px 0"></div>'}
     ${!fichScanOpen?`<button class="btn" style="margin-top:12px;background:${dentro?'var(--rojo)':'var(--acento)'}" onclick="fichScanOpen=true;show('fichaje')">📷 Fichar ${dentro?'SALIDA':'ENTRADA'}</button>`:''}</div>
     ${scan}
-    <div class="panel"><h2>🕘 Mis fichajes de hoy</h2>${mias.length?`<table><thead><tr><th>Hora</th><th>Tipo</th><th>Lugar</th></tr></thead><tbody>${mias.map(f=>`<tr><td><b>${fichHora(f)}</b></td><td>${f.tipo==='entrada'?'<span class="badge b-green">Entrada</span>':'<span class="badge b-red">Salida</span>'}</td><td>${esc(f.lugar||'')}</td></tr>`).join('')}</tbody></table>`:'<div style="color:var(--suave);font-size:13.5px">Todavía no tienes fichajes hoy.</div>'}</div>`;
+    <div class="panel"><h2>🕘 Mis fichajes de hoy</h2>${(function(){const ss=fichSessions(mias); if(!ss.length) return '<div style="color:var(--suave);font-size:13.5px">Todavía no tienes fichajes hoy.</div>'; return `<table><thead><tr><th>🟢 Entrada</th><th>🔴 Salida</th><th>Lugar</th>${gestor?'<th>Horas</th>':''}</tr></thead><tbody>${ss.map(s=>{const lug=(s.ent&&s.ent.lugar)||(s.sal&&s.sal.lugar)||''; const dur=(s.ent&&s.sal)?fichFmtDur((fichTsVal(s.sal)-fichTsVal(s.ent))/60000):''; return `<tr><td><b>${s.ent?fichHora(s.ent):'—'}</b></td><td>${s.sal?`<b>${fichHora(s.sal)}</b>`:'<span style="color:var(--suave)">…en curso</span>'}</td><td>${esc(lug)}</td>${gestor?`<td>${dur||'—'}</td>`:''}</tr>`;}).join('')}</tbody></table>`;})()}</div>`;
 }
 function fichDefaultRange(){ if(!fichDesde||!fichHasta){ const h=new Date(); const d=new Date(); d.setDate(d.getDate()-13); fichHasta=isoD(h); fichDesde=isoD(d); } }
 async function fichHistorial(userId){
@@ -2379,7 +2382,7 @@ async function fichHistorial(userId){
   const byDay={}; rows.forEach(f=>{(byDay[f.fecha]=byDay[f.fecha]||[]).push(f);});
   const dias=Object.keys(byDay).sort().reverse();
   let total=0; const dayRows=dias.map(d=>{ const m=fichMins(byDay[d]); total+=m; const ss=fichSessions(byDay[d]); const det=ss.map(s=>`${s.ent?fichHora(s.ent):'—'}→${s.sal?fichHora(s.sal):'…'}`).join(' · '); return `<tr><td><b>${new Date(d+'T00:00:00').toLocaleDateString('es-ES',{weekday:'short',day:'2-digit',month:'short'})}</b></td><td>${det||'—'}</td><td><b>${fichFmtDur(m)}</b></td></tr>`; }).join('');
-  const rango=`<div class="inc-filters" style="margin-bottom:12px"><label style="font-size:13px;align-self:center">Del</label><input type="date" value="${fichDesde}" onchange="fichSetRange('d',this.value)" style="padding:7px 10px;border:1px solid var(--gris2);border-radius:8px"><label style="font-size:13px;align-self:center">al</label><input type="date" value="${fichHasta}" onchange="fichSetRange('h',this.value)" style="padding:7px 10px;border:1px solid var(--gris2);border-radius:8px"><button class="btn-sm ghost" onclick="fichExport('${userId}')">⬇️ Exportar CSV</button></div>`;
+  const rango=`<div class="inc-filters" style="margin-bottom:12px"><label style="font-size:13px;align-self:center">Del</label><input type="date" value="${fichDesde}" onchange="fichSetRange('d',this.value)" style="padding:7px 10px;border:1px solid var(--gris2);border-radius:8px"><label style="font-size:13px;align-self:center">al</label><input type="date" value="${fichHasta}" onchange="fichSetRange('h',this.value)" style="padding:7px 10px;border:1px solid var(--gris2);border-radius:8px"><button class="btn-sm ghost" onclick="fichExport('${userId}')">⬇️ Exportar Excel</button></div>`;
   return `${rango}<div class="panel"><h2>Total del periodo: <span style="color:var(--azul)">${fichFmtDur(total)}</span></h2>
     ${dayRows?`<table><thead><tr><th>Día</th><th>Sesiones</th><th>Horas</th></tr></thead><tbody>${dayRows}</tbody></table>`:'<div style="color:var(--suave)">Sin fichajes en este periodo.</div>'}</div>`;
 }
@@ -2390,7 +2393,7 @@ async function fichEquipo(){
   const byU={};(all||[]).forEach(f=>{(byU[f.user_id]=byU[f.user_id]||{nombre:f.user_nombre,list:[]}); byU[f.user_id].list.push(f);});
   const hoyRows=Object.keys(byU).map(uid=>{ const o=byU[uid]; const ls=o.list.sort((a,b)=>fichTsVal(a)-fichTsVal(b)); const dent=ls[ls.length-1].tipo==='entrada'; const ent=ls.find(x=>x.tipo==='entrada'); return `<tr><td>${esc(o.nombre)}</td><td>${dent?'<span class="badge b-green">Dentro</span>':'<span class="badge b-grey">Fuera</span>'}</td><td>${ent?fichHora(ent):'—'}</td><td><b>${fichFmtDur(fichMins(ls))}</b></td><td>${esc((ent||ls[0]||{}).lugar||'')}</td></tr>`; }).join('')||'<tr><td colspan="5" style="color:var(--suave)">Sin fichajes hoy.</td></tr>';
   return `<div class="panel"><h2>👥 Equipo · hoy</h2><table><thead><tr><th>Empleado</th><th>Estado</th><th>Entrada</th><th>Trabajado</th><th>Lugar</th></tr></thead><tbody>${hoyRows}</tbody></table></div>
-    <div class="panel" style="font-size:13px;color:var(--suave)">Para ver el histórico y total de horas de un empleado, ve a su ficha o usa Exportar. <button class="btn-sm ghost" onclick="fichExportAll()">⬇️ Exportar todos (periodo ${fichDesde} → ${fichHasta})</button></div>`;
+    <div class="panel" style="font-size:13px;color:var(--suave)">Para ver el histórico y total de horas de un empleado, ve a su ficha o usa Exportar. <button class="btn-sm ghost" onclick="fichExportAll()">⬇️ Exportar Excel (todos · ${fichDesde} → ${fichHasta})</button></div>`;
 }
 async function fichExport(userId){
   fichDefaultRange();
@@ -2403,10 +2406,11 @@ async function fichExportAll(){
   fichCSV(data||[],'fichajes_equipo_'+fichDesde+'_'+fichHasta);
 }
 function fichCSV(rows,name){
-  const q=v=>'"'+String(v==null?'':v).replace(/"/g,'""')+'"';
-  const lines=['Empleado;Fecha;Hora;Tipo;Lugar;Método'];
-  rows.sort((a,b)=>(a.fecha+a.user_nombre)<(b.fecha+b.user_nombre)?-1:1).forEach(f=>lines.push([f.user_nombre,f.fecha,fichHora(f),f.tipo,f.lugar||'',f.metodo||''].map(q).join(';')));
-  const blob=new Blob(['﻿'+lines.join('\n')],{type:'text/csv;charset=utf-8'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name+'.csv';document.body.appendChild(a);a.click();a.remove();toast('✓ CSV exportado');
+  if(typeof XLSX==='undefined'){ alert('No se pudo cargar el componente de Excel.'); return; }
+  const data=[['Empleado','Fecha','Hora','Tipo','Lugar','Método']];
+  rows.slice().sort((a,b)=>(a.fecha+a.user_nombre)<(b.fecha+b.user_nombre)?-1:1).forEach(f=>data.push([f.user_nombre,f.fecha,fichHora(f),f.tipo,f.lugar||'',f.metodo||'']));
+  const ws=XLSX.utils.aoa_to_sheet(data); const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'Fichajes'); XLSX.writeFile(wb,name+'.xlsx');
+  toast('✓ Excel exportado');
 }
 async function doFichar(lugar){const today=hoyISO();const{data}=await sb.from('fichajes').select('tipo,ts,hora').eq('user_id',ME.id).eq('fecha',today);
   const ls=(data||[]).sort((a,b)=>fichTsVal(a)-fichTsVal(b)); const dentro=ls.length?ls[ls.length-1].tipo==='entrada':false; const tipo=dentro?'salida':'entrada';
