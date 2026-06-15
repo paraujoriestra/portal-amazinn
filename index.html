@@ -1646,7 +1646,7 @@ function horLegendFrom(rows){
   const items=Object.values(seen); if(!items.length) return '';
   return `<div class="legend">${items.map(({t})=>{const col=isLibreTurno(t)?'#bfe7c4':t.color; return `<span><i style="background:${col}"></i>${esc(t.nombre)}</span>`;}).join('')}</div>`;
 }
-function tchipRow(r){ if(!r||!r.tipo_id) return `<span class="cell-b" style="background:#f2f2f2;color:#bbb">—</span>`; const t=turnoTipo(r.tipo_id); if(!t) return `<span class="cell-b">·</span>`; const lib=isLibreTurno(t); const ini=r.hora_ini||t.hora_ini, fin=r.hora_fin||t.hora_fin; const h=ini?`${ini}–${fin}`:''; const col=lib?'#bfe7c4':t.color; return `<span class="cell-b" title="${esc(t.nombre)}${h?' '+esc(h):''}" style="background:${col};color:#333;display:inline-block;text-align:center;line-height:1.15;padding:4px 7px"><b style="display:block">${esc(abreviaTurno(t))}</b>${(h&&!lib)?`<small style="display:block;font-size:9px;font-weight:400;opacity:.85">${esc(h)}</small>`:''}</span>`; }
+function tchipRow(r){ if(!r||!r.tipo_id) return `<span class="cell-b" style="background:#f2f2f2;color:#bbb">—</span>`; const t=turnoTipo(r.tipo_id); if(!t) return `<span class="cell-b">·</span>`; const lib=isLibreTurno(t); const ini=r.hora_ini||t.hora_ini, fin=r.hora_fin||t.hora_fin; const h=ini?`${ini}–${fin}`:''; const col=lib?'#bfe7c4':t.color; return `<span class="cell-b" title="${esc(t.nombre)}${h?' '+esc(h):''}" style="background:${col};color:#333;display:inline-block;text-align:center;line-height:1.2;padding:4px 7px"><b>${esc(abreviaTurno(t))}</b>${(h&&!lib)?`<br><small style="font-size:9px;font-weight:400;opacity:.85">${esc(h)}</small>`:''}</span>`; }
 
 async function pageHorarios(){
   await loadTurnosTipo();
