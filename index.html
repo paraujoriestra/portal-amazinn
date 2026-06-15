@@ -1844,7 +1844,7 @@ async function horTeam(dept,days,equipoFilter){
   const legend=horLegendFrom(Object.values(map));
   const periodo=`${days[0].toLocaleDateString('es-ES',{day:'2-digit',month:'short'})} – ${days[days.length-1].toLocaleDateString('es-ES',{day:'2-digit',month:'short',year:'numeric'})}`;
   const ttlTxt=`Horario · ${dept}${equipoFilter?' · '+equipoFilter:''}`;
-  return `<div id="horSched" data-pdftitle="${esc(ttlTxt)}" data-pdfperiodo="${esc(periodo)}"><div class="hor-pdf-title" style="display:none;margin-bottom:10px"><div style="font-size:20px;font-weight:800;color:#1f4e79">${esc(ttlTxt)}</div><div style="font-size:13px;color:#555555">Periodo: ${esc(periodo)}</div></div><div class="grid-wrap"><table class="sched"><thead>${head}</thead><tbody>${rows}</tbody></table></div>${legend||'<div class="legend" style="color:var(--suave)">Sin turnos publicados en este periodo.</div>'}</div>`;
+  return `<div id="horSched" data-pdftitle="${esc(ttlTxt)}" data-pdfperiodo="${esc(periodo)}" data-dept="${esc(dept||'')}" data-equipo="${esc(equipoFilter||'')}"><div class="hor-pdf-title" style="display:none;margin-bottom:10px"><div style="font-size:20px;font-weight:800;color:#1f4e79">${esc(ttlTxt)}</div><div style="font-size:13px;color:#555555">Periodo: ${esc(periodo)}</div></div><div class="grid-wrap"><table class="sched"><thead>${head}</thead><tbody>${rows}</tbody></table></div>${legend||'<div class="legend" style="color:var(--suave)">Sin turnos publicados en este periodo.</div>'}</div>`;
 }
 function horParseColor(c){ c=(c||'').trim();
   if(c[0]==='#'){ let h=c.slice(1); if(h.length===3)h=h.split('').map(x=>x+x).join(''); const n=parseInt(h,16); return [(n>>16)&255,(n>>8)&255,n&255]; }
@@ -1867,6 +1867,8 @@ function horPDF(){
   const src=document.getElementById('horSched'); if(!src){ window.print(); return; }
   const titleTxt=src.getAttribute('data-pdftitle')||'';
   const periodo=src.getAttribute('data-pdfperiodo')||'';
+  const depT=src.getAttribute('data-dept')||'';
+  const equiT=src.getAttribute('data-equipo')||'';
   const fname=((titleTxt||'Horario').replace(/[·\\/:]/g,'-').replace(/\s+/g,'_').replace(/_+/g,'_').replace(/^_|_$/g,''))+'.pdf';
   const jsPDFlib=(window.jspdf&&window.jspdf.jsPDF)||window.jsPDF||(typeof jsPDF!=='undefined'?jsPDF:null);
   const table=src.querySelector('table.sched');
@@ -1896,8 +1898,12 @@ function horPDF(){
   const pdf=new jsPDFlib('l','mm','a4');
   const PW=297, PH=210, M=8, usable=PW-2*M;
   let y=M+1;
-  if(titleTxt){ pdf.setFont('helvetica','bold'); pdf.setFontSize(14); pdf.setTextColor(31,78,121); pdf.text(clean(titleTxt),M,y+3); y+=6;
-    if(periodo){ pdf.setFont('helvetica','normal'); pdf.setFontSize(9); pdf.setTextColor(90,90,90); pdf.text('Periodo: '+clean(periodo),M,y+2); y+=5; } y+=2; }
+  pdf.setFont('helvetica','bold'); pdf.setFontSize(14); pdf.setTextColor(31,78,121);
+  pdf.text(depT?'Horario':(clean(titleTxt)||'Horario'),M,y+3); y+=6;
+  pdf.setFont('helvetica','normal'); pdf.setFontSize(9.5); pdf.setTextColor(45,45,45);
+  if(depT){ pdf.text('Departamento: '+clean(depT)+'        Equipo: '+(clean(equiT)||'Todos los equipos'),M,y+2); y+=5; }
+  if(periodo){ pdf.setFontSize(9); pdf.setTextColor(110,110,110); pdf.text('Periodo: '+clean(periodo),M,y+2); y+=5; }
+  y+=2;
   const nDays=dayLabels.length||1, nameW=34, dayW=(usable-nameW)/nDays, headH=8, rowH=11;
   const drawHeader=(yy)=>{ pdf.setFillColor(31,78,121); pdf.rect(M,yy,usable,headH,'F');
     pdf.setTextColor(255,255,255); pdf.setFont('helvetica','bold'); pdf.setFontSize(7.5); pdf.text('EMPLEADO',M+2,yy+headH/2+1.4);
@@ -1905,10 +1911,10 @@ function horPDF(){
   y=drawHeader(y);
   rows.forEach(r=>{
     if(y+rowH>PH-M-10){ pdf.addPage(); y=M+1; y=drawHeader(y); }
-    pdf.setDrawColor(223,227,234); pdf.setLineWidth(0.2);
+    pdf.setDrawColor(160,168,182); pdf.setLineWidth(0.3);
     pdf.rect(M,y,nameW,rowH);
     pdf.setTextColor(40,40,40); pdf.setFont('helvetica','bold'); pdf.setFontSize(7); pdf.text(r.name,M+2,y+rowH/2+1,{maxWidth:nameW-3});
-    r.cells.forEach((c,i)=>{ const x=M+nameW+i*dayW; pdf.setDrawColor(223,227,234); pdf.rect(x,y,dayW,rowH);
+    r.cells.forEach((c,i)=>{ const x=M+nameW+i*dayW; pdf.setDrawColor(160,168,182); pdf.setLineWidth(0.3); pdf.rect(x,y,dayW,rowH);
       if(c.kind==='shift'){ const col=horParseColor(c.color); pdf.setFillColor(col[0],col[1],col[2]); const p=1.2; pdf.roundedRect(x+p,y+p,dayW-2*p,rowH-2*p,1,1,'F'); pdf.setTextColor(45,45,45);
         if(c.hours){ pdf.setFont('helvetica','bold'); pdf.setFontSize(6.6); pdf.text(c.abbr,x+dayW/2,y+rowH/2-0.4,{align:'center'}); pdf.setFont('helvetica','normal'); pdf.setFontSize(5.3); pdf.text(c.hours,x+dayW/2,y+rowH/2+2.7,{align:'center'}); }
         else { pdf.setFont('helvetica','bold'); pdf.setFontSize(6.8); pdf.text(c.abbr,x+dayW/2,y+rowH/2+1,{align:'center'}); } }
