@@ -1846,51 +1846,79 @@ async function horTeam(dept,days,equipoFilter){
   const ttlTxt=`Horario · ${dept}${equipoFilter?' · '+equipoFilter:''}`;
   return `<div id="horSched" data-pdftitle="${esc(ttlTxt)}" data-pdfperiodo="${esc(periodo)}"><div class="hor-pdf-title" style="display:none;margin-bottom:10px"><div style="font-size:20px;font-weight:800;color:#1f4e79">${esc(ttlTxt)}</div><div style="font-size:13px;color:#555555">Periodo: ${esc(periodo)}</div></div><div class="grid-wrap"><table class="sched"><thead>${head}</thead><tbody>${rows}</tbody></table></div>${legend||'<div class="legend" style="color:var(--suave)">Sin turnos publicados en este periodo.</div>'}</div>`;
 }
-function horPDF(){
-  const src=document.getElementById('horSched'); if(!src){ window.print(); return; }
-  const tt=(src.getAttribute('data-pdftitle')||'Horario').replace(/[·\\/:]/g,'-').replace(/\s+/g,'_').replace(/_+/g,'_').replace(/^_|_$/g,'');
-  const fname=(tt||'Horario')+'.pdf';
-  const jsPDFlib=(window.jspdf&&window.jspdf.jsPDF)||window.jsPDF||(typeof jsPDF!=='undefined'?jsPDF:null);
+function horParseColor(c){ c=(c||'').trim();
+  if(c[0]==='#'){ let h=c.slice(1); if(h.length===3)h=h.split('').map(x=>x+x).join(''); const n=parseInt(h,16); return [(n>>16)&255,(n>>8)&255,n&255]; }
+  const m=c.match(/rgba?\(([^)]+)\)/); if(m){ const a=m[1].split(',').map(s=>parseFloat(s)); return [a[0]|0,a[1]|0,a[2]|0]; }
+  return [238,238,238];
+}
+function horPDFcanvasFallback(src,fname){
   let wrap=document.getElementById('horPrint'); if(!wrap){ wrap=document.createElement('div'); wrap.id='horPrint'; document.body.appendChild(wrap); }
-  // contenedor ABSOLUTE fuera de pantalla (no fixed, no opacity:0)
   wrap.style.cssText='position:absolute;left:-10000px;top:0;background:#ffffff';
   wrap.innerHTML=`<div id="horPrintInner" style="display:inline-block;background:#fff;padding:18px 22px;box-sizing:border-box;font-family:inherit">${src.innerHTML}</div>`;
   const ttl=wrap.querySelector('.hor-pdf-title'); if(ttl) ttl.style.display='block';
   wrap.querySelectorAll('.grid-wrap').forEach(g=>{ g.style.overflow='visible'; g.style.maxWidth='none'; g.style.width='auto'; });
   const el=document.getElementById('horPrintInner');
-  // Fallback si no hay html2canvas/jsPDF como globales
-  if(typeof html2canvas==='undefined' || !jsPDFlib){
-    if(typeof html2pdf!=='undefined'){ const w=Math.max(900,el.scrollWidth+4); html2pdf().set({margin:6,filename:fname,image:{type:'jpeg',quality:.98},html2canvas:{scale:2,backgroundColor:'#ffffff',windowWidth:w+60,width:w,scrollX:0,scrollY:0},jsPDF:{unit:'mm',format:'a4',orientation:'landscape'},pagebreak:{mode:['css','legacy']}}).from(el).save().then(()=>{wrap.innerHTML='';},()=>{wrap.innerHTML='';}); }
-    else { wrap.innerHTML=''; window.print(); }
-    return;
-  }
-  const go=()=>{
-    const W=Math.ceil(Math.max(el.scrollWidth, el.getBoundingClientRect().width))+2;
-    const H=Math.ceil(Math.max(el.scrollHeight, el.getBoundingClientRect().height))+2;
-    html2canvas(el,{scale:2,backgroundColor:'#ffffff',useCORS:true,windowWidth:W+40,windowHeight:Math.max(1600,H+200),scrollX:0,scrollY:0}).then(canvas=>{
-      const pdf=new jsPDFlib('l','mm','a4');
-      const margin=8, pw=297, ph=210, cw=pw-2*margin, pageH=ph-2*margin;   // A4 horizontal
-      const imgData=canvas.toDataURL('image/jpeg',0.98);
-      const fullH=canvas.height*cw/canvas.width;   // alto escalado al ancho de página
-      if(fullH<=pageH+0.5){
-        pdf.addImage(imgData,'JPEG',margin,margin,cw,fullH);
-      } else {
-        const pxPageH=Math.floor(canvas.width*pageH/cw);
-        const tmp=document.createElement('canvas'), ctx=tmp.getContext('2d'); let sY=0, page=0;
-        while(sY<canvas.height){
-          const sliceH=Math.min(pxPageH,canvas.height-sY);
-          tmp.width=canvas.width; tmp.height=sliceH;
-          ctx.fillStyle='#ffffff'; ctx.fillRect(0,0,tmp.width,tmp.height);
-          ctx.drawImage(canvas,0,sY,canvas.width,sliceH,0,0,canvas.width,sliceH);
-          if(page>0) pdf.addPage();
-          pdf.addImage(tmp.toDataURL('image/jpeg',0.98),'JPEG',margin,margin,cw,sliceH*cw/canvas.width);
-          sY+=sliceH; page++;
-        }
-      }
-      pdf.save(fname); wrap.innerHTML='';
-    }).catch(e=>{ wrap.innerHTML=''; alert('No se pudo generar el PDF: '+(e&&e.message||e)); });
-  };
-  if(document.fonts&&document.fonts.ready){ document.fonts.ready.then(()=>setTimeout(go,80)); } else setTimeout(go,80);
+  if(typeof html2pdf==='undefined'){ wrap.innerHTML=''; window.print(); return; }
+  const w=Math.max(900,el.scrollWidth+4);
+  html2pdf().set({margin:6,filename:fname,image:{type:'jpeg',quality:.98},html2canvas:{scale:2,backgroundColor:'#ffffff',windowWidth:w+60,width:w,scrollX:0,scrollY:0},jsPDF:{unit:'mm',format:'a4',orientation:'landscape'},pagebreak:{mode:['css','legacy']}}).from(el).save().then(()=>{wrap.innerHTML='';},()=>{wrap.innerHTML='';});
+}
+// PDF del horario dibujado NATIVAMENTE con jsPDF (no html2canvas): fiable, sin recortes.
+function horPDF(){
+  const src=document.getElementById('horSched'); if(!src){ window.print(); return; }
+  const titleTxt=src.getAttribute('data-pdftitle')||'';
+  const periodo=src.getAttribute('data-pdfperiodo')||'';
+  const fname=((titleTxt||'Horario').replace(/[·\\/:]/g,'-').replace(/\s+/g,'_').replace(/_+/g,'_').replace(/^_|_$/g,''))+'.pdf';
+  const jsPDFlib=(window.jspdf&&window.jspdf.jsPDF)||window.jsPDF||(typeof jsPDF!=='undefined'?jsPDF:null);
+  const table=src.querySelector('table.sched');
+  const isEditor=!src.querySelector('.cell-b') && !!src.querySelector('select');
+  if(!jsPDFlib || !table || isEditor){ horPDFcanvasFallback(src,fname); return; }
+  const clean=s=>(s||'').replace(/[–—]/g,'-').replace(/ /g,' ').trim();
+  // ---- cabecera (días) ----
+  const headThs=[...table.querySelectorAll('thead th')];
+  const dayLabels=headThs.slice(1).map(th=>{ const c=th.cloneNode(true); c.querySelectorAll('select,br').forEach(n=>n.remove()); return clean(c.textContent); });
+  // ---- filas ----
+  const rows=[...table.querySelectorAll('tbody tr')].map(tr=>{
+    const tds=[...tr.children];
+    const name=clean((tds[0]?tds[0].textContent:'').replace(/\s+/g,' '));
+    const cells=tds.slice(1).map(td=>{
+      const chip=td.querySelector('.cell-b'), badge=td.querySelector('.badge');
+      if(badge){ const t=(badge.getAttribute('title')||'').toLowerCase(); return {kind:'abs',text:/vacacion/.test(t)?'Vac.':(/baja/.test(t)?'Baja':clean(badge.textContent))}; }
+      if(!chip) return {kind:'empty'};
+      const bg=(chip.getAttribute('style')||'').match(/background:\s*([^;]+)/);
+      const b=chip.querySelector('b'), sm=chip.querySelector('small');
+      return {kind:'shift',color:bg?bg[1].trim():'#eeeeee',abbr:clean(b?b.textContent:chip.textContent),hours:clean(sm?sm.textContent:'')};
+    });
+    return {name,cells};
+  });
+  // ---- leyenda ----
+  const legend=[...src.querySelectorAll('.legend span')].map(sp=>{ const i=sp.querySelector('i'); const bg=i?(i.getAttribute('style')||'').match(/background:\s*([^;]+)/):null; return {name:clean(sp.textContent),color:bg?bg[1].trim():'#cccccc'}; }).filter(l=>l.name);
+  // ---- dibujar ----
+  const pdf=new jsPDFlib('l','mm','a4');
+  const PW=297, PH=210, M=8, usable=PW-2*M;
+  let y=M+1;
+  if(titleTxt){ pdf.setFont('helvetica','bold'); pdf.setFontSize(14); pdf.setTextColor(31,78,121); pdf.text(clean(titleTxt),M,y+3); y+=6;
+    if(periodo){ pdf.setFont('helvetica','normal'); pdf.setFontSize(9); pdf.setTextColor(90,90,90); pdf.text('Periodo: '+clean(periodo),M,y+2); y+=5; } y+=2; }
+  const nDays=dayLabels.length||1, nameW=34, dayW=(usable-nameW)/nDays, headH=8, rowH=11;
+  const drawHeader=(yy)=>{ pdf.setFillColor(31,78,121); pdf.rect(M,yy,usable,headH,'F');
+    pdf.setTextColor(255,255,255); pdf.setFont('helvetica','bold'); pdf.setFontSize(7.5); pdf.text('EMPLEADO',M+2,yy+headH/2+1.4);
+    pdf.setFontSize(6.6); dayLabels.forEach((d,i)=>{ pdf.text(d,M+nameW+i*dayW+dayW/2,yy+headH/2+1.4,{align:'center',maxWidth:dayW-1}); }); return yy+headH; };
+  y=drawHeader(y);
+  rows.forEach(r=>{
+    if(y+rowH>PH-M-10){ pdf.addPage(); y=M+1; y=drawHeader(y); }
+    pdf.setDrawColor(223,227,234); pdf.setLineWidth(0.2);
+    pdf.rect(M,y,nameW,rowH);
+    pdf.setTextColor(40,40,40); pdf.setFont('helvetica','bold'); pdf.setFontSize(7); pdf.text(r.name,M+2,y+rowH/2+1,{maxWidth:nameW-3});
+    r.cells.forEach((c,i)=>{ const x=M+nameW+i*dayW; pdf.setDrawColor(223,227,234); pdf.rect(x,y,dayW,rowH);
+      if(c.kind==='shift'){ const col=horParseColor(c.color); pdf.setFillColor(col[0],col[1],col[2]); const p=1.2; pdf.roundedRect(x+p,y+p,dayW-2*p,rowH-2*p,1,1,'F'); pdf.setTextColor(45,45,45);
+        if(c.hours){ pdf.setFont('helvetica','bold'); pdf.setFontSize(6.6); pdf.text(c.abbr,x+dayW/2,y+rowH/2-0.4,{align:'center'}); pdf.setFont('helvetica','normal'); pdf.setFontSize(5.3); pdf.text(c.hours,x+dayW/2,y+rowH/2+2.7,{align:'center'}); }
+        else { pdf.setFont('helvetica','bold'); pdf.setFontSize(6.8); pdf.text(c.abbr,x+dayW/2,y+rowH/2+1,{align:'center'}); } }
+      else if(c.kind==='abs'){ pdf.setTextColor(120,120,120); pdf.setFont('helvetica','normal'); pdf.setFontSize(6.5); pdf.text(c.text,x+dayW/2,y+rowH/2+1,{align:'center'}); }
+      else { pdf.setTextColor(195,195,195); pdf.setFont('helvetica','normal'); pdf.setFontSize(8); pdf.text('-',x+dayW/2,y+rowH/2+1,{align:'center'}); } });
+    y+=rowH;
+  });
+  if(legend.length){ y+=5; if(y>PH-M-4){ pdf.addPage(); y=M+4; } pdf.setFont('helvetica','normal'); pdf.setFontSize(7.5); let lx=M;
+    legend.forEach(l=>{ const tw=pdf.getTextWidth(l.name)+8; if(lx+tw>PW-M){ lx=M; y+=6; } const col=horParseColor(l.color); pdf.setFillColor(col[0],col[1],col[2]); pdf.roundedRect(lx,y-2.6,3.2,3.2,0.6,0.6,'F'); pdf.setTextColor(80,80,80); pdf.text(l.name,lx+4.4,y); lx+=tw+3; }); }
+  pdf.save(fname);
 }
 async function horOthers(days){
   const{data}=await sb.from('profiles').select('dept');
