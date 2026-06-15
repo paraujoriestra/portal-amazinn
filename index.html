@@ -1655,7 +1655,7 @@ async function pageHorarios(){
   let body='';
   if(horTab==='mi') body=await horMine(days);
   else if(horTab==='editor') body=await horCrear();
-  else if(horTab==='equipo') body=await horTeam(dept,days);
+  else if(horTab==='equipo') body=`<div style="display:flex;justify-content:flex-end;margin-bottom:10px"><button class="btn ghost" style="padding:9px 16px" onclick="horPDF()">📥 Descargar PDF</button></div>`+await horTeam(dept,days);
   else body=await horOthers(days);
   const legend=`<div class="legend">${TURNOS_TIPO.map(t=>`<span><i style="background:${isLibreTurno(t)?'#bfe7c4':t.color}"></i>${esc(t.nombre)}</span>`).join('')}</div>`;
   document.getElementById('main').innerHTML=`
@@ -1826,8 +1826,8 @@ async function horTeam(dept,days,equipoFilter){
   const head=`<tr><th class="emp">Empleado</th>${days.map(d=>`<th class="${isWk(d)?'wknd':''}">${lblD(d)}</th>`).join('')}</tr>`;
   const rows=team.map(e=>`<tr><td class="emp">${e.id===ME.id?'<b style="color:var(--azul)">'+esc(e.nombre)+' (tú)</b>':esc(e.nombre)}</td>${days.map(d=>`<td class="${isWk(d)?'wknd':''}">${tchipRow(map[e.id+'|'+isoD(d)])}</td>`).join('')}</tr>`).join('');
   const legend=horLegendFrom(Object.values(map));
-  return `<div style="margin-bottom:10px"><button class="btn ghost" onclick="horPDF()">📥 Descargar PDF</button></div>
-    <div id="horSched"><div class="hor-pdf-title" style="display:none;font-size:18px;font-weight:800;color:var(--azul);margin-bottom:8px">Horario · ${esc(dept)}${equipoFilter?' · '+esc(equipoFilter):''}</div><div class="grid-wrap"><table class="sched"><thead>${head}</thead><tbody>${rows}</tbody></table></div>${legend||'<div class="legend" style="color:var(--suave)">Sin turnos publicados en este periodo.</div>'}</div>`;
+  const periodo=`${days[0].toLocaleDateString('es-ES',{day:'2-digit',month:'short'})} – ${days[days.length-1].toLocaleDateString('es-ES',{day:'2-digit',month:'short',year:'numeric'})}`;
+  return `<div id="horSched"><div class="hor-pdf-title" style="display:none;margin-bottom:10px"><div style="font-size:20px;font-weight:800;color:var(--azul)">Horario · ${esc(dept)}${equipoFilter?' · '+esc(equipoFilter):''}</div><div style="font-size:13px;color:#555">Periodo: ${periodo}</div></div><div class="grid-wrap"><table class="sched"><thead>${head}</thead><tbody>${rows}</tbody></table></div>${legend||'<div class="legend" style="color:var(--suave)">Sin turnos publicados en este periodo.</div>'}</div>`;
 }
 function horPDF(){
   const src=document.getElementById('horSched'); if(!src){ window.print(); return; }
@@ -1850,8 +1850,8 @@ async function horOthers(days){
   const teams=[...new Set(allTeam.map(e=>e.team).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
   if(horOtherEquipo && !teams.includes(horOtherEquipo)) horOtherEquipo='';
   const eqSel = teams.length? `<label style="font-size:13px;font-weight:600;color:var(--suave);margin:0 8px 0 14px">Equipo:</label><select onchange="setHorOtherEq(this.value)" style="padding:9px 12px;border:1px solid var(--gris2);border-radius:9px;font-size:14px"><option value="">Todos los equipos</option>${teams.map(t=>`<option ${t===horOtherEquipo?'selected':''}>${esc(t)}</option>`).join('')}</select>`:'';
-  const sel=`<div style="margin-bottom:14px;display:flex;align-items:center;flex-wrap:wrap;gap:6px"><label style="font-size:13px;font-weight:600;color:var(--suave);margin-right:8px">Departamento:</label>
-    <select onchange="setHorOther(this.value)" style="padding:9px 12px;border:1px solid var(--gris2);border-radius:9px;font-size:14px">${depts.map(d=>`<option ${d===horOtherDept?'selected':''}>${esc(d)}</option>`).join('')}</select>${eqSel}</div>`;
+  const sel=`<div style="margin-bottom:14px;display:flex;align-items:center;flex-wrap:wrap;gap:8px"><label style="font-size:13px;font-weight:600;color:var(--suave);margin-right:8px">Departamento:</label>
+    <select onchange="setHorOther(this.value)" style="padding:9px 12px;border:1px solid var(--gris2);border-radius:9px;font-size:14px">${depts.map(d=>`<option ${d===horOtherDept?'selected':''}>${esc(d)}</option>`).join('')}</select>${eqSel}<button class="btn ghost" style="margin-left:auto;padding:9px 16px" onclick="horPDF()">📥 Descargar PDF</button></div>`;
   return sel+await horTeam(horOtherDept,days,horOtherEquipo);
 }
 
