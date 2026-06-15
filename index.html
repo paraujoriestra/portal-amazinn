@@ -1826,13 +1826,15 @@ async function horTeam(dept,days,equipoFilter){
 }
 function horPDF(){
   const src=document.getElementById('horSched'); if(!src){ window.print(); return; }
-  let wrap=document.getElementById('horPrint'); if(!wrap){ wrap=document.createElement('div'); wrap.id='horPrint'; wrap.style.cssText='position:absolute;left:-9999px;top:0'; document.body.appendChild(wrap); }
-  wrap.innerHTML=`<div style="width:1320px;background:#fff;padding:18px 22px;box-sizing:border-box;font-family:inherit">${src.innerHTML}</div>`;
+  let wrap=document.getElementById('horPrint'); if(!wrap){ wrap=document.createElement('div'); wrap.id='horPrint'; wrap.style.cssText='position:absolute;left:0;top:0;z-index:-1;opacity:0'; document.body.appendChild(wrap); }
+  wrap.innerHTML=`<div id="horPrintInner" style="display:inline-block;background:#fff;padding:18px 22px;box-sizing:border-box;font-family:inherit">${src.innerHTML}</div>`;
   const ttl=wrap.querySelector('.hor-pdf-title'); if(ttl) ttl.style.display='block';
-  const el=wrap.firstElementChild;
+  wrap.querySelectorAll('.grid-wrap').forEach(g=>{ g.style.overflow='visible'; g.style.maxWidth='none'; g.style.width='auto'; });
+  const el=document.getElementById('horPrintInner');
+  const w=Math.max(900, el.scrollWidth+4);
   if(typeof html2pdf==='undefined'){ window.print(); return; }
   const done=()=>{ wrap.innerHTML=''; };
-  html2pdf().set({margin:[8,8,8,8],filename:'Horario_Amazinn.pdf',image:{type:'jpeg',quality:.98},html2canvas:{scale:2,backgroundColor:'#ffffff',windowWidth:1320},jsPDF:{unit:'mm',format:'a4',orientation:'landscape'},pagebreak:{mode:['css','legacy']}}).from(el).save().then(done,done);
+  html2pdf().set({margin:6,filename:'Horario_Amazinn.pdf',image:{type:'jpeg',quality:.98},html2canvas:{scale:2,backgroundColor:'#ffffff',windowWidth:w+60,width:w,scrollX:0,scrollY:0},jsPDF:{unit:'mm',format:'a4',orientation:'landscape'},pagebreak:{mode:['css','legacy']}}).from(el).save().then(done,done);
 }
 async function horOthers(days){
   const{data}=await sb.from('profiles').select('dept');
