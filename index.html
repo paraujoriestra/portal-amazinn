@@ -1924,6 +1924,8 @@ function horPDF(){
   });
   if(legend.length){ y+=5; if(y>PH-M-4){ pdf.addPage(); y=M+4; } pdf.setFont('helvetica','normal'); pdf.setFontSize(7.5); let lx=M;
     legend.forEach(l=>{ const tw=pdf.getTextWidth(l.name)+8; if(lx+tw>PW-M){ lx=M; y+=6; } const col=horParseColor(l.color); pdf.setFillColor(col[0],col[1],col[2]); pdf.roundedRect(lx,y-2.6,3.2,3.2,0.6,0.6,'F'); pdf.setTextColor(80,80,80); pdf.text(l.name,lx+4.4,y); lx+=tw+3; }); }
+  pdf.setFont('helvetica','normal'); pdf.setFontSize(6.8); pdf.setTextColor(150,150,150);
+  pdf.text('Descargado: '+new Date().toLocaleString('es-PA'), PW-M, PH-M+3, {align:'right'});
   pdf.save(fname);
 }
 async function horOthers(days){
