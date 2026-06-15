@@ -2749,7 +2749,8 @@ function cotPDF(){
     return;
   }
   const go=()=>{
-    html2canvas(doc,{scale:2,backgroundColor:'#ffffff',useCORS:true}).then(canvas=>{
+    const H=Math.ceil(Math.max(doc.scrollHeight, doc.getBoundingClientRect().height))+2;   // altura COMPLETA real
+    html2canvas(doc,{scale:2,backgroundColor:'#ffffff',useCORS:true,width:794,windowWidth:794,height:H,windowHeight:H,scrollX:0,scrollY:0}).then(canvas=>{
       const pdf=new jsPDFlib('p','mm','a4');
       const margin=8, pw=210, ph=297, cw=pw-2*margin, pageH=ph-2*margin;   // ancho útil = 194mm
       const imgData=canvas.toDataURL('image/jpeg',0.98);
