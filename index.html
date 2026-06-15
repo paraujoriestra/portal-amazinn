@@ -1785,7 +1785,18 @@ async function horTeam(dept,days,equipoFilter){
   const head=`<tr><th class="emp">Empleado</th>${days.map(d=>`<th class="${isWk(d)?'wknd':''}">${lblD(d)}</th>`).join('')}</tr>`;
   const rows=team.map(e=>`<tr><td class="emp">${e.id===ME.id?'<b style="color:var(--azul)">'+esc(e.nombre)+' (tú)</b>':esc(e.nombre)}</td>${days.map(d=>`<td class="${isWk(d)?'wknd':''}">${tchipRow(map[e.id+'|'+isoD(d)])}</td>`).join('')}</tr>`).join('');
   const legend=horLegendFrom(Object.values(map));
-  return `<div class="grid-wrap"><table class="sched"><thead>${head}</thead><tbody>${rows}</tbody></table></div>${legend||'<div class="legend" style="color:var(--suave)">Sin turnos publicados en este periodo.</div>'}`;
+  return `<div style="margin-bottom:10px"><button class="btn ghost" onclick="horPDF()">📥 Descargar PDF</button></div>
+    <div id="horSched"><div class="hor-pdf-title" style="display:none;font-size:18px;font-weight:800;color:var(--azul);margin-bottom:8px">Horario · ${esc(dept)}${equipoFilter?' · '+esc(equipoFilter):''}</div><div class="grid-wrap"><table class="sched"><thead>${head}</thead><tbody>${rows}</tbody></table></div>${legend||'<div class="legend" style="color:var(--suave)">Sin turnos publicados en este periodo.</div>'}</div>`;
+}
+function horPDF(){
+  const src=document.getElementById('horSched'); if(!src){ window.print(); return; }
+  let wrap=document.getElementById('horPrint'); if(!wrap){ wrap=document.createElement('div'); wrap.id='horPrint'; wrap.style.cssText='position:absolute;left:-9999px;top:0'; document.body.appendChild(wrap); }
+  wrap.innerHTML=`<div style="width:1320px;background:#fff;padding:18px 22px;box-sizing:border-box;font-family:inherit">${src.innerHTML}</div>`;
+  const ttl=wrap.querySelector('.hor-pdf-title'); if(ttl) ttl.style.display='block';
+  const el=wrap.firstElementChild;
+  if(typeof html2pdf==='undefined'){ window.print(); return; }
+  const done=()=>{ wrap.innerHTML=''; };
+  html2pdf().set({margin:[8,8,8,8],filename:'Horario_Amazinn.pdf',image:{type:'jpeg',quality:.98},html2canvas:{scale:2,backgroundColor:'#ffffff',windowWidth:1320},jsPDF:{unit:'mm',format:'a4',orientation:'landscape'},pagebreak:{mode:['css','legacy']}}).from(el).save().then(done,done);
 }
 async function horOthers(days){
   const{data}=await sb.from('profiles').select('dept');
@@ -2337,7 +2348,7 @@ function fichSessions(list){ const s=[...list].sort((a,b)=>fichTsVal(a)-fichTsVa
 function fichMins(list){ let t=0; fichSessions(list).forEach(x=>{ if(x.ent&&x.sal) t+=(fichTsVal(x.sal)-fichTsVal(x.ent))/60000; }); return t; }
 function fichGestor(){ return ['direccion','admin','propietario'].includes(PROFILE.role); }
 async function pageFichaje(){
-  const tabs=[['fichar','⏱️ Fichar']]; if(fichGestor()) tabs.push(['historial','🕘 Mi historial'],['equipo','👥 Equipo']);
+  const tabs=[['fichar','⏱️ Fichar']]; if(fichGestor()) tabs.push(['historial','🕘 Mi historial'],['equipo','👥 Listado trabajadores']);
   if(!tabs.some(t=>t[0]===fichTab)) fichTab='fichar';
   let body;
   if(fichTab==='fichar') body=await fichFichar();
@@ -2386,29 +2397,34 @@ async function fichHistorial(userId){
   return `${rango}<div class="panel"><h2>Total del periodo: <span style="color:var(--azul)">${fichFmtDur(total)}</span></h2>
     ${dayRows?`<table><thead><tr><th>Día</th><th>Sesiones</th><th>Horas</th></tr></thead><tbody>${dayRows}</tbody></table>`:'<div style="color:var(--suave)">Sin fichajes en este periodo.</div>'}</div>`;
 }
+async function fichDeptMap(){ const{data}=await sb.from('profiles').select('id,dept'); const m={}; (data||[]).forEach(p=>m[p.id]=p.dept||''); return m; }
 async function fichEquipo(){
   fichDefaultRange();
   const today=hoyISO();
+  const dm=await fichDeptMap();
   const{data:all}=await sb.from('fichajes').select('*').eq('fecha',today);
   const byU={};(all||[]).forEach(f=>{(byU[f.user_id]=byU[f.user_id]||{nombre:f.user_nombre,list:[]}); byU[f.user_id].list.push(f);});
-  const hoyRows=Object.keys(byU).map(uid=>{ const o=byU[uid]; const ls=o.list.sort((a,b)=>fichTsVal(a)-fichTsVal(b)); const dent=ls[ls.length-1].tipo==='entrada'; const ent=ls.find(x=>x.tipo==='entrada'); return `<tr><td>${esc(o.nombre)}</td><td>${dent?'<span class="badge b-green">Dentro</span>':'<span class="badge b-grey">Fuera</span>'}</td><td>${ent?fichHora(ent):'—'}</td><td><b>${fichFmtDur(fichMins(ls))}</b></td><td>${esc((ent||ls[0]||{}).lugar||'')}</td></tr>`; }).join('')||'<tr><td colspan="5" style="color:var(--suave)">Sin fichajes hoy.</td></tr>';
-  return `<div class="panel"><h2>👥 Equipo · hoy</h2><table><thead><tr><th>Empleado</th><th>Estado</th><th>Entrada</th><th>Trabajado</th><th>Lugar</th></tr></thead><tbody>${hoyRows}</tbody></table></div>
+  const hoyRows=Object.keys(byU).map(uid=>{ const o=byU[uid]; const ls=o.list.sort((a,b)=>fichTsVal(a)-fichTsVal(b)); const dent=ls[ls.length-1].tipo==='entrada'; const ent=ls.find(x=>x.tipo==='entrada'); return `<tr><td><b>${esc(o.nombre)}</b></td><td>${esc(dm[uid]||'—')}</td><td>${dent?'<span class="badge b-green">Dentro</span>':'<span class="badge b-grey">Fuera</span>'}</td><td>${ent?fichHora(ent):'—'}</td><td><b>${fichFmtDur(fichMins(ls))}</b></td><td>${esc((ent||ls[0]||{}).lugar||'')}</td></tr>`; }).join('')||'<tr><td colspan="6" style="color:var(--suave)">Sin fichajes hoy.</td></tr>';
+  return `<div class="panel"><h2>👥 Listado trabajadores · hoy</h2><table><thead><tr><th>Empleado</th><th>Departamento</th><th>Estado</th><th>Entrada</th><th>Trabajado</th><th>Lugar</th></tr></thead><tbody>${hoyRows}</tbody></table></div>
     <div class="panel" style="font-size:13px;color:var(--suave)">Para ver el histórico y total de horas de un empleado, ve a su ficha o usa Exportar. <button class="btn-sm ghost" onclick="fichExportAll()">⬇️ Exportar Excel (todos · ${fichDesde} → ${fichHasta})</button></div>`;
 }
 async function fichExport(userId){
   fichDefaultRange();
+  const dm=await fichDeptMap();
   const{data}=await sb.from('fichajes').select('*').eq('user_id',userId).gte('fecha',fichDesde).lte('fecha',fichHasta);
-  fichCSV(data||[],'fichajes_'+fichDesde+'_'+fichHasta);
+  fichCSV(data||[],'fichajes_'+fichDesde+'_'+fichHasta,dm);
 }
 async function fichExportAll(){
   fichDefaultRange();
+  const dm=await fichDeptMap();
   const{data}=await sb.from('fichajes').select('*').gte('fecha',fichDesde).lte('fecha',fichHasta);
-  fichCSV(data||[],'fichajes_equipo_'+fichDesde+'_'+fichHasta);
+  fichCSV(data||[],'fichajes_equipo_'+fichDesde+'_'+fichHasta,dm);
 }
-function fichCSV(rows,name){
+function fichCSV(rows,name,deptMap){
   if(typeof XLSX==='undefined'){ alert('No se pudo cargar el componente de Excel.'); return; }
-  const data=[['Empleado','Fecha','Hora','Tipo','Lugar','Método']];
-  rows.slice().sort((a,b)=>(a.fecha+a.user_nombre)<(b.fecha+b.user_nombre)?-1:1).forEach(f=>data.push([f.user_nombre,f.fecha,fichHora(f),f.tipo,f.lugar||'',f.metodo||'']));
+  deptMap=deptMap||{};
+  const data=[['Empleado','Departamento','Fecha','Hora','Tipo','Lugar','Método']];
+  rows.slice().sort((a,b)=>(a.fecha+a.user_nombre)<(b.fecha+b.user_nombre)?-1:1).forEach(f=>data.push([f.user_nombre,deptMap[f.user_id]||'',f.fecha,fichHora(f),f.tipo,f.lugar||'',f.metodo||'']));
   const ws=XLSX.utils.aoa_to_sheet(data); const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'Fichajes'); XLSX.writeFile(wb,name+'.xlsx');
   toast('✓ Excel exportado');
 }
