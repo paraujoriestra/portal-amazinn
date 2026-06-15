@@ -1828,7 +1828,8 @@ async function horTeam(dept,days,equipoFilter){
   const rows=team.map(e=>`<tr><td class="emp">${e.id===ME.id?'<b style="color:var(--azul)">'+esc(e.nombre)+' (tú)</b>':esc(e.nombre)}</td>${days.map(d=>`<td class="${isWk(d)?'wknd':''}">${tchipRow(map[e.id+'|'+isoD(d)])}</td>`).join('')}</tr>`).join('');
   const legend=horLegendFrom(Object.values(map));
   const periodo=`${days[0].toLocaleDateString('es-ES',{day:'2-digit',month:'short'})} – ${days[days.length-1].toLocaleDateString('es-ES',{day:'2-digit',month:'short',year:'numeric'})}`;
-  return `<div id="horSched"><div class="hor-pdf-title" style="display:none;margin-bottom:10px"><div style="font-size:20px;font-weight:800;color:var(--azul)">Horario · ${esc(dept)}${equipoFilter?' · '+esc(equipoFilter):''}</div><div style="font-size:13px;color:#555">Periodo: ${periodo}</div></div><div class="grid-wrap"><table class="sched"><thead>${head}</thead><tbody>${rows}</tbody></table></div>${legend||'<div class="legend" style="color:var(--suave)">Sin turnos publicados en este periodo.</div>'}</div>`;
+  const ttlTxt=`Horario · ${dept}${equipoFilter?' · '+equipoFilter:''}`;
+  return `<div id="horSched" data-pdftitle="${esc(ttlTxt)}" data-pdfperiodo="${esc(periodo)}"><div class="hor-pdf-title" style="display:none;margin-bottom:10px"><div style="font-size:20px;font-weight:800;color:#1f4e79">${esc(ttlTxt)}</div><div style="font-size:13px;color:#555555">Periodo: ${esc(periodo)}</div></div><div class="grid-wrap"><table class="sched"><thead>${head}</thead><tbody>${rows}</tbody></table></div>${legend||'<div class="legend" style="color:var(--suave)">Sin turnos publicados en este periodo.</div>'}</div>`;
 }
 function horPDF(){
   const src=document.getElementById('horSched'); if(!src){ window.print(); return; }
@@ -1839,8 +1840,10 @@ function horPDF(){
   const el=document.getElementById('horPrintInner');
   const w=Math.max(900, el.scrollWidth+4);
   if(typeof html2pdf==='undefined'){ window.print(); return; }
+  const tt=(src.getAttribute('data-pdftitle')||'Horario').replace(/[·\\/:]/g,'-').replace(/\s+/g,'_').replace(/_+/g,'_').replace(/^_|_$/g,'');
+  const fname=(tt||'Horario')+'.pdf';
   const done=()=>{ wrap.innerHTML=''; };
-  html2pdf().set({margin:6,filename:'Horario_Amazinn.pdf',image:{type:'jpeg',quality:.98},html2canvas:{scale:2,backgroundColor:'#ffffff',windowWidth:w+60,width:w,scrollX:0,scrollY:0},jsPDF:{unit:'mm',format:'a4',orientation:'landscape'},pagebreak:{mode:['css','legacy']}}).from(el).save().then(done,done);
+  html2pdf().set({margin:6,filename:fname,image:{type:'jpeg',quality:.98},html2canvas:{scale:2,backgroundColor:'#ffffff',windowWidth:w+60,width:w,scrollX:0,scrollY:0},jsPDF:{unit:'mm',format:'a4',orientation:'landscape'},pagebreak:{mode:['css','legacy']}}).from(el).save().then(done,done);
 }
 async function horOthers(days){
   const{data}=await sb.from('profiles').select('dept');
