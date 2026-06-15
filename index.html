@@ -1635,7 +1635,7 @@ function horLegendFrom(rows){
   const seen={};
   (rows||[]).forEach(r=>{ if(!r||!r.tipo_id)return; const t=turnoTipo(r.tipo_id); if(!t)return; const ini=r.hora_ini||t.hora_ini, fin=r.hora_fin||t.hora_fin; const key=r.tipo_id+'|'+(ini||'')+'|'+(fin||''); if(!seen[key]) seen[key]={t,ini,fin}; });
   const items=Object.values(seen); if(!items.length) return '';
-  return `<div class="legend">${items.map(({t,ini,fin})=>{const col=isLibreTurno(t)?'#bfe7c4':t.color; return `<span><i style="background:${col}"></i>${esc(t.nombre)}${ini?` (${esc(ini)}–${esc(fin)})`:''}</span>`;}).join('')}</div>`;
+  return `<div class="legend">${items.map(({t})=>{const col=isLibreTurno(t)?'#bfe7c4':t.color; return `<span><i style="background:${col}"></i>${esc(t.nombre)}</span>`;}).join('')}</div>`;
 }
 function tchipRow(r){ if(!r||!r.tipo_id) return `<span class="cell-b" style="background:#f2f2f2;color:#bbb">—</span>`; const t=turnoTipo(r.tipo_id); if(!t) return `<span class="cell-b">·</span>`; const lib=isLibreTurno(t); const ini=r.hora_ini||t.hora_ini, fin=r.hora_fin||t.hora_fin; const h=ini?`${ini}–${fin}`:''; const col=lib?'#bfe7c4':t.color; return `<span class="cell-b" title="${esc(t.nombre)}${h?' '+esc(h):''}" style="background:${col};color:#333;display:inline-flex;flex-direction:column;align-items:center;line-height:1.1;padding:4px 7px"><b>${esc(abreviaTurno(t))}</b>${(h&&!lib)?`<small style="font-size:9px;font-weight:400;opacity:.85">${esc(h)}</small>`:''}</span>`; }
 
@@ -1652,7 +1652,7 @@ async function pageHorarios(){
   else if(horTab==='editor') body=await horCrear();
   else if(horTab==='equipo') body=await horTeam(dept,days);
   else body=await horOthers(days);
-  const legend=`<div class="legend">${TURNOS_TIPO.map(t=>`<span><i style="background:${isLibreTurno(t)?'#bfe7c4':t.color}"></i>${esc(t.nombre)}${t.hora_ini?` (${esc(t.hora_ini)}–${esc(t.hora_fin)})`:''}</span>`).join('')}</div>`;
+  const legend=`<div class="legend">${TURNOS_TIPO.map(t=>`<span><i style="background:${isLibreTurno(t)?'#bfe7c4':t.color}"></i>${esc(t.nombre)}</span>`).join('')}</div>`;
   document.getElementById('main').innerHTML=`
     <div class="page-title">Horarios${dept?' · '+dept:''}</div>
     <div class="page-sub">${canEdit?'Crea horarios por alcance y fechas; el equipo ve sus turnos al instante':'Consulta tu horario y el de los equipos'}</div>
