@@ -1368,11 +1368,16 @@ async function pageInicio(){
   const {data:kud}=await sb.from('kudos').select('*').order('created_at',{ascending:false}).limit(2);
   const {data:forms}=await sb.from('formaciones').select('tipo');
   const formObl=(forms||[]).filter(f=>f.tipo==='Obligatoria').length;
+  await loadTurnosTipo();
   const {data:turn}=await sb.from('turnos').select('*').eq('empleado_id',ME.id).gte('fecha',isoD(now)).order('fecha').limit(1);
-  const HORA={M:'Mañana 09–17',T:'Tarde 14–22',P:'Partido',N:'Noche 22–06',L:'Libre',V:'Vacaciones'};
+  const HORA={M:'Mañana',T:'Tarde',P:'Partido',N:'Noche',L:'Libre',V:'Vacaciones'};
   const tt=turn&&turn[0];
-  const prox=tt?(HORA[tt.turno]||'—'):'—';
-  const proxSub=tt?((tt.lugar?tt.lugar+' · ':'')+lblD(new Date(tt.fecha+'T00:00:00'))):'sin turnos publicados';
+  let prox='—', proxHoras='';
+  if(tt){ const tp=tt.tipo_id?turnoTipo(tt.tipo_id):null;
+    prox = tp?tp.nombre : (HORA[tt.turno]||tt.turno||'Turno');
+    const ini=tt.hora_ini||(tp&&tp.hora_ini)||'', fin=tt.hora_fin||(tp&&tp.hora_fin)||'';
+    proxHoras=(ini&&fin)?`${ini} – ${fin}`:''; }
+  const proxSub=tt?((proxHoras?'🕐 '+proxHoras+' · ':'')+(tt.lugar?tt.lugar+' · ':'')+lblD(new Date(tt.fecha+'T00:00:00'))):'sin turnos publicados';
   const MS=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
   const bdNext=(bd||[]).map(x=>{const a=(x.cumple||'').split('-');const mo=+a[1],da=+a[2];let nx=new Date(now.getFullYear(),mo-1,da);if(nx<new Date(now.getFullYear(),now.getMonth(),now.getDate()))nx=new Date(now.getFullYear()+1,mo-1,da);return{nombre:x.nombre,mo,da,dias:(nx-new Date(now.getFullYear(),now.getMonth(),now.getDate()))/864e5};}).sort((a,b)=>a.dias-b.dias).slice(0,3);
   const kudos=(kud||[]).map(k=>`<div style="font-size:13.5px;padding:7px 0;border-bottom:1px solid var(--gris)"><b>${esc(k.de_nombre)}</b> → <b style="color:var(--acento)">${esc(k.para_nombre)}</b>: ${esc(k.texto)}</div>`).join('')||'<div style="color:var(--suave);font-size:13.5px">Aún no hay reconocimientos.</div>';
