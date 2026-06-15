@@ -1737,8 +1737,8 @@ async function horGuardar(){
   const rows=cells.map(s=>{const tid=s.value?Number(s.value):null;const h=tid?horHora(tid):{ini:'',fin:''};return {dept:s.dataset.dept||horW.dept||PROFILE.dept||'—',empleado_id:s.dataset.emp,empleado_nombre:s.dataset.name,fecha:s.dataset.fecha,tipo_id:tid,hora_ini:tid?h.ini:null,hora_fin:tid?h.fin:null,lugar:(tid?(locMap[s.dataset.emp]||null):null),updated_at:new Date().toISOString()};});
   const{error}=await sb.from('turnos').upsert(rows,{onConflict:'empleado_id,fecha'});
   if(error){alert('No se pudo guardar: '+error.message);return;}
-  const dests=[...new Set(rows.map(r=>r.dept))];
-  for(const d of dests){ await notifyTeam(d,'📅',`${PROFILE.nombre} ha publicado el horario. Revisa tus turnos.`,'horarios'); }
+  const empIds=[...new Set(rows.filter(r=>r.tipo_id).map(r=>r.empleado_id))];
+  for(const eid of empIds){ if(eid===ME.id) continue; const nm=(rows.find(r=>r.empleado_id===eid)||{}).empleado_nombre||''; try{ await sb.from('mensajes').insert({de_id:ME.id,para_id:eid,de_nombre:PROFILE.nombre,para_nombre:nm,texto:`📅 ${PROFILE.nombre} ha publicado tu horario. Revisa tus turnos.`,leido:false}); }catch(e){} }
   toast('✓ Horario publicado'); horW.gen=false; show('horarios');
 }
 async function horMine(days){
