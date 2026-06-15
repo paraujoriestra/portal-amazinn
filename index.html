@@ -1393,6 +1393,7 @@ async function pageInicio(){
     </div>
     ${bday}
     ${deptBlock}
+    <div style="font-weight:700;color:var(--azul);margin:${deptBlock?'22px':'4px'} 0 8px${deptBlock?';padding-top:18px;border-top:1px solid var(--gris)':''}">📋 Tu día a día</div>
     <div class="cards">
       <div class="card clic" onclick="show('horarios')"><h3>📅 Próximo turno</h3><div class="big" style="font-size:22px">${prox}</div><small style="color:var(--suave)">${esc(proxSub)}</small></div>
       <div class="card clic" onclick="show('vacaciones')"><h3>🌴 Vacaciones disponibles</h3><div class="big green">${p.vac||0} días</div><small style="color:var(--suave)">disponibles</small></div>
