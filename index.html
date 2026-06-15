@@ -2756,8 +2756,11 @@ async function userSave(e){e.preventDefault();
   userFormOpen=false;show('admin');return false;}
 
 /* ---------------- MENSAJES Y PLANTILLAS ---------------- */
-const TPL_CAT={Acceso:'b-red',Bienvenida:'b-green',WiFi:'b-blue',Normas:'b-amber','Check-out':'b-grey',General:'b-grey'};
-let msgTab='ver', msgUnit=null, twoFAok=false, tplEditId=null, tplFormOpen=false;
+const TPL_CAT={'Bienvenida':'b-green','Accesos':'b-red','Confirmación transporte':'b-blue','Confirmación extras':'b-blue','Mascotas':'b-amber','Early check in':'b-amber','Late check out':'b-amber','Aceptación de invitados':'b-grey','Piscina compartida':'b-blue'};
+const TPL_CATS=['Bienvenida','Accesos','Confirmación transporte','Confirmación extras','Mascotas','Early check in','Late check out','Aceptación de invitados','Piscina compartida'];
+let msgTab='ver', msgUnit=null, twoFAok=false, tplEditId=null, tplFormOpen=false, TPL_UNI=[];
+function tplCancel(){ tplFormOpen=false; tplEditId=null; tplDraft={}; show('mensajes'); }
+function tplFormProp(){ const p=(document.getElementById('tProp')||{}).value||''; const sel=document.getElementById('tUni'); if(!sel)return; const list=p?TPL_UNI.filter(u=>u.prop===p):[]; sel.innerHTML=`<option value="">Todas las unidades</option>`+list.map(u=>`<option value="${u.id}">${esc(u.nombre)}</option>`).join(''); }
 function canMsg(){return PROFILE.dept==='Atención al cliente'||isAdmin();}
 function canMsgEdit(){return isAdmin()||(PROFILE.role==='responsable'&&PROFILE.dept==='Atención al cliente');}
 function fillTpl(c,u){return (c||'').split('{apartamento}').join(u.nombre).split('{numero}').join(u.numero).split('{codigo}').join(u.codigo).split('{wifi}').join(u.wifi||'').split('{propiedad}').join(u.prop);}
@@ -2765,6 +2768,7 @@ async function auditLog(accion,tipo){await sb.from('auditoria').insert({user_nom
 function setMsgTab(t){msgTab=t;tplFormOpen=false;show('mensajes');}
 async function pageMensajes(){
   const manage=canMsgEdit();
+  if(manage&&tplFormOpen){ document.getElementById('main').innerHTML=`<div class="page-title">${tplEditId?'Editar plantilla':'Nueva plantilla'}</div><div class="page-sub">Plantillas por apartamento para Atención al cliente</div>${await tplForm()}`; return; }
   const tabs=[['ver','👁️ Ver mensajes'],['tpl','🗂️ Gestionar plantillas'],['cods','🔑 Códigos de acceso']];
   if(manage&&!tabs.some(t=>t[0]===msgTab))msgTab='ver';
   let body;
@@ -2774,7 +2778,7 @@ async function pageMensajes(){
   document.getElementById('main').innerHTML=`<div class="page-title">Mensajes y plantillas</div><div class="page-sub">Plantillas por apartamento para Atención al cliente</div>
     ${manage?`<div class="tabs">${tabs.map(t=>`<button class="${msgTab===t[0]?'on':''}" onclick="setMsgTab('${t[0]}')">${t[1]}</button>`).join('')}</div>`:''}${body}`;
 }
-async function loadUnidades(){const{data}=await sb.from('mant_unidades').select('*').order('edificio').order('orden').order('nombre');return (data||[]).map(u=>({id:u.id,nombre:u.nombre,prop:u.edificio,numero:u.numero||'',codigo:u.codigo||'',wifi:u.wifi||''}));}
+async function loadUnidades(){const{data}=await sb.from('mant_unidades').select('*').order('edificio').order('orden').order('nombre');return (data||[]).map(u=>({id:u.id,nombre:u.nombre,prop:u.edificio,tipo:u.tipo,numero:u.numero||'',codigo:u.codigo||'',wifi:u.wifi||''}));}
 async function msgViewer(){
   const uni=await loadUnidades();
   const props=[...new Set(uni.map(u=>u.prop))];
@@ -2787,7 +2791,7 @@ async function msgViewer(){
   const mine=(tpls||[]).filter(t=>(t.unidades||[]).includes(u.id));
   const banner=`<div class="acc-banner">📍 Estás viendo: <span class="big">${esc(u.nombre)}</span> · Nº <b>${esc(u.numero)}</b> · Código de acceso <span class="code">${esc(u.codigo)}</span><br><small>Verifica que es el apartamento de la reserva antes de enviar el mensaje.</small></div>`;
   const cards=mine.map(t=>{const filled=fillTpl(t.cuerpo,u);const cat=TPL_CAT[t.cat]||'b-grey';
-    return `<div class="tpl-card ${t.cat==='Acceso'?'acc':''}"><div class="h"><span class="badge ${cat}">${esc(t.cat||'')}</span><b>${esc(t.titulo)}</b>
+    return `<div class="tpl-card ${t.cat==='Accesos'?'acc':''}"><div class="h"><span class="badge ${cat}">${esc(t.cat||'')}</span><b>${esc(t.titulo)}</b>
       <button class="btn" style="margin-left:auto;padding:7px 14px" onclick="copyTxt(this)" data-t="${esc(filled).replace(/"/g,'&quot;')}">📋 Copiar</button></div>
       <div class="tpl-text">${esc(filled)}</div>
       <div class="foot">Creada por <b>${esc(t.autor_nombre||'')}</b>${t.editor_nombre?` · ✏️ editada por <b>${esc(t.editor_nombre)}</b> (${esc(t.edit_fecha||'')})`:''}</div></div>`;}).join('')||'<div class="panel">No hay plantillas asignadas a este apartamento.</div>';
@@ -2804,7 +2808,7 @@ async function msgManage(){
       <button onclick="tplDup(${t.id})">⧉ Duplicar</button>
       <button onclick="tplDelete(${t.id})" style="color:#c0392b">🗑 Eliminar</button>
     </div></details></div>`).join('');
-  return `<div style="margin-bottom:14px"><button class="btn" onclick="tplNew()">+ Nueva plantilla</button></div>${tplFormOpen?await tplForm():''}
+  return `<div style="margin-bottom:14px"><button class="btn" onclick="tplNew()">+ Nueva plantilla</button></div>
     <div class="panel"><h2>Plantillas (${(tpls||[]).length})</h2>${rows||'<div style="color:var(--suave)">Sin plantillas.</div>'}</div>`;
 }
 async function tplDelete(id){ if(!confirm('¿Eliminar esta plantilla de forma permanente?'))return; const{error}=await sb.from('plantillas').delete().eq('id',id); if(error){alert(error.message);return;} try{auditLog('Eliminó una plantilla','plantilla');}catch(e){} toast('Plantilla eliminada'); show('mensajes'); }
@@ -2815,19 +2819,30 @@ async function tplDup(id){const{data}=await sb.from('plantillas').select('*').eq
   const{error}=await sb.from('plantillas').insert({titulo:data.titulo+' (copia)',cat:data.cat,cuerpo:data.cuerpo,unidades:data.unidades,autor_nombre:PROFILE.nombre});
   if(error){alert(error.message);return;}auditLog('Duplicó la plantilla «'+data.titulo+'»','plantilla');show('mensajes');}
 async function tplForm(){
-  const t=tplDraft;const cats=['Acceso','Bienvenida','WiFi','Normas','Check-out','General'];const uni=await loadUnidades();
-  const checked=new Set(t.unidades||[]);const props=[...new Set(uni.map(u=>u.prop))];
-  return `<div class="panel" style="max-width:760px"><h2>${tplEditId?'✏️ Editar plantilla':'+ Nueva plantilla'}</h2><form class="box" onsubmit="return tplSave(event)" style="max-width:none">
-    <div class="row"><div><label>Título</label><input id="tT" required value="${t.titulo?esc(t.titulo):''}"></div><div><label>Categoría</label><select id="tC">${cats.map(c=>`<option ${t.cat===c?'selected':''}>${c}</option>`).join('')}</select></div></div>
-    <label>Contenido</label><textarea id="tB" rows="5" required>${t.cuerpo?esc(t.cuerpo):''}</textarea>
+  const t=tplDraft; const uni=await loadUnidades();
+  const apts=uni.filter(u=>u.tipo!=='comun'); TPL_UNI=apts;
+  const props=[...new Set(apts.map(u=>u.prop))];
+  // derivar selección actual al editar
+  const selIds=new Set(t.unidades||[]); let selProp='', selUni='';
+  if(selIds.size){ const sel=apts.filter(u=>selIds.has(u.id)); if(sel.length===1){ selProp=sel[0].prop; selUni=String(sel[0].id); } else { const ps=[...new Set(sel.map(u=>u.prop))]; if(ps.length===1) selProp=ps[0]; } }
+  const propOpts=`<option value="">Todas las propiedades</option>`+props.map(p=>`<option ${selProp===p?'selected':''}>${esc(p)}</option>`).join('');
+  const uniForProp = selProp? apts.filter(u=>u.prop===selProp):[];
+  const uniOpts=`<option value="">Todas las unidades</option>`+uniForProp.map(u=>`<option value="${u.id}" ${selUni===String(u.id)?'selected':''}>${esc(u.nombre)}</option>`).join('');
+  return `<div class="panel" style="max-width:760px"><form class="box" onsubmit="return tplSave(event)" style="max-width:none">
+    <div class="row"><div><label>Título</label><input id="tT" required value="${t.titulo?esc(t.titulo):''}"></div><div><label>Categoría</label><select id="tC">${TPL_CATS.map(c=>`<option ${t.cat===c?'selected':''}>${c}</option>`).join('')}</select></div></div>
+    <label>Contenido</label><textarea id="tB" rows="6" required>${t.cuerpo?esc(t.cuerpo):''}</textarea>
     <small style="color:var(--suave)">Variables: {apartamento} {numero} {codigo} {wifi} {propiedad}</small>
-    <label>Aplica a apartamentos</label><div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:6px 12px;padding:12px;background:var(--gris);border-radius:9px;max-height:220px;overflow:auto">
-      ${props.map(p=>`<div style="grid-column:1/-1;font-weight:700;color:var(--azul);font-size:12px">${esc(p)}</div>`+uni.filter(u=>u.prop===p).map(u=>`<label style="font-size:13px"><input type="checkbox" class="tU" value="${u.id}" ${checked.has(u.id)?'checked':''}> ${esc(u.nombre)}</label>`).join('')).join('')}</div>
-    <div><button class="btn" type="submit">Guardar</button> <button class="btn ghost" type="button" onclick="tplFormOpen=false;show('mensajes')">Cancelar</button></div></form></div>`;
+    <div class="row" style="margin-top:10px"><div><label>Propiedad</label><select id="tProp" onchange="tplFormProp()">${propOpts}</select></div>
+    <div><label>Nº / unidad</label><select id="tUni">${uniOpts}</select></div></div>
+    <div style="margin-top:14px"><button class="btn" type="submit">${tplEditId?'Guardar':'Crear plantilla'}</button> <button class="btn ghost" type="button" onclick="tplCancel()">Cancelar</button></div></form></div>`;
 }
 async function tplSave(e){e.preventDefault();
-  const unidades=[...document.querySelectorAll('.tU:checked')].map(c=>c.value);
-  if(!unidades.length){alert('Selecciona al menos un apartamento.');return false;}
+  const prop=(document.getElementById('tProp')||{}).value||''; const uniSel=(document.getElementById('tUni')||{}).value||'';
+  let unidades=[];
+  if(uniSel){ unidades=[+uniSel]; }
+  else if(prop){ unidades=TPL_UNI.filter(u=>u.prop===prop).map(u=>u.id); }
+  else { unidades=TPL_UNI.map(u=>u.id); }
+  if(!unidades.length){alert('No hay unidades en el catálogo. Crea edificios/unidades en Catálogos.');return false;}
   const row={titulo:val('tT'),cat:document.getElementById('tC').value,cuerpo:document.getElementById('tB').value,unidades};
   let error;
   if(tplEditId){row.editor_nombre=PROFILE.nombre;row.edit_fecha=new Date().toLocaleDateString('es-ES');({error}=await sb.from('plantillas').update(row).eq('id',tplEditId));auditLog('Editó la plantilla «'+row.titulo+'»','plantilla');}
