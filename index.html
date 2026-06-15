@@ -1718,17 +1718,53 @@ async function horGrid(){
   const days=horDays(horW.desde,horW.hasta);
   if(!days.length) return '<div class="panel">Rango de fechas no válido.</div>';
   const ids=people.map(p=>p.id);
-  const{data:ex}=await sb.from('turnos').select('empleado_id,fecha,tipo_id,lugar').in('empleado_id',ids).gte('fecha',isoD(days[0])).lte('fecha',isoD(days[days.length-1]));
-  const map={}, locMap={};(ex||[]).forEach(t=>{map[t.empleado_id+'|'+t.fecha]=t.tipo_id; if(t.lugar&&!locMap[t.empleado_id]) locMap[t.empleado_id]=t.lugar;});
+  const startISO=isoD(days[0]), endISO=isoD(days[days.length-1]);
+  const[exR,solR]=await Promise.all([
+    sb.from('turnos').select('empleado_id,fecha,tipo_id,lugar').in('empleado_id',ids).gte('fecha',startISO).lte('fecha',endISO),
+    sb.from('solicitudes').select('user_id,tipo,desde,hasta,estado').in('user_id',ids).in('tipo',['vacaciones','baja']).eq('estado','Aprobada')
+  ]);
+  const map={}, locMap={};(exR.data||[]).forEach(t=>{map[t.empleado_id+'|'+t.fecha]=t.tipo_id; if(t.lugar&&!locMap[t.empleado_id]) locMap[t.empleado_id]=t.lugar;});
+  const abs={};(solR.data||[]).forEach(s=>{ let d=new Date(s.desde+'T00:00:00'); const hh=new Date((s.hasta||s.desde)+'T00:00:00'); let g=0; while(d<=hh&&g<400){ abs[s.user_id+'|'+isoD(d)]=s.tipo; d.setDate(d.getDate()+1); g++; } });
   const chosen=TURNOS_TIPO.filter(t=>horW.turnos.includes(t.id));
+  const turnoOpts=chosen.map(t=>`<option value="${t.id}">${esc(t.nombre)}</option>`).join('');
   const ubicOpts=cur=>`<option value="">— Ninguna —</option>${CAT.ubicaciones.map(u=>`<option ${cur===u?'selected':''}>${esc(u)}</option>`).join('')}`;
-  const head=`<tr><th class="emp">Empleado</th><th>📍 Ubicación</th>${days.map(d=>`<th class="${isWk(d)?'wknd':''}">${lblD(d)}</th>`).join('')}</tr>`;
-  const rows=people.map(p=>`<tr><td class="emp">${esc(p.nombre)}<br><small style="color:var(--suave)">${esc(p.dept||p.area||'')}</small></td>
-    <td><select class="uloc" data-emp="${p.id}">${ubicOpts(locMap[p.id]||'')}</select></td>${days.map(d=>{const iso=isoD(d);const cur=map[p.id+'|'+iso]||'';
+  const head=`<tr><th class="emp">Empleado</th><th>📍 Ubicación</th>${days.map(d=>`<th class="${isWk(d)?'wknd':''}">${lblD(d)}<br><select onchange="horFillCol('${isoD(d)}',this.value)" style="font-size:10px;margin-top:3px;max-width:78px;font-family:inherit"><option value="__">▾ todos</option>${turnoOpts}<option value="">vaciar</option></select></th>`).join('')}</tr>`;
+  const rows=people.map(p=>`<tr><td class="emp">${esc(p.nombre)}<br><small style="color:var(--suave)">${esc(p.dept||p.area||'')}</small><br><select onchange="horFillRow('${p.id}',this.value)" style="font-size:10px;margin-top:3px;max-width:130px;font-family:inherit"><option value="__">▾ rellenar fila</option>${turnoOpts}<option value="">vaciar</option></select></td>
+    <td><select class="uloc" data-emp="${p.id}">${ubicOpts(locMap[p.id]||'')}</select></td>${days.map(d=>{const iso=isoD(d); const ab=abs[p.id+'|'+iso]; if(ab) return `<td class="${isWk(d)?'wknd':''}" style="text-align:center"><span class="badge ${ab==='vacaciones'?'b-grey':'b-amber'}" title="${ab==='vacaciones'?'Vacaciones aprobadas':'Baja aprobada'}">${ab==='vacaciones'?'🌴':'🤕'}</span></td>`; const cur=map[p.id+'|'+iso]||'';
     return `<td class="${isWk(d)?'wknd':''}"><select class="tcell2" data-emp="${p.id}" data-name="${esc(p.nombre)}" data-dept="${esc(p.dept||'')}" data-fecha="${iso}"><option value="">—</option>${chosen.map(t=>`<option value="${t.id}" ${String(cur)===String(t.id)?'selected':''}>${esc(t.nombre)}</option>`).join('')}</select></td>`;}).join('')}</tr>`).join('');
-  return `<div class="panel"><div style="margin-bottom:12px;display:flex;gap:8px;flex-wrap:wrap"><button class="btn" onclick="horGuardar()">💾 Guardar y publicar</button><button class="btn ghost" onclick="horClearGrid()">↩ Cambiar alcance/fechas</button>
-      <span style="font-size:12.5px;color:var(--suave);align-self:center">${people.length} persona(s) · ${days.length} día(s)</span></div>
+  return `<div class="panel"><div style="margin-bottom:12px;display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn" onclick="horGuardar()">💾 Guardar y publicar</button>
+      <button class="btn ghost" onclick="horCopyPrev()">📋 Copiar semana anterior</button>
+      <button class="btn ghost" onclick="horResumen()">📊 Horas y cobertura</button>
+      <button class="btn ghost" onclick="horClearGrid()">↩ Cambiar alcance/fechas</button>
+      <span style="font-size:12.5px;color:var(--suave);align-self:center">${people.length} persona(s) · ${days.length} día(s) · 🌴/🤕 = ausencia aprobada</span></div>
+    <div id="horResumenBox"></div>
     <div class="grid-wrap"><table class="sched"><thead>${head}</thead><tbody>${rows}</tbody></table></div></div>`;
+}
+function horFillRow(emp,val){ if(val==='__')return; document.querySelectorAll('.tcell2[data-emp="'+emp+'"]').forEach(c=>{ if([...c.options].some(o=>String(o.value)===String(val))) c.value=val; }); }
+function horFillCol(iso,val){ if(val==='__')return; document.querySelectorAll('.tcell2[data-fecha="'+iso+'"]').forEach(c=>{ if([...c.options].some(o=>String(o.value)===String(val))) c.value=val; }); }
+function horTurnoMins(tid){ const h=horHora(tid); if(!h.ini||!h.fin) return 0; const p=s=>{const a=s.split(':');return (+a[0])*60+(+a[1]);}; let a=p(h.ini),b=p(h.fin); if(b<=a)b+=1440; return b-a; }
+async function horCopyPrev(){
+  const days=horDays(horW.desde,horW.hasta); if(!days.length)return; const len=days.length;
+  const prevStart=new Date(days[0]); prevStart.setDate(prevStart.getDate()-len); const prevEnd=new Date(days[0]); prevEnd.setDate(prevEnd.getDate()-1);
+  const uniq=[...new Set([...document.querySelectorAll('.tcell2')].map(c=>c.dataset.emp))];
+  if(!uniq.length)return;
+  const{data}=await sb.from('turnos').select('empleado_id,fecha,tipo_id').in('empleado_id',uniq).gte('fecha',isoD(prevStart)).lte('fecha',isoD(prevEnd));
+  const pm={};(data||[]).forEach(t=>pm[t.empleado_id+'|'+t.fecha]=t.tipo_id);
+  let n=0; document.querySelectorAll('.tcell2').forEach(c=>{ const idx=days.findIndex(d=>isoD(d)===c.dataset.fecha); if(idx<0)return; const pd=new Date(prevStart); pd.setDate(pd.getDate()+idx); const tid=pm[c.dataset.emp+'|'+isoD(pd)]; if(tid!=null && [...c.options].some(o=>String(o.value)===String(tid))){ c.value=String(tid); n++; } });
+  toast(n?('✓ Copiados '+n+' turnos del periodo anterior'):'No había turnos en el periodo anterior');
+}
+function horResumen(){
+  const box=document.getElementById('horResumenBox'); if(!box)return;
+  if(box.getAttribute('data-open')==='1'){ box.setAttribute('data-open','0'); box.innerHTML=''; return; }
+  box.setAttribute('data-open','1');
+  const byEmp={}, byDay={};
+  [...document.querySelectorAll('.tcell2')].forEach(c=>{ const emp=c.dataset.name; const day=c.dataset.fecha; byEmp[emp]=byEmp[emp]||0; byDay[day]=byDay[day]||0; const tid=c.value?Number(c.value):null; if(tid){ const t=turnoTipo(tid); const m=horTurnoMins(tid); byEmp[emp]+=m; if(m>0&&!isLibreTurno(t)) byDay[day]++; } });
+  const empRows=Object.entries(byEmp).sort((a,b)=>b[1]-a[1]).map(([n,m])=>{const h=Math.round(m/60*10)/10; const warn=h>48; return `<tr><td>${esc(n)}</td><td${warn?' style="color:#c0392b;font-weight:700"':''}>${h} h${warn?' ⚠️':''}</td></tr>`;}).join('')||'<tr><td colspan="2" style="color:var(--suave)">—</td></tr>';
+  const dayRows=Object.keys(byDay).sort().map(d=>{const n=byDay[d]; return `<span style="display:inline-block;margin:0 10px 6px 0;font-size:12.5px">${new Date(d+'T00:00:00').toLocaleDateString('es-ES',{weekday:'short',day:'2-digit'})}: <b${n===0?' style="color:#c0392b"':''}>${n}${n===0?' ⚠️':''}</b></span>`;}).join('');
+  box.innerHTML=`<div class="panel"><h2>📊 Horas planificadas por empleado</h2><table><thead><tr><th>Empleado</th><th>Horas semana</th></tr></thead><tbody>${empRows}</tbody></table>
+    <div style="font-weight:700;margin:14px 0 6px">Cobertura por día (personas trabajando)</div><div>${dayRows}</div>
+    <div style="font-size:12px;color:var(--suave);margin-top:8px">⚠️ rojo = más de 48 h/semana, o día sin cobertura.</div></div>`;
 }
 async function horGuardar(){
   const cells=[...document.querySelectorAll('.tcell2')];
