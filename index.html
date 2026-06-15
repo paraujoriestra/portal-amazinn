@@ -1731,7 +1731,7 @@ async function horGuardar(){
   if(error){alert('No se pudo guardar: '+error.message);return;}
   const dests=[...new Set(rows.map(r=>r.dept))];
   for(const d of dests){ await notifyTeam(d,'📅',`${PROFILE.nombre} ha publicado el horario. Revisa tus turnos.`,'horarios'); }
-  toast('✓ Horario publicado'); show('horarios');
+  toast('✓ Horario publicado'); horW.gen=false; show('horarios');
 }
 async function horMine(days){
   const{data}=await sb.from('turnos').select('*').eq('empleado_id',ME.id).gte('fecha',isoD(days[0])).lte('fecha',isoD(days[days.length-1]));
