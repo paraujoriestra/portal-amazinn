@@ -1118,7 +1118,7 @@ let TURNOS_TIPO=[];
 let horW={area:'',dept:'',equipos:[],desde:'',hasta:'',turnos:null,gen:false};
 function horToggleEquipo(name,on){ horW.equipos=horW.equipos||[]; if(on){ if(!horW.equipos.includes(name)) horW.equipos.push(name);} else horW.equipos=horW.equipos.filter(x=>x!==name);
   const c=document.getElementById('horEqCount'); if(c) c.textContent=horW.equipos.length?horW.equipos.length+' equipo(s) seleccionados':'Vacío = todos'; horClearGrid(); }
-async function loadTurnosTipo(){ const{data}=await sb.from('turnos_tipo').select('*').order('orden').order('id'); TURNOS_TIPO=data||[]; if(horW.turnos===null) horW.turnos=TURNOS_TIPO.map(t=>t.id); }
+async function loadTurnosTipo(){ const{data}=await sb.from('turnos_tipo').select('*').order('orden').order('id'); TURNOS_TIPO=(data||[]).filter(t=>!/^partido$/i.test((t.nombre||'').trim())); if(horW.turnos===null) horW.turnos=TURNOS_TIPO.map(t=>t.id); }
 function turnoTipo(id){ return TURNOS_TIPO.find(t=>String(t.id)===String(id)); }
 function abreviaTurno(t){ const n=(t&&t.nombre)||''; return n.slice(0,3); }
 function tchip(id){ if(!id) return `<span class="cell-b" style="background:#f2f2f2;color:#bbb">—</span>`; const t=turnoTipo(id); if(!t) return `<span class="cell-b">·</span>`; const h=t.hora_ini?` ${t.hora_ini}–${t.hora_fin}`:''; return `<span class="cell-b" title="${esc(t.nombre)}${esc(h)}" style="background:${t.color};color:#333">${esc(abreviaTurno(t))}</span>`; }
@@ -1629,7 +1629,14 @@ function horDeptSelector(selDept){
 function chip(v){const s=SH[v||""];return `<span class="cell-b" title="${s.l}" style="background:${s.c};color:#333">${v||'—'}</span>`;}
 async function teamOf(dept){const{data}=await sb.from('profiles').select('id,nombre').eq('dept',dept).order('nombre');return data||[];}
 async function turnosMap(dept){const{data}=await sb.from('turnos').select('*').eq('dept',dept);const m={};(data||[]).forEach(t=>m[t.empleado_id+'|'+t.fecha]=t);return m;}
-function tchipRow(r){ if(!r||!r.tipo_id) return `<span class="cell-b" style="background:#f2f2f2;color:#bbb">—</span>`; const t=turnoTipo(r.tipo_id); if(!t) return `<span class="cell-b">·</span>`; const ini=r.hora_ini||t.hora_ini, fin=r.hora_fin||t.hora_fin; const h=ini?` ${ini}–${fin}`:''; return `<span class="cell-b" title="${esc(t.nombre)}${esc(h)}" style="background:${t.color};color:#333">${esc(abreviaTurno(t))}</span>`; }
+function isLibreTurno(t){ return /libre/i.test((t&&t.nombre)||''); }
+function horLegendFrom(rows){
+  const seen={};
+  (rows||[]).forEach(r=>{ if(!r||!r.tipo_id)return; const t=turnoTipo(r.tipo_id); if(!t)return; const ini=r.hora_ini||t.hora_ini, fin=r.hora_fin||t.hora_fin; const key=r.tipo_id+'|'+(ini||'')+'|'+(fin||''); if(!seen[key]) seen[key]={t,ini,fin}; });
+  const items=Object.values(seen); if(!items.length) return '';
+  return `<div class="legend">${items.map(({t,ini,fin})=>{const col=isLibreTurno(t)?'#bfe7c4':t.color; return `<span><i style="background:${col}"></i>${esc(t.nombre)}${ini?` (${esc(ini)}–${esc(fin)})`:''}</span>`;}).join('')}</div>`;
+}
+function tchipRow(r){ if(!r||!r.tipo_id) return `<span class="cell-b" style="background:#f2f2f2;color:#bbb">—</span>`; const t=turnoTipo(r.tipo_id); if(!t) return `<span class="cell-b">·</span>`; const lib=isLibreTurno(t); const ini=r.hora_ini||t.hora_ini, fin=r.hora_fin||t.hora_fin; const h=ini?`${ini}–${fin}`:''; const col=lib?'#bfe7c4':t.color; return `<span class="cell-b" title="${esc(t.nombre)}${h?' '+esc(h):''}" style="background:${col};color:#333;display:inline-flex;flex-direction:column;align-items:center;line-height:1.1;padding:4px 7px"><b>${esc(abreviaTurno(t))}</b>${(h&&!lib)?`<small style="font-size:9px;font-weight:400;opacity:.85">${esc(h)}</small>`:''}</span>`; }
 
 async function pageHorarios(){
   await loadTurnosTipo();
@@ -1644,12 +1651,12 @@ async function pageHorarios(){
   else if(horTab==='editor') body=await horCrear();
   else if(horTab==='equipo') body=await horTeam(dept,days);
   else body=await horOthers(days);
-  const legend=`<div class="legend">${TURNOS_TIPO.map(t=>`<span><i style="background:${t.color}"></i>${esc(t.nombre)}${t.hora_ini?` (${esc(t.hora_ini)}–${esc(t.hora_fin)})`:''}</span>`).join('')}</div>`;
+  const legend=`<div class="legend">${TURNOS_TIPO.map(t=>`<span><i style="background:${isLibreTurno(t)?'#bfe7c4':t.color}"></i>${esc(t.nombre)}${t.hora_ini?` (${esc(t.hora_ini)}–${esc(t.hora_fin)})`:''}</span>`).join('')}</div>`;
   document.getElementById('main').innerHTML=`
     <div class="page-title">Horarios${dept?' · '+dept:''}</div>
     <div class="page-sub">${canEdit?'Crea horarios por alcance y fechas; el equipo ve sus turnos al instante':'Consulta tu horario y el de los equipos'}</div>
     <div class="tabs">${tabs.map(t=>`<button class="${horTab===t[0]?'on':''}" onclick="setHorTab('${t[0]}')">${t[1]}</button>`).join('')}</div>
-    ${body}${horTab!=='mi'?legend:''}`;
+    ${body}${horTab==='editor'?legend:''}`;
 }
 /* ----- Crear horario (asistente: alcance → fechas → turnos → cuadrícula) ----- */
 function horToggleTurno(id,on){ id=Number(id); if(on){ if(!horW.turnos.includes(id)) horW.turnos.push(id);} else horW.turnos=horW.turnos.filter(x=>x!==id); }
@@ -1741,7 +1748,7 @@ async function horMine(days){
   const card=d=>{const iso=isoD(d);const t=map[iso];const tp=t?turnoTipo(t.tipo_id):null;
     const esVac=tp&&/vacacion/i.test(tp.nombre), esLibre=!tp||/libre/i.test(tp.nombre||'');
     if(esVac)vac++; else if(esLibre)libres++; else trab++;
-    const col=tp?tp.color:'#eee', nombre=tp?tp.nombre:'Sin turno';
+    const col=(tp&&esLibre)?'#bfe7c4':(tp?tp.color:'#eee'), nombre=tp?tp.nombre:'Sin turno';
     const ini=(t&&t.hora_ini)||(tp&&tp.hora_ini), fin=(t&&t.hora_fin)||(tp&&tp.hora_fin);
     const hrs=ini?`${ini} – ${fin}`:(esVac?'🌴 Descanso':(esLibre?'Día libre':'—'));
     const lugar=(t&&t.lugar)?t.lugar:'';
@@ -1775,7 +1782,8 @@ async function horTeam(dept,days){
   const map=await turnosMap(dept);
   const head=`<tr><th class="emp">Empleado</th>${days.map(d=>`<th class="${isWk(d)?'wknd':''}">${lblD(d)}</th>`).join('')}</tr>`;
   const rows=team.map(e=>`<tr><td class="emp">${e.id===ME.id?'<b style="color:var(--azul)">'+esc(e.nombre)+' (tú)</b>':esc(e.nombre)}</td>${days.map(d=>`<td class="${isWk(d)?'wknd':''}">${tchipRow(map[e.id+'|'+isoD(d)])}</td>`).join('')}</tr>`).join('');
-  return `<div class="grid-wrap"><table class="sched"><thead>${head}</thead><tbody>${rows}</tbody></table></div>`;
+  const legend=horLegendFrom(Object.values(map));
+  return `<div class="grid-wrap"><table class="sched"><thead>${head}</thead><tbody>${rows}</tbody></table></div>${legend||'<div class="legend" style="color:var(--suave)">Sin turnos publicados en este periodo.</div>'}`;
 }
 async function horOthers(days){
   const{data}=await sb.from('profiles').select('dept');
