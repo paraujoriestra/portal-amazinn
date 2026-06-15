@@ -1738,7 +1738,7 @@ async function horGrid(){
   const turnoOpts=chosen.map(t=>`<option value="${t.id}">${esc(t.nombre)}</option>`).join('');
   const ubicOpts=cur=>`<option value="">— Ninguna —</option>${CAT.ubicaciones.map(u=>`<option ${cur===u?'selected':''}>${esc(u)}</option>`).join('')}`;
   const head=`<tr><th class="emp">Empleado</th><th>📍 Ubicación</th>${days.map(d=>`<th class="${isWk(d)?'wknd':''}">${lblD(d)}<br><select onchange="horFillCol('${isoD(d)}',this.value)" style="font-size:10px;margin-top:3px;max-width:78px;font-family:inherit"><option value="__">▾ todos</option>${turnoOpts}<option value="">vaciar</option></select></th>`).join('')}</tr>`;
-  const rows=people.map(p=>`<tr><td class="emp">${esc(p.nombre)}<br><small style="color:var(--suave)">${esc(p.dept||p.area||'')}</small><br><select onchange="horFillRow('${p.id}',this.value)" style="font-size:10px;margin-top:3px;max-width:130px;font-family:inherit"><option value="__">▾ rellenar fila</option>${turnoOpts}<option value="">vaciar</option></select></td>
+  const rows=people.map(p=>`<tr><td class="emp">${esc(p.nombre)}<br><small style="color:var(--suave)">${esc(p.dept||p.area||'')}</small><br><select onchange="horFillRow('${p.id}',this.value)" style="display:block;font-size:10px;margin-top:3px;max-width:130px;font-family:inherit"><option value="__">▾ rellenar fila</option>${turnoOpts}<option value="">vaciar</option></select><select onchange="horFillDayOff('${p.id}',this.value)" style="display:block;font-size:10px;margin-top:4px;max-width:130px;font-family:inherit"><option value="__">▾ día libre</option><option value="1">Lunes</option><option value="2">Martes</option><option value="3">Miércoles</option><option value="4">Jueves</option><option value="5">Viernes</option><option value="6">Sábado</option><option value="0">Domingo</option></select></td>
     <td><select class="uloc" data-emp="${p.id}">${ubicOpts(locMap[p.id]||'')}</select></td>${days.map(d=>{const iso=isoD(d); const ab=abs[p.id+'|'+iso]; if(ab) return `<td class="${isWk(d)?'wknd':''}" style="text-align:center"><span class="badge ${ab==='vacaciones'?'b-grey':'b-amber'}" title="${ab==='vacaciones'?'Vacaciones aprobadas':'Baja aprobada'}">${ab==='vacaciones'?'🌴':'🤕'}</span></td>`; const cur=map[p.id+'|'+iso]||'';
     return `<td class="${isWk(d)?'wknd':''}"><select class="tcell2" data-emp="${p.id}" data-name="${esc(p.nombre)}" data-dept="${esc(p.dept||'')}" data-fecha="${iso}"><option value="">—</option>${chosen.map(t=>`<option value="${t.id}" ${String(cur)===String(t.id)?'selected':''}>${esc(t.nombre)}</option>`).join('')}</select></td>`;}).join('')}</tr>`).join('');
   return `<div class="panel"><div style="margin-bottom:12px;display:flex;gap:8px;flex-wrap:wrap">
@@ -1751,6 +1751,17 @@ async function horGrid(){
     <div class="grid-wrap"><table class="sched"><thead>${head}</thead><tbody>${rows}</tbody></table></div></div>`;
 }
 function horFillRow(emp,val){ if(val==='__')return; document.querySelectorAll('.tcell2[data-emp="'+emp+'"]').forEach(c=>{ if([...c.options].some(o=>String(o.value)===String(val))) c.value=val; }); }
+function horFillDayOff(emp,dow){
+  if(dow==='__')return;
+  const libre=TURNOS_TIPO.find(isLibreTurno);
+  if(!libre){ toast('No hay un turno "Libre" en el catálogo de turnos.'); return; }
+  const d=parseInt(dow,10); let n=0, opt=false;
+  document.querySelectorAll('.tcell2[data-emp="'+emp+'"]').forEach(c=>{
+    const dt=new Date(c.dataset.fecha+'T00:00:00');
+    if(dt.getDay()===d){ if([...c.options].some(o=>String(o.value)===String(libre.id))){ c.value=String(libre.id); n++; opt=true; } }
+  });
+  toast(n?('✓ Día libre asignado ('+n+')'):(opt?'Ese día no está en el rango seleccionado.':'Activa el turno «Libre» en el alcance para poder asignarlo.'));
+}
 function horFillCol(iso,val){ if(val==='__')return; document.querySelectorAll('.tcell2[data-fecha="'+iso+'"]').forEach(c=>{ if([...c.options].some(o=>String(o.value)===String(val))) c.value=val; }); }
 function horTurnoMins(tid){ const h=horHora(tid); if(!h.ini||!h.fin) return 0; const p=s=>{const a=s.split(':');return (+a[0])*60+(+a[1]);}; let a=p(h.ini),b=p(h.fin); if(b<=a)b+=1440; return b-a; }
 async function horCopyPrev(){
