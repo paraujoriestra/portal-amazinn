@@ -1059,7 +1059,7 @@ const NAV=[
   {grp:'General'},
   {id:'inicio',ic:'🏠',t:'Inicio'},
   {id:'horarios',ic:'📅',t:'Mis horarios'},
-  {id:'fichaje',ic:'⏱️',t:'Fichaje', lockRoles:['empleado','responsable']},
+  {id:'fichaje',ic:'⏱️',t:'Fichaje'},
   {id:'comunicados',ic:'📢',t:'Comunicados'},
   {id:'mensajeria',ic:'💌',t:'Mensajería'},
   {id:'calendario',ic:'🗓️',t:'Calendario'},
@@ -1320,7 +1320,7 @@ function show(id){
   else if(id==='conexiones'){ ld('<div class="page-title">Conexiones</div><div class="page-sub">Cargando…</div>'); pageConexiones(); }
   else if(id==='suministros'){ ld('<div class="page-title">Suministros</div><div class="page-sub">Cargando…</div>'); pageSuministros(); }
   else if(id==='sugerencias'){ ld('<div class="page-title">Sugerencias</div><div class="page-sub">Cargando…</div>'); pageSugerencias(); }
-  else if(id==='fichaje'){ if(['empleado','responsable'].includes(PROFILE.role)){ m.innerHTML='<div class="page-title">Fichaje</div><div class="panel" style="color:var(--suave)">🔒 La sección de Fichaje estará disponible próximamente.</div>'; return; } ld('<div class="page-title">Fichaje</div><div class="page-sub">Cargando…</div>'); pageFichaje(); }
+  else if(id==='fichaje'){ ld('<div class="page-title">Fichaje</div><div class="page-sub">Cargando…</div>'); pageFichaje(); }
   else if(id==='vacaciones'){ ld('<div class="page-title">Vacaciones</div><div class="page-sub">Cargando…</div>'); pageSolicitud('vacaciones'); }
   else if(id==='bajas'){ ld('<div class="page-title">Notificar baja</div><div class="page-sub">Cargando…</div>'); pageSolicitud('baja'); }
   else if(id==='aprobaciones'){ ld('<div class="page-title">Aprobaciones</div><div class="page-sub">Cargando…</div>'); pageAprobaciones(); }
@@ -2327,33 +2327,91 @@ function qrSVG(seed){const n=23,cell=6,pad=2,dim=(n+pad*2)*cell;let h=0;for(cons
   const fin=(r,c,R,C)=>{const rr=r-R,cc=c-C;if(rr<0||rr>6||cc<0||cc>6)return null;return (rr===0||rr===6||cc===0||cc===6)||(rr>=2&&rr<=4&&cc>=2&&cc<=4);};
   let x='';for(let r=0;r<n;r++)for(let c=0;c<n;c++){const f=fin(r,c,0,0)??fin(r,c,0,n-7)??fin(r,c,n-7,0);const on=(f!==null&&f!==undefined)?f:rnd()>0.52;if(on)x+=`<rect x="${(c+pad)*cell}" y="${(r+pad)*cell}" width="${cell}" height="${cell}"/>`;}
   return `<svg viewBox="0 0 ${dim} ${dim}" width="130" height="130" xmlns="http://www.w3.org/2000/svg"><rect width="${dim}" height="${dim}" fill="#fff"/><g fill="#111">${x}</g></svg>`;}
+let fichTab='fichar', fichDesde='', fichHasta='', fichEmp='';
+function setFichTab(t){ fichTab=t; fichScanOpen=false; show('fichaje'); }
+function fichSetRange(k,v){ if(k==='d')fichDesde=v; else if(k==='h')fichHasta=v; else if(k==='e')fichEmp=v; show('fichaje'); }
+function fichTsVal(f){ return f.ts? new Date(f.ts).getTime() : (f.fecha&&f.hora? new Date(f.fecha+'T'+f.hora).getTime() : 0); }
+function fichHora(f){ return f.ts? new Date(f.ts).toLocaleTimeString('es-ES',{hour:'2-digit',minute:'2-digit'}) : (f.hora||'—'); }
+function fichFmtDur(min){ min=Math.max(0,Math.round(min)); const h=Math.floor(min/60),m=min%60; return h?(m?h+'h '+m+'m':h+'h'):m+'m'; }
+function fichSessions(list){ const s=[...list].sort((a,b)=>fichTsVal(a)-fichTsVal(b)); const out=[]; let open=null; s.forEach(f=>{ if(f.tipo==='entrada'){ open={ent:f,sal:null}; out.push(open); } else { if(open&&!open.sal){ open.sal=f; open=null; } else out.push({ent:null,sal:f}); } }); return out; }
+function fichMins(list){ let t=0; fichSessions(list).forEach(x=>{ if(x.ent&&x.sal) t+=(fichTsVal(x.sal)-fichTsVal(x.ent))/60000; }); return t; }
 async function pageFichaje(){
-  const isRRHH=esRRHH(), isMgr=CAN_MANAGE.includes(PROFILE.role), today=hoyISO();
-  const{data:mine}=await sb.from('fichajes').select('*').eq('user_id',ME.id).eq('fecha',today).order('hora');
-  const mias=mine||[]; const ult=mias.length?mias[mias.length-1]:null; const dentro=ult?ult.tipo==='entrada':false;
-  const status=dentro?`<div style="font-size:20px;font-weight:800;color:var(--acento)">🟢 Estás fichado (dentro)</div><div style="color:var(--suave);font-size:13px">Entrada a las ${ult.hora} en ${esc(ult.lugar||'')}</div>`
-    :(ult?`<div style="font-size:20px;font-weight:800;color:var(--suave)">⚪ Fuera de turno</div><div style="color:var(--suave);font-size:13px">Última salida a las ${ult.hora}</div>`:`<div style="font-size:20px;font-weight:800;color:var(--suave)">⚪ Aún no has fichado hoy</div>`);
-  const scan=fichScanOpen?`<div class="qr-cam"><div style="font-weight:700">📷 Escanea el QR de tu lugar de trabajo</div><div class="frame">⬛</div>
-    <div style="font-size:12px;color:#aaa;margin-bottom:8px">Simulación: elige el QR que escaneas</div><div class="qr-choices">${FICHA_LUGARES.map(l=>`<button onclick="doFichar('${l}')">${l}</button>`).join('')}</div>
-    <div style="margin-top:12px"><button class="btn ghost" style="color:#fff;border-color:#555" onclick="fichScanOpen=false;show('fichaje')">Cancelar</button></div></div>`:'';
-  let rrhh='';
-  if(isRRHH){const{data:all}=await sb.from('fichajes').select('*').eq('fecha',today).order('hora');const byU={};(all||[]).forEach(f=>{(byU[f.user_nombre]=byU[f.user_nombre]||[]).push(f);});
-    rrhh=`<div class="panel"><h2>👥 Equipo · hoy</h2><table><thead><tr><th>Empleado</th><th>Estado</th><th>Entrada</th><th>Salida</th><th>Lugar</th></tr></thead><tbody>
-      ${Object.keys(byU).map(u=>{const fs=byU[u];const ent=fs.find(x=>x.tipo==='entrada');const sal=[...fs].reverse().find(x=>x.tipo==='salida');const dent=fs[fs.length-1].tipo==='entrada';
-        return `<tr><td>${esc(u)}</td><td>${dent?'<span class="badge b-green">Dentro</span>':'<span class="badge b-grey">Fuera</span>'}</td><td>${ent?ent.hora:'—'}</td><td>${sal&&!dent?sal.hora:'—'}</td><td>${esc((ent||sal||{}).lugar||'')}</td></tr>`;}).join('')||'<tr><td colspan="5" style="color:var(--suave)">Sin fichajes hoy.</td></tr>'}
-      </tbody></table></div>`;}
-  const qr=isMgr?`<div class="panel"><h2>🔳 Códigos QR de las propiedades</h2><div style="font-size:13px;color:var(--suave);margin-bottom:12px">Imprime cada QR y pégalo en la entrada.</div>
-    <div style="display:flex;flex-wrap:wrap;gap:14px">${FICHA_LUGARES.map(l=>`<div class="qr-card">${qrSVG(l)}<b>${l}</b></div>`).join('')}</div></div>`:'';
-  document.getElementById('main').innerHTML=`<div class="page-title">Fichaje</div><div class="page-sub">Ficha tu entrada y salida escaneando el QR de tu lugar de trabajo</div>
-    <div class="panel" style="max-width:540px;text-align:center">${status}${!fichScanOpen?`<button class="btn" style="margin-top:14px;background:${dentro?'var(--rojo)':'var(--acento)'}" onclick="fichScanOpen=true;show('fichaje')">📷 Escanear QR para fichar ${dentro?'SALIDA':'ENTRADA'}</button>`:''}</div>
-    ${scan}
-    <div class="panel"><h2>🕘 Mis fichajes de hoy</h2>${mias.length?`<table><thead><tr><th>Hora</th><th>Tipo</th><th>Lugar</th></tr></thead><tbody>${mias.map(f=>`<tr><td><b>${f.hora}</b></td><td>${f.tipo==='entrada'?'<span class="badge b-green">Entrada</span>':'<span class="badge b-red">Salida</span>'}</td><td>${esc(f.lugar||'')}</td></tr>`).join('')}</tbody></table>`:'<div style="color:var(--suave);font-size:13.5px">Todavía no tienes fichajes hoy.</div>'}</div>
-    ${rrhh}${qr}`;
+  const isMgr=CAN_MANAGE.includes(PROFILE.role)||esRRHH();
+  const tabs=[['fichar','⏱️ Fichar'],['historial','🕘 Mi historial']]; if(isMgr) tabs.push(['equipo','👥 Equipo']);
+  if(!tabs.some(t=>t[0]===fichTab)) fichTab='fichar';
+  let body;
+  if(fichTab==='fichar') body=await fichFichar();
+  else if(fichTab==='historial') body=await fichHistorial(ME.id);
+  else body=await fichEquipo();
+  document.getElementById('main').innerHTML=`<div class="page-title">Fichaje</div><div class="page-sub">Ficha tu entrada y salida</div>
+    <div class="tabs">${tabs.map(t=>`<button class="${fichTab===t[0]?'on':''}" onclick="setFichTab('${t[0]}')">${t[1]}</button>`).join('')}</div>${body}`;
 }
-async function doFichar(lugar){const today=hoyISO();const{data}=await sb.from('fichajes').select('tipo,hora').eq('user_id',ME.id).eq('fecha',today).order('hora');
-  const dentro=(data&&data.length)?data[data.length-1].tipo==='entrada':false;const tipo=dentro?'salida':'entrada';
-  const{error}=await sb.from('fichajes').insert({user_id:ME.id,user_nombre:PROFILE.nombre,fecha:today,hora:horaAhora(),tipo,lugar});
-  if(error){alert('Error: '+error.message);return;}fichScanOpen=false;show('fichaje');}
+async function fichFichar(){
+  const today=hoyISO();
+  const{data:mine}=await sb.from('fichajes').select('*').eq('user_id',ME.id).eq('fecha',today);
+  const mias=(mine||[]).sort((a,b)=>fichTsVal(a)-fichTsVal(b));
+  const ult=mias[mias.length-1]||null; const dentro=ult?ult.tipo==='entrada':false;
+  const worked=fichMins(mias);
+  // turno de hoy (cruce)
+  let cruce='';
+  const{data:tn}=await sb.from('turnos').select('*').eq('empleado_id',ME.id).eq('fecha',today);
+  const turno=(tn||[])[0]; const tp=turno?turnoTipo(turno.tipo_id):null;
+  if(tp){ const ini=turno.hora_ini||tp.hora_ini; const ent=mias.find(x=>x.tipo==='entrada');
+    if(ini&&ent){ const plan=new Date(today+'T'+ini).getTime(); const real=fichTsVal(ent); const diff=Math.round((real-plan)/60000); cruce= diff>10? `<div style="color:#c0392b;font-size:13px;margin-top:6px">⏰ Entraste ${diff} min tarde (turno ${ini})</div>` : `<div style="color:#2c6b39;font-size:13px;margin-top:6px">✓ Turno ${ini}${turno.hora_fin?'–'+turno.hora_fin:''}</div>`; }
+    else if(ini&&!ent){ cruce=`<div style="color:var(--suave);font-size:13px;margin-top:6px">Tu turno de hoy empieza a las ${ini}.</div>`; }
+  }
+  const status=dentro?`<div style="font-size:20px;font-weight:800;color:var(--acento)">🟢 Estás fichado (dentro)</div><div style="color:var(--suave);font-size:13px">Entrada a las ${fichHora(ult)}${ult.lugar?' en '+esc(ult.lugar):''}</div>`
+    :(ult?`<div style="font-size:20px;font-weight:800;color:var(--suave)">⚪ Fuera de turno</div><div style="color:var(--suave);font-size:13px">Última salida a las ${fichHora(ult)}</div>`:`<div style="font-size:20px;font-weight:800;color:var(--suave)">⚪ Aún no has fichado hoy</div>`);
+  const scan=fichScanOpen?`<div class="qr-cam"><div style="font-weight:700">📷 Escanea el QR de tu lugar de trabajo</div><div class="frame">⬛</div>
+    <div style="font-size:12px;color:#aaa;margin-bottom:8px">Simulación: elige el QR que escaneas</div><div class="qr-choices">${FICHA_LUGARES.map(l=>`<button onclick="doFichar('${l}')">${esc(l)}</button>`).join('')}</div>
+    <div style="margin-top:12px"><button class="btn ghost" style="color:#fff;border-color:#555" onclick="fichScanOpen=false;show('fichaje')">Cancelar</button></div></div>`:'';
+  return `<div class="panel" style="max-width:560px;text-align:center">${status}
+    <div style="margin:10px 0;font-size:13px;color:var(--suave)">Trabajado hoy: <b style="color:var(--azul)">${fichFmtDur(worked)}</b></div>${cruce}
+    ${!fichScanOpen?`<button class="btn" style="margin-top:12px;background:${dentro?'var(--rojo)':'var(--acento)'}" onclick="fichScanOpen=true;show('fichaje')">📷 Fichar ${dentro?'SALIDA':'ENTRADA'}</button>`:''}</div>
+    ${scan}
+    <div class="panel"><h2>🕘 Mis fichajes de hoy</h2>${mias.length?`<table><thead><tr><th>Hora</th><th>Tipo</th><th>Lugar</th></tr></thead><tbody>${mias.map(f=>`<tr><td><b>${fichHora(f)}</b></td><td>${f.tipo==='entrada'?'<span class="badge b-green">Entrada</span>':'<span class="badge b-red">Salida</span>'}</td><td>${esc(f.lugar||'')}</td></tr>`).join('')}</tbody></table>`:'<div style="color:var(--suave);font-size:13.5px">Todavía no tienes fichajes hoy.</div>'}</div>`;
+}
+function fichDefaultRange(){ if(!fichDesde||!fichHasta){ const h=new Date(); const d=new Date(); d.setDate(d.getDate()-13); fichHasta=isoD(h); fichDesde=isoD(d); } }
+async function fichHistorial(userId){
+  fichDefaultRange();
+  const{data}=await sb.from('fichajes').select('*').eq('user_id',userId).gte('fecha',fichDesde).lte('fecha',fichHasta);
+  const rows=(data||[]);
+  const byDay={}; rows.forEach(f=>{(byDay[f.fecha]=byDay[f.fecha]||[]).push(f);});
+  const dias=Object.keys(byDay).sort().reverse();
+  let total=0; const dayRows=dias.map(d=>{ const m=fichMins(byDay[d]); total+=m; const ss=fichSessions(byDay[d]); const det=ss.map(s=>`${s.ent?fichHora(s.ent):'—'}→${s.sal?fichHora(s.sal):'…'}`).join(' · '); return `<tr><td><b>${new Date(d+'T00:00:00').toLocaleDateString('es-ES',{weekday:'short',day:'2-digit',month:'short'})}</b></td><td>${det||'—'}</td><td><b>${fichFmtDur(m)}</b></td></tr>`; }).join('');
+  const rango=`<div class="inc-filters" style="margin-bottom:12px"><label style="font-size:13px;align-self:center">Del</label><input type="date" value="${fichDesde}" onchange="fichSetRange('d',this.value)" style="padding:7px 10px;border:1px solid var(--gris2);border-radius:8px"><label style="font-size:13px;align-self:center">al</label><input type="date" value="${fichHasta}" onchange="fichSetRange('h',this.value)" style="padding:7px 10px;border:1px solid var(--gris2);border-radius:8px"><button class="btn-sm ghost" onclick="fichExport('${userId}')">⬇️ Exportar CSV</button></div>`;
+  return `${rango}<div class="panel"><h2>Total del periodo: <span style="color:var(--azul)">${fichFmtDur(total)}</span></h2>
+    ${dayRows?`<table><thead><tr><th>Día</th><th>Sesiones</th><th>Horas</th></tr></thead><tbody>${dayRows}</tbody></table>`:'<div style="color:var(--suave)">Sin fichajes en este periodo.</div>'}</div>`;
+}
+async function fichEquipo(){
+  fichDefaultRange();
+  const today=hoyISO();
+  const{data:all}=await sb.from('fichajes').select('*').eq('fecha',today);
+  const byU={};(all||[]).forEach(f=>{(byU[f.user_id]=byU[f.user_id]||{nombre:f.user_nombre,list:[]}); byU[f.user_id].list.push(f);});
+  const hoyRows=Object.keys(byU).map(uid=>{ const o=byU[uid]; const ls=o.list.sort((a,b)=>fichTsVal(a)-fichTsVal(b)); const dent=ls[ls.length-1].tipo==='entrada'; const ent=ls.find(x=>x.tipo==='entrada'); return `<tr><td>${esc(o.nombre)}</td><td>${dent?'<span class="badge b-green">Dentro</span>':'<span class="badge b-grey">Fuera</span>'}</td><td>${ent?fichHora(ent):'—'}</td><td><b>${fichFmtDur(fichMins(ls))}</b></td><td>${esc((ent||ls[0]||{}).lugar||'')}</td></tr>`; }).join('')||'<tr><td colspan="5" style="color:var(--suave)">Sin fichajes hoy.</td></tr>';
+  return `<div class="panel"><h2>👥 Equipo · hoy</h2><table><thead><tr><th>Empleado</th><th>Estado</th><th>Entrada</th><th>Trabajado</th><th>Lugar</th></tr></thead><tbody>${hoyRows}</tbody></table></div>
+    <div class="panel" style="font-size:13px;color:var(--suave)">Para ver el histórico y total de horas de un empleado, ve a su ficha o usa Exportar. <button class="btn-sm ghost" onclick="fichExportAll()">⬇️ Exportar todos (periodo ${fichDesde} → ${fichHasta})</button></div>`;
+}
+async function fichExport(userId){
+  fichDefaultRange();
+  const{data}=await sb.from('fichajes').select('*').eq('user_id',userId).gte('fecha',fichDesde).lte('fecha',fichHasta);
+  fichCSV(data||[],'fichajes_'+fichDesde+'_'+fichHasta);
+}
+async function fichExportAll(){
+  fichDefaultRange();
+  const{data}=await sb.from('fichajes').select('*').gte('fecha',fichDesde).lte('fecha',fichHasta);
+  fichCSV(data||[],'fichajes_equipo_'+fichDesde+'_'+fichHasta);
+}
+function fichCSV(rows,name){
+  const q=v=>'"'+String(v==null?'':v).replace(/"/g,'""')+'"';
+  const lines=['Empleado;Fecha;Hora;Tipo;Lugar;Método'];
+  rows.sort((a,b)=>(a.fecha+a.user_nombre)<(b.fecha+b.user_nombre)?-1:1).forEach(f=>lines.push([f.user_nombre,f.fecha,fichHora(f),f.tipo,f.lugar||'',f.metodo||''].map(q).join(';')));
+  const blob=new Blob(['﻿'+lines.join('\n')],{type:'text/csv;charset=utf-8'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name+'.csv';document.body.appendChild(a);a.click();a.remove();toast('✓ CSV exportado');
+}
+async function doFichar(lugar){const today=hoyISO();const{data}=await sb.from('fichajes').select('tipo,ts,hora').eq('user_id',ME.id).eq('fecha',today);
+  const ls=(data||[]).sort((a,b)=>fichTsVal(a)-fichTsVal(b)); const dentro=ls.length?ls[ls.length-1].tipo==='entrada':false; const tipo=dentro?'salida':'entrada';
+  const{error}=await sb.from('fichajes').insert({user_id:ME.id,user_nombre:PROFILE.nombre,fecha:today,hora:horaAhora(),tipo,lugar,metodo:'qr'});
+  if(error){alert('Error: '+error.message);return;}fichScanOpen=false;toast('✓ Fichaje registrado'); show('fichaje');}
 
 /* ---------------- VACACIONES / BAJAS ---------------- */
 const SOL_EST={Pendiente:'b-amber',Aprobada:'b-green',Rechazada:'b-red',Registrada:'b-blue'};
