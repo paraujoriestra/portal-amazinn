@@ -2,8 +2,17 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Amazinn Places · Portal interno</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#1c1b18">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Amazinn">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+<link rel="icon" type="image/png" sizes="512x512" href="icon-512.png">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
@@ -157,6 +166,32 @@
     td{padding:8px 9px}
     .btn{padding:9px 12px}
     .notif-panel{right:8px;width:94vw}
+  }
+  /* ===== MÓVIL · optimización para personal operativo (limpieza/mantenimiento) ===== */
+  @media(max-width:760px){
+    /* Evita el zoom automático de iOS al enfocar campos (font-size>=16px) */
+    input:not([type=checkbox]):not([type=radio]),select,textarea,form.box input,form.box select,form.box textarea{font-size:16px}
+    /* Botones cómodos para el dedo */
+    .btn,.btn-ok,.btn-sm{min-height:44px}
+    /* Incidencia · acciones a lo ancho y apiladas */
+    .inc-final{display:flex;flex-direction:column;gap:8px}
+    .inc-final>button{width:100%;min-height:48px;font-size:15px}
+    .inc-timer{flex-direction:column;align-items:stretch;gap:10px}
+    .inc-timer-disp{font-size:30px;text-align:center}
+    .inc-timer-btns{display:flex;gap:8px}.inc-timer-btns button{flex:1;min-height:46px}
+    /* Limpieza · seguimiento: fila apilada con botón grande */
+    .asg-unit-row{flex-direction:column;align-items:stretch;gap:8px}
+    .asg-unit-row>div:last-child{display:flex;justify-content:space-between;align-items:center}
+    .asg-st{min-height:42px;padding:9px 14px}
+    /* Tarjetas de publicadas: acciones debajo */
+    .pubcard{flex-wrap:wrap}.pubcard .pa{margin-left:0;width:100%}
+    /* Tablas anchas: scroll táctil suave */
+    .grid-wrap,.asg-scroll,.inc-scroll,[style*="overflow-x:auto"]{-webkit-overflow-scrolling:touch}
+  }
+  @media(max-width:480px){
+    .inc-timer-disp{font-size:26px}
+    .asg-table{font-size:13px}
+    table.hsched{min-width:560px}
   }
   /* ===== MODO OSCURO ===== */
   body.dark{--gris:#16150f;--gris2:#34302a;--texto:#ece6d9;--suave:#a59d8d;--azul:#efe7d8;--azul-claro:#2b2823}
@@ -933,6 +968,9 @@ function isAdmin(){ return PROFILE.role==='admin' || PROFILE.role==='propietario
 function isDireccion(){ return ['direccion','admin','propietario'].includes(PROFILE.role); } // área o más
 function esRRHH(){ return isAdmin() || PROFILE.dept==='RRHH' || PROFILE.area==='Recursos Humanos'; }
 function isOwner(){ return PROFILE.role==='propietario'; }
+function isProvider(){ return !!(PROFILE&&PROFILE.proveedor); }     // técnico/proveedor externo
+function provEsp(){ return (PROFILE&&PROFILE.especialidad)||''; }   // su categoría (ej. climatizacion)
+const PROV_NAV_OK=['inicio','incidencias','preventivo','perfil'];
 
 let sb=null, ME=null, PROFILE=null, curPage='';
 
@@ -1158,9 +1196,10 @@ function navGroups(){
   const groups=[]; let cur=null;
   NAV.forEach(it=>{
     if(it.owner && !isOwner()) return;
+    if(isProvider() && it.id && !PROV_NAV_OK.includes(it.id)) return;   // proveedor: solo incidencias/preventivo
     const er = PROFILE.role==='propietario' ? 'admin' : PROFILE.role;
     if(it.roles && !it.roles.includes(er)) return;
-    if(it.depts && !it.depts.includes(PROFILE.dept) && !isAdmin()) return;
+    if(it.depts && !it.depts.includes(PROFILE.dept) && !isAdmin() && !isProvider()) return;
     if(it.id && !isOwner() && ACCESS_DENY.has(it.id)) return;   // oculto por configuración de Permisos
     if(it.grp){ cur={name:it.grp,items:[]}; groups.push(cur); }
     else if(cur){ cur.items.push(it); }
@@ -3248,6 +3287,11 @@ function userForm(){const u=userDraft;const colores=['#1F4E79','#16a085','#8e44a
         ? `<input value="Propietario 👑" disabled style="background:var(--gris)"><small style="color:var(--suave)">El rol de Propietario no se puede cambiar.</small>`
         : `<select id="uR">${ROLES.filter(r=>r[0]!=='propietario').map(r=>`<option value="${r[0]}" ${u.role===r[0]?'selected':''}>${esc(r[1])}</option>`).join('')}</select>`}</div>
       <div><label>Título en organigrama (opcional)</label><input id="uOrgT" value="${esc(u.org_titulo||'')}" placeholder="Ej: CEO Latam"></div></div>
+    <div class="row"><div><label>Proveedor externo</label>
+        <select id="uProv" onchange="userDraft.proveedor=(this.value==='1')"><option value="0" ${!u.proveedor?'selected':''}>No</option><option value="1" ${u.proveedor?'selected':''}>Sí — técnico externo</option></select></div>
+      <div><label>Especialidad (categoría)</label>
+        <select id="uEsp"><option value="">— Ninguna —</option>${INC_CAT.map(([v,l])=>`<option value="${v}" ${u.especialidad===v?'selected':''}>${l}</option>`).join('')}</select></div></div>
+    <small style="color:var(--suave);display:block;margin-top:-4px">Si es <b>proveedor</b>, al entrar solo verá <b>Incidencias</b> y <b>Mantenimiento preventivo</b> de su especialidad. Ponle el departamento <b>Mantenimiento</b> para que se le puedan asignar.</small>
     <div class="row"><div><label>Nº de teléfono</label><input id="uTel" value="${esc(u.telefono||'')}"></div>
       <div><label>Nº de identificación</label><input id="uIdent" value="${esc(u.identificacion||'')}"></div></div>
     <label>Cumpleaños</label><input id="uC" type="date" value="${u.cumple||''}">
@@ -3267,6 +3311,8 @@ function captureUserForm(){
   if(g('uTel')!==null) userDraft.telefono=g('uTel');
   if(g('uIdent')!==null) userDraft.identificacion=g('uIdent');
   if(g('uOrgT')!==null) userDraft.org_titulo=g('uOrgT');
+  const pv=g('uProv'); if(pv!==null) userDraft.proveedor=(pv==='1');
+  const ep=g('uEsp'); if(ep!==null) userDraft.especialidad=ep||null;
   if(g('uC')!==null) userDraft.cumple=g('uC')||null;
   const col=document.querySelector('input[name="uCol"]:checked'); if(col) userDraft.color=col.value;
 }
@@ -3305,7 +3351,7 @@ async function userSave(e){e.preventDefault();
   let role;
   if(userDraft.role==='propietario'){ role='propietario'; }
   else { const rn=g('uR'); role=(rn&&rn!=='__new__')?rn:userDraft.role; }
-  const row={nombre:val('uN'),dept,area,role,posicion,vac:+val('uV')||0,cumple:val('uC')||null,equipo,telefono:val('uTel'),identificacion:val('uIdent'),org_titulo:val('uOrgT'),color:col?col.value:'#1F4E79'};
+  const row={nombre:val('uN'),dept,area,role,posicion,vac:+val('uV')||0,cumple:val('uC')||null,equipo,telefono:val('uTel'),identificacion:val('uIdent'),org_titulo:val('uOrgT'),color:col?col.value:'#1F4E79',proveedor:(g('uProv')==='1'),especialidad:(g('uEsp')||null)};
   const f=document.getElementById('uFoto').files[0];
   if(f){ row.foto=await fileToAvatar(f); }            // respaldo si no se usó el recorte
   else { row.foto = (userDraft.foto!==undefined ? userDraft.foto : null); }  // recorte aplicado, foto existente, o "Quitar foto"
@@ -3960,7 +4006,9 @@ function renderIncBandeja(){
   const chips=[];
   if(incEsMant()){ chips.push(['mias','🙋 Mías'],['equipo','👥 Mi equipo'],['curso','🛠️ En curso'+(enCurso?` (${enCurso})`:'')],['sinasignar','📭 Sin asignar']); }
   if(incCan()) chips.push(['todas','🗂️ Todas']);
-  const chipsHTML=chips.map(([k,l])=>`<button class="inc-chip ${f.ambito===k?'on':''}" onclick="incSetAmbito('${k}')">${l}</button>`).join('');
+  const chipsHTML=isProvider()
+    ? `<div class="panel" style="background:#eef5ff;border:1px solid #d7e6fb;margin-bottom:10px;font-size:13px">🔧 Tu especialidad: <b>${incCatLabel(provEsp())}</b> — ves las incidencias de esta categoría.</div>`
+    : chips.map(([k,l])=>`<button class="inc-chip ${f.ambito===k?'on':''}" onclick="incSetAmbito('${k}')">${l}</button>`).join('');
   const edOpts=`<option value="">Todos los edificios</option>`+MANT_EDIF.map(e=>`<option ${f.edificio===e.nombre?'selected':''}>${esc(e.nombre)}</option>`).join('');
   const uniList=MANT_UNI.filter(u=>!f.edificio||u.edificio===f.edificio);
   const unOpts=`<option value="">Todas las unidades</option>`+uniList.map(u=>`<option ${f.unidad===u.nombre?'selected':''}>${esc(u.nombre)}</option>`).join('');
@@ -3980,18 +4028,19 @@ function renderIncBandeja(){
       <input type="search" placeholder="🔎 Buscar…" value="${esc(f.q||'')}" onchange="incSetFilter('q',this.value)" style="padding:7px 10px;border:1px solid var(--gris2);border-radius:8px;font-size:13px;font-family:inherit;min-width:150px">
       <select onchange="incSetFilter('edificio',this.value)">${edOpts}</select>
       <select onchange="incSetFilter('unidad',this.value)">${unOpts}</select>
-      <select onchange="incSetFilter('categoria',this.value)">${catOpts}</select>
+      ${isProvider()?'':`<select onchange="incSetFilter('categoria',this.value)">${catOpts}</select>`}
       <select onchange="incSetFilter('urgencia',this.value)">${urgOpts}</select>
       ${anyF?`<button class="inc-clear" onclick="incClearFilters()">✕ Limpiar</button>`:''}
     </div>`:''}
     ${renderIncList(false)}`;
 }
 function incFilteredList(hist){
-  const f=incFilters, me=ME.id; const urgRank={alta:0,media:1,baja:2};
+  const f=incFilters, me=ME.id; const urgRank={alta:0,media:1,baja:2}; const prov=isProvider(), esp=provEsp();
   const arr=INC.filter(i=>{
     const done=(i.estado==='terminada'||i.estado==='cancelada');
     if(hist){ if(!done) return false; } else { if(done) return false; }
-    if(!hist){
+    if(prov && (i.categoria||'')!==esp) return false;
+    if(!prov && !hist){
       if(f.ambito==='reportadas'){ if(i.creado_por!==me) return false; }
       else if(f.ambito==='mias'){ if(i.tomada_por!==me && i.asignado_a!==me) return false; }
       else if(f.ambito==='equipo'){ const t=incMyTeam(); if(!(i.asignado_equipo==='*'||(t&&i.asignado_equipo===t))) return false; }
@@ -4416,7 +4465,7 @@ function renderPrevCal(){
 function renderPrevDetail(id){
   const t=MANT_PREV.find(x=>String(x.id)===String(id));
   if(!t) return `<button class="btn-sm ghost" onclick="prevBack()">← Volver</button><div class="panel" style="margin-top:12px">Tarea no encontrada.</div>`;
-  const canManage=incCan();
+  const canManage=incCan()||isProvider();
   const today=new Date(); today.setHours(0,0,0,0);
   const prox=t.proximo?new Date(t.proximo+'T00:00:00'):null;
   const overdue=prox&&prox<today&&t.activo!==false;
@@ -4445,8 +4494,9 @@ function renderPrevDetail(id){
 }
 function prevSetCat(v){ prevFilterCat=v; show('preventivo'); }
 function renderPrev(){
-  const canManage=incCan();
+  const canManage=incCan()||isProvider();
   let tasks=MANT_PREV.slice();
+  if(isProvider()) tasks=tasks.filter(t=>(t.categoria||'')===provEsp());
   if(prevFilterCat) tasks=tasks.filter(t=>(t.categoria||'')===prevFilterCat);
   tasks.sort((a,b)=>((a.proximo||'9999')<(b.proximo||'9999')?-1:1));
   const catOpts=`<option value="">Todas las categorías</option>`+INC_CAT.map(([v,l])=>`<option value="${v}" ${prevFilterCat===v?'selected':''}>${l}</option>`).join('');
@@ -4454,11 +4504,11 @@ function renderPrev(){
   const cards = tasks.length? `<div class="inc-cards">${tasks.map(prevCardHTML).join('')}</div>` : '<div class="panel" style="color:var(--suave)">No hay tareas en esta vista.</div>';
   return `<div style="font-size:12.5px;color:var(--suave);margin:0 0 12px">Tareas que se repiten. Pulsa <b>Hecho</b> y se reprograma sola para la próxima. Las <b style="color:#c0392b">vencidas parpadean</b>.</div>
     ${canManage?`<div style="margin:0 0 12px"><button class="btn" onclick="prevNew()">+ Nueva tarea preventiva</button></div>`:''}
-    <div class="inc-filters"><select onchange="prevSetCat(this.value)">${catOpts}</select></div>
+    ${isProvider()?`<div class="panel" style="background:#eef5ff;border:1px solid #d7e6fb;margin-bottom:10px;font-size:13px">🔧 Tu especialidad: <b>${incCatLabel(provEsp())}</b> — gestionas las tareas de esta categoría.</div>`:`<div class="inc-filters"><select onchange="prevSetCat(this.value)">${catOpts}</select></div>`}
     ${form}${cards}`;
 }
 function prevCardHTML(t){
-  const canManage=incCan();
+  const canManage=incCan()||isProvider();
   const today=new Date(); today.setHours(0,0,0,0);
   const prox=t.proximo?new Date(t.proximo+'T00:00:00'):null;
   const overdue = prox && prox<today && t.activo!==false;
@@ -4487,7 +4537,8 @@ function prevFormHTML(){
   const edOpts=`<option value="">— Cualquiera —</option>`+MANT_EDIF.map(e=>`<option ${t.edificio===e.nombre?'selected':''}>${esc(e.nombre)}</option>`).join('');
   const uniList=MANT_UNI.filter(u=>u.edificio===t.edificio);
   const unOpts=`<option value="">— Cualquiera —</option>`+uniList.map(u=>`<option ${t.unidad===u.nombre?'selected':''}>${esc(u.nombre)}</option>`).join('');
-  const catOpts=`<option value="">— Sin categoría —</option>`+INC_CAT.map(([v,l])=>`<option value="${v}" ${t.categoria===v?'selected':''}>${l}</option>`).join('');
+  const defCat=(!prevEditId && isProvider())? provEsp() : (t.categoria||'');
+  const catOpts=`<option value="">— Sin categoría —</option>`+INC_CAT.map(([v,l])=>`<option value="${v}" ${defCat===v?'selected':''}>${l}</option>`).join('');
   const teamOpts=`<option value="">— Sin equipo —</option>`+MANT_TEAMS.map(tm=>`<option ${t.asignado_equipo===tm?'selected':''}>${esc(tm)}</option>`).join('');
   const perOpts=`<option value="">— Nadie en concreto —</option>`+MANT_STAFF.map(s=>`<option value="${s.id}" ${String(t.asignado_a)===String(s.id)?'selected':''}>${esc(s.nombre)}</option>`).join('');
   return `<div class="panel" style="max-width:680px"><form class="box" style="max-width:none" onsubmit="return prevSave(event)">
