@@ -4553,21 +4553,73 @@ function asgTeamWorkers(){ return ASG_TRAB_FULL.filter(t=>!ASG.equipo||(t.equipo
 function asgSetEquipo(e){ ASG.equipo=e; show('asignaciones'); }
 function asgTipoLabel(t){ const o=ASG_TIPO.find(x=>x[0]===t); return o?o[1]:''; }
 function fechaLarga(iso){ if(!iso) return ''; const d=new Date(iso+'T00:00:00'); if(isNaN(d)) return iso; const ds=['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado']; const dd=String(d.getDate()).padStart(2,'0'), mm=String(d.getMonth()+1).padStart(2,'0'); return `${ds[d.getDay()]} ${dd}/${mm}/${d.getFullYear()}`; }
-function asgComputeResumen(d){ d=d||ASG; const m={}; const add=(t,k)=>{ if(t&&(''+t).trim()){ t=(''+t).trim(); m[t]=m[t]||{u:0,c:0}; m[t][k]++; } }; (d.unidades||[]).forEach(u=>{add(u.t1,'u');add(u.t2,'u');}); (d.comunes||[]).forEach(c=>{add(c.t1,'c');add(c.t2,'c');}); return Object.keys(m).sort().map(n=>({nombre:n,u:m[n].u,c:m[n].c})); }
-function asgResumenHTML(){ const r=asgComputeResumen(ASG); if(!r.length) return '<p style="color:var(--suave);margin:0">Aún no hay personal asignado.</p>'; return `<div class="asg-resgrid">${r.map((p,i)=>`<div class="asg-reschip"><b>${i+1}. ${esc(p.nombre)}</b><span>${p.u?p.u+' unidad(es)':''}${p.u&&p.c?' · ':''}${p.c?p.c+' z. común':''}</span></div>`).join('')}</div><div class="asg-restotal">👥 ${r.length} persona(s) llamada(s) a trabajar</div>`; }
-function asgRefreshResumen(){ const b=document.getElementById('asgResumenBox'); if(b) b.innerHTML=asgResumenHTML(); }
+function asgComputeResumen(d){ d=d||ASG; const m={};
+  const ensure=n=>{ n=(''+n).trim(); m[n]=m[n]||{u:0,c:0,unidades:[],comunes:[]}; return m[n]; };
+  (d.unidades||[]).forEach(u=>{ const nom=(u.unidad||'').trim()||'(sin unidad)'; [u.t1,u.t2].forEach(t=>{ if(t&&(''+t).trim()){ const o=ensure(t); o.u++; o.unidades.push(nom); } }); });
+  (d.comunes||[]).forEach(c=>{ const ar=(c.area||'').trim()||'(zona común)'; [c.t1,c.t2].forEach(t=>{ if(t&&(''+t).trim()){ const o=ensure(t); o.c++; o.comunes.push(ar); } }); });
+  return Object.keys(m).sort().map(n=>({nombre:n,u:m[n].u,c:m[n].c,unidades:m[n].unidades,comunes:m[n].comunes})); }
+function asgResumenHTML(){ const r=asgComputeResumen(ASG); if(!r.length) return '<p style="color:var(--suave);margin:0">Aún no hay personal asignado.</p>'; return `<div class="asg-resgrid">${r.map((p,i)=>`<div class="asg-reschip"><b>${i+1}. ${esc(p.nombre)}</b><span>${p.u?p.u+' unidad(es)':''}${p.u&&p.c?' · ':''}${p.c?p.c+' z. común':''}</span><div style="margin-top:6px;font-size:12px;color:#33414f;line-height:1.6">${[...p.unidades.map(u=>'🏠 '+esc(u)),...p.comunes.map(c=>'🧽 '+esc(c))].join('<br>')||'<span style=\"color:var(--suave)\">—</span>'}</div></div>`).join('')}</div><div class="asg-restotal">👥 ${r.length} persona(s) llamada(s) a trabajar</div>`; }
+function asgRefreshResumen(){ const b=document.getElementById('asgResumenBox'); if(b) b.innerHTML=asgResumenHTML(); const bb=document.getElementById('asgBalanceBox'); if(bb) bb.innerHTML=asgBalanceHTML(); }
 function asgUpdU(i,c,v){ if(ASG.unidades[i]){ ASG.unidades[i][c]=v; asgRefreshResumen(); } }
 function asgUpdC(i,c,v){ if(ASG.comunes[i]){ ASG.comunes[i][c]=v; asgRefreshResumen(); } }
 function asgUpdFecha(v){ ASG.fecha=v; }
 function asgRenderUTbody(focusLast){ const b=document.getElementById('asgUTbody'); if(b){ b.innerHTML=asgUnidadRows(); if(focusLast){ const inp=b.querySelector('tr:last-child input'); if(inp) inp.focus(); } } asgRefreshResumen(); }
 function asgRenderCTbody(focusLast){ const b=document.getElementById('asgCTbody'); if(b){ b.innerHTML=asgComunRows(); if(focusLast){ const inp=b.querySelector('tr:last-child input'); if(inp) inp.focus(); } } asgRefreshResumen(); }
-function asgAddUnidad(){ ASG.unidades.push({unidad:'',prioridad:'',tipo:'salida_entrada',pax:'',extra:'',t1:'',t2:''}); asgRenderUTbody(true); }
+function asgAddUnidad(){ ASG.unidades.push(asgNewUnit()); asgRenderUTbody(true); }
 function asgDelUnidad(i){ ASG.unidades.splice(i,1); asgRenderUTbody(false); }
 function asgAddComun(){ ASG.comunes.push({area:'',t1:'',t2:''}); asgRenderCTbody(true); }
 function asgDelComun(i){ ASG.comunes.splice(i,1); asgRenderCTbody(false); }
-function asgNueva(){ ASG={pubId:null,equipo:'',fecha:'',unidades:[{unidad:'',prioridad:'',tipo:'salida_entrada',pax:'',extra:'',t1:'',t2:''}],comunes:[]}; asgTab='asignaciones'; show('asignaciones'); }
+function asgNueva(){ ASG={pubId:null,equipo:'',fecha:'',unidades:[asgNewUnit()],comunes:[]}; asgTab='asignaciones'; show('asignaciones'); }
 function setAsgTab(t){ asgTab=t; show('asignaciones'); }
 function asgFind(id){ return ASG_PUBS.find(p=>p.id===id); }
+let asgOpenPub=null;
+function asgNewUnit(){ return {unidad:'',checkin:'',prioridad:'',tipo:'salida_entrada',pax:'',extra:'',t1:'',t2:'',estado:'pendiente'}; }
+function asgTimeKey(t){ t=(''+(t||'')).trim(); const m=t.match(/(\d{1,2}):(\d{2})/); if(m) return (+m[1])*60+(+m[2]); const h=t.match(/^(\d{1,2})$/); return h?(+h[1])*60:99999; }
+function asgSortByCheckin(){ ASG.unidades.sort((a,b)=>asgTimeKey(a.checkin)-asgTimeKey(b.checkin)); asgRenderUTbody(false); toast('Ordenado por hora de check-in'); }
+function asgCopyPrev(){
+  if(!ASG.equipo){ alert('Elige primero el equipo.'); return; }
+  const mism=(ASG_PUBS||[]).filter(p=>(p.equipo||'')===ASG.equipo && p.id!==ASG.pubId);
+  const prev=mism.filter(p=>!ASG.fecha||p.fecha<ASG.fecha).sort((a,b)=>(b.fecha||'').localeCompare(a.fecha||''))[0]
+    || mism.sort((a,b)=>(b.fecha||'').localeCompare(a.fecha||''))[0];
+  if(!prev){ alert('No hay un plan anterior de este equipo para copiar.'); return; }
+  ASG.unidades=(prev.unidades||[]).map(u=>({unidad:u.unidad||'',checkin:u.checkin||'',prioridad:u.prioridad||'',tipo:u.tipo||'salida_entrada',pax:u.pax||'',extra:u.extra||'',t1:u.t1||'',t2:u.t2||'',estado:'pendiente'}));
+  ASG.comunes=(prev.comunes||[]).map(c=>({area:c.area||'',t1:c.t1||'',t2:c.t2||''}));
+  if(!ASG.unidades.length) ASG.unidades=[asgNewUnit()];
+  show('asignaciones'); toast('Copiado del plan del '+fechaLarga(prev.fecha));
+}
+function asgWorkerLoad(){ const m={}; asgTeamWorkers().forEach(n=>m[n]=0);
+  (ASG.unidades||[]).forEach(u=>{ [u.t1,u.t2].forEach(t=>{ t=(''+(t||'')).trim(); if(t) m[t]=(m[t]||0)+1; }); }); return m; }
+function asgBalanceHTML(){
+  const load=asgWorkerLoad(); const entries=Object.entries(load).sort((a,b)=>b[1]-a[1]);
+  const sinAsig=(ASG.unidades||[]).filter(u=>(u.unidad||'').trim() && !((''+(u.t1||'')).trim()||(''+(u.t2||'')).trim())).length;
+  const vals=entries.map(e=>e[1]); const mx=Math.max(1,...vals); const avg=vals.length?vals.reduce((a,b)=>a+b,0)/vals.length:0;
+  const bars=entries.length?entries.map(([n,v])=>{ const over=v>=3&&v>avg+1; const idle=v===0;
+    return `<div class="kp-row"><span class="kp-k">${esc(n)}${over?' <span style="color:#c0392b;font-weight:700">⚠</span>':''}${idle?' <span style="color:#999">· libre</span>':''}</span><span class="kp-bar"><i style="width:${Math.round(v/mx*100)}%;background:${over?'#e23b3b':idle?'#cbd5e1':'var(--azul)'}"></i></span><b class="kp-v">${v}</b></div>`;
+  }).join(''):'<div style="color:var(--suave);font-size:13px">Aún no hay trabajadores en este equipo (añádelos en “Listado trabajadores”).</div>';
+  return `${sinAsig?`<div style="background:#fff4e0;border:1px solid #f0c98a;border-radius:9px;padding:9px 12px;font-size:13px;margin-bottom:10px">⚠ Hay <b>${sinAsig}</b> unidad(es) con nombre pero <b>sin trabajador</b> asignado.</div>`:''}${bars}`;
+}
+function asgEstadoLabel(e){ return e==='hecho'?'✅ Terminada':e==='curso'?'🟡 En curso':'⚪ Pendiente'; }
+async function asgSetEstado(pubId,uid,estado){
+  asgOpenPub=pubId;
+  const {error}=await sb.from('limpieza_pub_unidades').update({estado,fin_at:estado==='hecho'?new Date().toISOString():null}).eq('id',uid);
+  if(error){ alert('Error: '+error.message); return; }
+  const p=asgFind(pubId); if(p){ const u=(p.unidades||[]).find(x=>x.id===uid); if(u) u.estado=estado; }
+  show('asignaciones');
+}
+function asgTrackToggle(id,open){ asgOpenPub=open?id:(asgOpenPub===id?null:asgOpenPub); }
+function asgPubUnitsHTML(e){
+  const us=(e.unidades||[]).slice().sort((a,b)=>(a.orden||0)-(b.orden||0));
+  if(!us.length) return '<div style="color:var(--suave);font-size:13px;padding:10px 16px">Sin unidades en este plan.</div>';
+  const done=us.filter(u=>u.estado==='hecho').length;
+  const prog=`<div class="asg-prog"><div class="asg-prog-bar"><i style="width:${Math.round(done/us.length*100)}%"></i></div><small style="font-size:12px;color:var(--suave);white-space:nowrap">${done}/${us.length} terminadas</small></div>`;
+  const rows=us.map(u=>{ const st=u.estado||'pendiente';
+    const btn = st==='pendiente'?`<button class="btn ghost asg-st" onclick="asgSetEstado(${e.id},${u.id},'curso')">▶ Empezar</button>`
+      : st==='curso'?`<button class="btn asg-st" onclick="asgSetEstado(${e.id},${u.id},'hecho')">✓ Terminar</button>`
+      : `<button class="btn ghost asg-st" onclick="asgSetEstado(${e.id},${u.id},'pendiente')">↩ Reabrir</button>`;
+    return `<div class="asg-unit-row asg-st-${st}"><div><b>${esc(u.unidad||'(sin unidad)')}</b>${u.checkin?` <span class="asg-ci">🕐 ${esc(u.checkin)}</span>`:''} <span class="asg-tag">${asgTipoLabel(u.tipo)}</span><div class="asg-unit-sub">${esc([u.t1,u.t2].filter(Boolean).join(' · ')||'sin asignar')}</div></div><div style="display:flex;align-items:center;gap:9px"><span class="asg-estado">${asgEstadoLabel(st)}</span>${btn}</div></div>`;
+  }).join('');
+  return prog+rows;
+}
 
 async function asgAddTrab(){ const g=document.getElementById('asgTrabN'); const eq=document.getElementById('asgTrabEq'); const n=(g?g.value:'').trim(); const equipo=eq?eq.value:'';
   if(!n){ if(g)g.focus(); return; }
@@ -4588,12 +4640,14 @@ async function asgSyncCatalogs(){
 async function asgPublicar(){
   if(!ASG.equipo){ alert('Selecciona el equipo antes de publicar.'); return; }
   if(!ASG.fecha){ alert('Selecciona la fecha del día antes de publicar.'); return; }
+  const sinAsig=(ASG.unidades||[]).filter(u=>(u.unidad||'').trim() && !((''+(u.t1||'')).trim()||(''+(u.t2||'')).trim())).length;
+  if(sinAsig && !confirm('Hay '+sinAsig+' unidad(es) con nombre pero sin trabajador asignado. ¿Publicar igualmente?')) return;
   let pubId=ASG.pubId;
   if(pubId==null){ const {data,error}=await sb.from('limpieza_pub').insert({fecha:ASG.fecha,equipo:ASG.equipo,created_by:ME.id}).select().single(); if(error){alert('Error: '+error.message);return;} pubId=data.id; }
   else { const {error}=await sb.from('limpieza_pub').update({fecha:ASG.fecha,equipo:ASG.equipo}).eq('id',pubId); if(error){alert('Error: '+error.message);return;} }
   await sb.from('limpieza_pub_unidades').delete().eq('pub_id',pubId);
   await sb.from('limpieza_pub_comunes').delete().eq('pub_id',pubId);
-  const us=ASG.unidades.filter(u=>(u.unidad||u.t1||u.t2)).map((u,ix)=>({pub_id:pubId,unidad:u.unidad,prioridad:u.prioridad,tipo:u.tipo,pax:u.pax,extra:u.extra,t1:u.t1,t2:u.t2,orden:ix}));
+  const us=ASG.unidades.filter(u=>(u.unidad||u.t1||u.t2)).map((u,ix)=>({pub_id:pubId,unidad:u.unidad,checkin:u.checkin||'',prioridad:u.prioridad,tipo:u.tipo,pax:u.pax,extra:u.extra,t1:u.t1,t2:u.t2,estado:u.estado||'pendiente',orden:ix}));
   const cs=ASG.comunes.filter(c=>(c.area||c.t1||c.t2)).map((c,ix)=>({pub_id:pubId,area:c.area,t1:c.t1,t2:c.t2,orden:ix}));
   if(us.length){ const {error}=await sb.from('limpieza_pub_unidades').insert(us); if(error){alert('Error: '+error.message);return;} }
   if(cs.length){ const {error}=await sb.from('limpieza_pub_comunes').insert(cs); if(error){alert('Error: '+error.message);return;} }
@@ -4601,7 +4655,7 @@ async function asgPublicar(){
   ASG.pubId=pubId; asgTab='publicadas'; show('asignaciones');
 }
 function asgEditar(id){ const p=asgFind(id); if(!p) return;
-  ASG={pubId:p.id, equipo:p.equipo||'', fecha:p.fecha, unidades:(p.unidades||[]).map(u=>({unidad:u.unidad||'',prioridad:u.prioridad||'',tipo:u.tipo||'salida_entrada',pax:u.pax||'',extra:u.extra||'',t1:u.t1||'',t2:u.t2||''})), comunes:(p.comunes||[]).map(c=>({area:c.area||'',t1:c.t1||'',t2:c.t2||''}))};
+  ASG={pubId:p.id, equipo:p.equipo||'', fecha:p.fecha, unidades:(p.unidades||[]).map(u=>({unidad:u.unidad||'',checkin:u.checkin||'',prioridad:u.prioridad||'',tipo:u.tipo||'salida_entrada',pax:u.pax||'',extra:u.extra||'',t1:u.t1||'',t2:u.t2||'',estado:u.estado||'pendiente'})), comunes:(p.comunes||[]).map(c=>({area:c.area||'',t1:c.t1||'',t2:c.t2||''}))};
   asgTab='asignaciones'; show('asignaciones'); }
 async function asgEliminar(id){ if(!confirm('¿Eliminar esta asignación publicada del historial?')) return;
   const {error}=await sb.from('limpieza_pub').delete().eq('id',id); if(error){alert('Error: '+error.message);return;}
@@ -4609,13 +4663,13 @@ async function asgEliminar(id){ if(!confirm('¿Eliminar esta asignación publica
 function asgPDF(id){ const p=asgFind(id); if(p) asgBuildPDF(p); }
 
 function asgPrintHTML(d){
-  const filasU=(d.unidades||[]).map(u=>`<tr><td><b>${esc(u.unidad)}</b></td><td>${esc(u.prioridad)}</td><td>${u.tipo==='salida'?'<span class="apz-out">Salida</span>':u.tipo==='entrada'?'<span class="apz-in">Entrada</span>':'<span class="apz-out">Salida</span> + <span class="apz-in">Entrada</span>'}</td><td>${esc(u.pax)}</td><td>${esc(u.extra)}</td><td>${esc(u.t1)}</td><td>${esc(u.t2)}</td></tr>`).join('');
+  const filasU=(d.unidades||[]).map(u=>`<tr><td><b>${esc(u.unidad)}</b></td><td>${u.checkin?esc(u.checkin):''}</td><td>${esc(u.prioridad)}</td><td>${u.tipo==='salida'?'<span class="apz-out">Salida</span>':u.tipo==='entrada'?'<span class="apz-in">Entrada</span>':'<span class="apz-out">Salida</span> + <span class="apz-in">Entrada</span>'}</td><td>${esc(u.pax)}</td><td>${esc(u.extra)}</td><td>${esc(u.t1)}</td><td>${esc(u.t2)}</td></tr>`).join('');
   const filasC=(d.comunes||[]).map(c=>`<tr><td><b>${esc(c.area)}</b></td><td>${esc(c.t1)}</td><td>${esc(c.t2)}</td></tr>`).join('');
   const r=asgComputeResumen(d);
-  const resumen=r.length?`<h3 class="apz-h3">Personal llamado a trabajar (${r.length})</h3><div class="apz-res">${r.map((p,i)=>`<div>${i+1}. <b>${esc(p.nombre)}</b> <span style="color:#888">(${[p.u?p.u+' und':'',p.c?p.c+' z.común':''].filter(Boolean).join(' · ')})</span></div>`).join('')}</div>`:'';
+  const resumen=r.length?`<h3 class="apz-h3">Personal llamado a trabajar (${r.length})</h3><div class="apz-res">${r.map((p,i)=>`<div>${i+1}. <b>${esc(p.nombre)}</b> <span style="color:#888">(${[p.u?p.u+' und':'',p.c?p.c+' z.común':''].filter(Boolean).join(' · ')})</span><div style="color:#555;font-size:11px;margin:1px 0 5px 12px">${[...p.unidades,...p.comunes].map(x=>esc(x)).join(' · ')}</div></div>`).join('')}</div>`:'';
   return `<div class="apz-head"><img src="${LOGO}" alt="Amazinn Places" style="height:34px"><div><div class="apz-title">ENTRADAS Y SALIDAS</div><div class="apz-date">${esc(fechaLarga(d.fecha))}${d.equipo?' · Equipo: '+esc(d.equipo):''}</div></div></div>
     <h3 class="apz-h3">Unidades</h3>
-    <table class="apz-table"><colgroup><col style="width:15%"><col style="width:12%"><col style="width:13%"><col style="width:8%"><col style="width:16%"><col style="width:18%"><col style="width:18%"></colgroup><thead><tr><th>Unidad</th><th>Prioridad</th><th>Tipo</th><th>Nº pax</th><th>Extra</th><th>Trabajador 1</th><th>Trabajador 2</th></tr></thead><tbody>${filasU||'<tr><td colspan="7" style="color:#999">—</td></tr>'}</tbody></table>
+    <table class="apz-table"><colgroup><col style="width:14%"><col style="width:8%"><col style="width:10%"><col style="width:12%"><col style="width:7%"><col style="width:15%"><col style="width:17%"><col style="width:17%"></colgroup><thead><tr><th>Unidad</th><th>Check-in</th><th>Prioridad</th><th>Tipo</th><th>Nº pax</th><th>Extra</th><th>Trabajador 1</th><th>Trabajador 2</th></tr></thead><tbody>${filasU||'<tr><td colspan="8" style="color:#999">—</td></tr>'}</tbody></table>
     ${(d.comunes&&d.comunes.length)?`<h3 class="apz-h3">Zonas comunes</h3><table class="apz-table"><colgroup><col style="width:40%"><col style="width:30%"><col style="width:30%"></colgroup><thead><tr><th>Área común</th><th>Trabajador 1</th><th>Trabajador 2</th></tr></thead><tbody>${filasC}</tbody></table>`:''}
     ${resumen}`;
 }
@@ -4655,6 +4709,20 @@ function asgEnsureStyle(){ if(document.getElementById('asgStyle')) return; const
   .pubcard{display:flex;align-items:center;gap:12px;background:#fff;border:1px solid var(--gris2);border-radius:12px;padding:13px 16px;margin-bottom:10px}
   .pubcard .pi b{font-size:15px}.pubcard .pi span{display:block;font-size:12.5px;color:var(--suave);margin-top:2px}
   .pubcard .pa{margin-left:auto;display:flex;align-items:center;gap:8px}
+  .pubwrap{margin-bottom:12px}
+  .asg-track{border:1px solid var(--gris2);border-top:none;border-radius:0 0 12px 12px;background:#fafbfc}
+  .asg-track>summary{list-style:none;cursor:pointer;padding:9px 16px;font-size:13px;font-weight:600;color:var(--azul)}
+  .asg-track>summary::-webkit-details-marker{display:none}
+  .asg-prog{display:flex;align-items:center;gap:10px;padding:4px 16px 8px}
+  .asg-prog-bar{flex:1;height:8px;background:var(--gris2);border-radius:5px;overflow:hidden}
+  .asg-prog-bar i{display:block;height:100%;background:#22c55e}
+  .asg-unit-row{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:9px 16px;border-top:1px solid var(--gris)}
+  .asg-unit-sub{font-size:12px;color:var(--suave);margin-top:2px}
+  .asg-ci{font-size:11.5px;color:#1b3a5b;background:#e7eef7;border-radius:5px;padding:1px 6px;font-weight:600}
+  .asg-tag{font-size:11px;color:var(--suave)}
+  .asg-estado{font-size:12px;font-weight:600;white-space:nowrap}
+  .asg-st{padding:5px 11px;font-size:12px}
+  .asg-st-hecho{background:#f0faf2}.asg-st-curso{background:#fffbeb}
   .asg-kebab{position:relative}
   .asg-kebab summary{list-style:none;cursor:pointer;font-size:20px;line-height:1;padding:4px 9px;border-radius:8px;color:var(--suave)}
   .asg-kebab summary::-webkit-details-marker{display:none}
@@ -4702,10 +4770,11 @@ function renderAsgPanel(){
   const d7=new Date(today); d7.setDate(today.getDate()-6); const d7ISO=iso(d7);
   const units=[]; const assigns=[];
   pubs.forEach(p=>{ (p.unidades||[]).forEach(u=>{
-    units.push({fecha:p.fecha,equipo:(p.equipo||'—'),unidad:((u.unidad||'').trim()||'(sin unidad)'),tipo:u.tipo});
+    units.push({fecha:p.fecha,equipo:(p.equipo||'—'),unidad:((u.unidad||'').trim()||'(sin unidad)'),tipo:u.tipo,estado:u.estado||'pendiente'});
     [u.t1,u.t2].forEach(w=>{ if(w&&(''+w).trim()) assigns.push({worker:(''+w).trim(),fecha:p.fecha}); });
   }); });
   const cHoy=units.filter(u=>u.fecha===todayISO).length;
+  const hechoHoy=units.filter(u=>u.fecha===todayISO&&u.estado==='hecho').length;
   const c7=units.filter(u=>u.fecha>=d7ISO&&u.fecha<=todayISO).length;
   const cMes=units.filter(u=>(u.fecha||'').slice(0,7)===ym).length;
   const cTot=units.length;
@@ -4718,6 +4787,7 @@ function renderAsgPanel(){
   return `
     <div class="kpi-cards">
       <div class="kpi"><div class="kpi-n">${cHoy}</div><div class="kpi-l">Limpiezas hoy</div></div>
+      <div class="kpi"><div class="kpi-n" style="color:#16a34a">${hechoHoy}/${cHoy}</div><div class="kpi-l">Terminadas hoy</div></div>
       <div class="kpi"><div class="kpi-n">${c7}</div><div class="kpi-l">Últimos 7 días</div></div>
       <div class="kpi"><div class="kpi-n">${cMes}</div><div class="kpi-l">Este mes</div></div>
       <div class="kpi"><div class="kpi-n">${cTot}</div><div class="kpi-l">Total acumulado</div></div>
@@ -4739,6 +4809,7 @@ function asgUnidadRows(){
   const edit=asgCan();
   const rows=ASG.unidades.map((u,i)=> edit ? `<tr>
     <td><input list="asgUniDL" value="${esc(u.unidad)}" placeholder="Buscar unidad…" oninput="asgUpdU(${i},'unidad',this.value)" class="asg-cell asg-cell-w"></td>
+    <td><input type="time" value="${esc(u.checkin||'')}" oninput="asgUpdU(${i},'checkin',this.value)" class="asg-cell asg-cell-s" title="Hora de check-in del huésped"></td>
     <td><input value="${esc(u.prioridad)}" placeholder="—" oninput="asgUpdU(${i},'prioridad',this.value)" class="asg-cell"></td>
     <td><select onchange="asgUpdU(${i},'tipo',this.value)" class="asg-cell">${ASG_TIPO.map(o=>`<option value="${o[0]}" ${u.tipo===o[0]?'selected':''}>${o[1]}</option>`).join('')}</select></td>
     <td><input value="${esc(u.pax)}" placeholder="—" oninput="asgUpdU(${i},'pax',this.value)" class="asg-cell asg-cell-s"></td>
@@ -4746,8 +4817,8 @@ function asgUnidadRows(){
     <td><input list="asgTrabDL" value="${esc(u.t1)}" placeholder="Trabajador…" oninput="asgUpdU(${i},'t1',this.value)" class="asg-cell"></td>
     <td><input list="asgTrabDL" value="${esc(u.t2)}" placeholder="(opcional)" oninput="asgUpdU(${i},'t2',this.value)" class="asg-cell"></td>
     <td class="asg-act"><button onclick="asgDelUnidad(${i})" title="Quitar fila">🗑</button></td></tr>`
-    : `<tr><td><b>${esc(u.unidad)}</b></td><td>${esc(u.prioridad)}</td><td>${asgTipoLabel(u.tipo)}</td><td>${esc(u.pax)}</td><td>${u.extra?`<span class="asg-nota">📝 ${esc(u.extra)}</span>`:''}</td><td>${esc(u.t1)}</td><td>${esc(u.t2)}</td></tr>`).join('');
-  return rows||`<tr><td colspan="${edit?8:7}" style="color:var(--suave)">Sin unidades. Añade una fila.</td></tr>`;
+    : `<tr><td><b>${esc(u.unidad)}</b></td><td>${u.checkin?'🕐 '+esc(u.checkin):''}</td><td>${esc(u.prioridad)}</td><td>${asgTipoLabel(u.tipo)}</td><td>${esc(u.pax)}</td><td>${u.extra?`<span class="asg-nota">📝 ${esc(u.extra)}</span>`:''}</td><td>${esc(u.t1)}</td><td>${esc(u.t2)}</td></tr>`).join('');
+  return rows||`<tr><td colspan="${edit?9:8}" style="color:var(--suave)">Sin unidades. Añade una fila.</td></tr>`;
 }
 function asgComunRows(){
   const edit=asgCan();
@@ -4775,13 +4846,17 @@ function asgRenderEditor(){
       <label style="font-weight:600;font-size:13px;margin-left:6px">📅 Día:</label>
       ${edit?`<input type="date" value="${esc(ASG.fecha)}" onchange="asgUpdFecha(this.value)" style="padding:8px 11px;border:1px solid var(--gris2);border-radius:8px;font-family:inherit">`:`<b>${esc(fechaLarga(ASG.fecha))}</b>`}
       ${ASG.pubId!=null?`<span class="asg-pill">Editando publicación</span>`:''}
+      ${edit?`<button class="btn ghost" onclick="asgCopyPrev()" title="Copiar el plan anterior de este equipo">📋 Copiar día anterior</button>`:''}
       ${edit?`<button class="btn" style="margin-left:auto" onclick="asgPublicar()">${ASG.pubId!=null?'💾 Actualizar publicación':'✓ Publicar'}</button>`:''}
     </div>
     <div class="panel"><h2 style="margin-top:0">🏠 Unidades</h2>
-      <div class="asg-scroll"><table class="asg-table"><thead><tr><th style="min-width:150px">Unidad</th><th>Prioridad</th><th style="min-width:155px">Tipo</th><th>Nº pax</th><th>Extra / nota</th><th>Trabajador 1</th><th>Trabajador 2</th>${edit?'<th></th>':''}</tr></thead>
+      <div class="asg-scroll"><table class="asg-table"><thead><tr><th style="min-width:150px">Unidad</th><th>🕐 Check-in</th><th>Prioridad</th><th style="min-width:155px">Tipo</th><th>Nº pax</th><th>Extra / nota</th><th>Trabajador 1</th><th>Trabajador 2</th>${edit?'<th></th>':''}</tr></thead>
         <tbody id="asgUTbody">${asgUnidadRows()}</tbody></table></div>
-      ${edit?`<button class="btn ghost" style="margin-top:10px" onclick="asgAddUnidad()">+ Añadir unidad</button>`:''}
+      ${edit?`<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px"><button class="btn ghost" onclick="asgAddUnidad()">+ Añadir unidad</button><button class="btn ghost" onclick="asgSortByCheckin()">🕐 Ordenar por check-in</button></div>`:''}
     </div>
+    ${edit?`<div class="panel"><h2 style="margin-top:0">⚖️ Balance de carga del equipo</h2>
+      <p style="font-size:12.5px;color:var(--suave);margin:-4px 0 12px">Unidades asignadas por trabajador (incluye 2º trabajador). ⚠ = posible sobrecarga.</p>
+      <div id="asgBalanceBox">${asgBalanceHTML()}</div></div>`:''}
     <div class="panel"><h2 style="margin-top:0">🧽 Zonas comunes</h2>
       <div class="asg-scroll"><table class="asg-table"><thead><tr><th style="min-width:200px">Área común</th><th>Trabajador 1</th><th>Trabajador 2</th>${edit?'<th></th>':''}</tr></thead>
         <tbody id="asgCTbody">${asgComunRows()}</tbody></table></div>
@@ -4808,10 +4883,11 @@ function asgRenderPublicadas(){
   const edit=asgCan();
   const sub=`<div class="page-sub">Historial de asignaciones publicadas, por fecha. Aquí puedes descargar el PDF, editar o eliminar cada una.</div>`;
   if(!ASG_PUBS.length) return sub+`<div class="panel" style="color:var(--suave)">Todavía no hay asignaciones publicadas.${edit?' Crea una en la pestaña “Asignaciones” y pulsa Publicar.':''}</div>`;
-  const items=ASG_PUBS.map(e=>{ const r=asgComputeResumen(e);
-    return `<div class="pubcard"><div class="pi"><b>📅 ${esc(fechaLarga(e.fecha))}${e.equipo?` <span class="asg-pill" style="background:#e7eef7;color:#1b3a5b;font-size:10.5px">${esc(e.equipo)}</span>`:''}</b><span>${(e.unidades||[]).length} unidad(es) · ${(e.comunes||[]).length} zona(s) común · ${r.length} personal</span></div>
+  const items=ASG_PUBS.map(e=>{ const r=asgComputeResumen(e); const us=e.unidades||[]; const done=us.filter(u=>u.estado==='hecho').length;
+    return `<div class="pubwrap"><div class="pubcard" style="margin-bottom:0;border-radius:12px 12px 0 0"><div class="pi"><b>📅 ${esc(fechaLarga(e.fecha))}${e.equipo?` <span class="asg-pill" style="background:#e7eef7;color:#1b3a5b;font-size:10.5px">${esc(e.equipo)}</span>`:''}</b><span>${us.length} unidad(es) · ${(e.comunes||[]).length} zona(s) común · ${r.length} personal${us.length?` · ${done}/${us.length} terminadas`:''}</span></div>
       <div class="pa"><button class="btn ghost" onclick="asgPDF(${e.id})">📥 PDF</button>
-        ${edit?`<details class="asg-kebab"><summary>⋮</summary><div class="asg-kebab-menu"><button onclick="asgEditar(${e.id})">✏️ Editar</button><button onclick="asgEliminar(${e.id})">🗑 Eliminar</button></div></details>`:''}</div></div>`; }).join('');
+        ${edit?`<details class="asg-kebab"><summary>⋮</summary><div class="asg-kebab-menu"><button onclick="asgEditar(${e.id})">✏️ Editar</button><button onclick="asgEliminar(${e.id})">🗑 Eliminar</button></div></details>`:''}</div></div>
+      <details class="asg-track" ${e.id===asgOpenPub?'open':''} ontoggle="asgTrackToggle(${e.id},this.open)"><summary>🧹 Seguimiento del día · ${done}/${us.length} terminadas</summary>${asgPubUnitsHTML(e)}</details></div>`; }).join('');
   return sub+`${edit?`<button class="btn ghost" style="margin-bottom:14px" onclick="asgNueva()">+ Nueva asignación</button>`:''}${items}`;
 }
 async function pageAsignaciones(){
