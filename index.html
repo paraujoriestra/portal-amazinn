@@ -3394,8 +3394,8 @@ async function loadUnidades(){
   const eds=ed.data||[], uns=un.data||[]; const out=[];
   eds.forEach(e=>{
     const apts=uns.filter(u=>u.edificio===e.nombre && u.tipo!=='comun');
-    if(apts.length){ apts.forEach(u=>out.push({id:u.id,raw:u.id,kind:'u',nombre:u.nombre,prop:e.nombre,tipo:'apartamento',numero:u.numero||'',codigo:u.codigo||'',wifi:u.wifi||''})); }
-    else { out.push({id:'E'+e.id,raw:e.id,kind:'e',nombre:e.nombre,prop:e.nombre,tipo:'apartamento',whole:true,numero:e.numero||'',codigo:e.codigo||'',wifi:e.wifi||''}); }
+    if(apts.length){ apts.forEach(u=>out.push({id:u.id,raw:u.id,kind:'u',nombre:u.nombre,prop:e.nombre,tipo:'apartamento',numero:u.numero||'',planta:u.planta||'',codigo:u.codigo||'',wifi:u.wifi||''})); }
+    else { out.push({id:'E'+e.id,raw:e.id,kind:'e',nombre:e.nombre,prop:e.nombre,tipo:'apartamento',whole:true,numero:e.numero||'',planta:e.planta||'',codigo:e.codigo||'',wifi:e.wifi||''}); }
   });
   return out;
 }
@@ -3483,18 +3483,18 @@ async function msgCodes(){
     <input id="twofa" maxlength="6" inputmode="numeric" placeholder="••••••" style="text-align:center;letter-spacing:10px;font-size:24px;padding:12px;border:1px solid var(--gris2);border-radius:10px;width:210px" onkeydown="if(event.key==='Enter')verify2FA()">
     <div style="margin-top:14px"><button class="btn" onclick="verify2FA()">Verificar</button></div><small style="color:var(--suave)">Demo: cualquier 6 dígitos.</small></div>`;
   const uni=await loadUnidades();
-  const rows=uni.map(u=>`<tr><td><b>${esc(u.nombre)}</b></td><td>${esc(u.prop)}</td><td><input id="n_${u.id}" value="${esc(u.numero||'')}" style="padding:7px;border:1px solid var(--gris2);border-radius:7px;width:90px"></td>
+  const rows=uni.map(u=>`<tr><td>${esc(u.prop)}</td><td><b>${esc(u.nombre)}</b></td><td><input id="p_${u.id}" value="${esc(u.planta||'')}" placeholder="—" style="padding:7px;border:1px solid var(--gris2);border-radius:7px;width:90px"></td>
     <td><input id="c_${u.id}" value="${esc(u.codigo||'')}" style="padding:7px;border:1px solid var(--gris2);border-radius:7px;width:110px;font-weight:700;color:var(--rojo)"></td></tr>`).join('');
-  return `<div class="panel" style="background:var(--azul-claro);border:none;font-size:13.5px">🔑 Edita el nº y el código de cada apartamento. Cada cambio queda en <b>Auditoría</b> y se refleja en las plantillas.</div>
-    <div class="panel"><table><thead><tr><th>Apartamento</th><th>Propiedad</th><th>Nº</th><th>Código</th></tr></thead><tbody>${rows}</tbody></table>
+  return `<div class="panel" style="background:var(--azul-claro);border:none;font-size:13.5px">🔑 Indica la <b>planta</b> (opcional) y el <b>código</b> de cada unidad. Cada cambio queda en <b>Auditoría</b> y se refleja en las plantillas.</div>
+    <div class="panel"><table><thead><tr><th>Propiedad</th><th>Nº unidad</th><th>Nº Planta</th><th>Código</th></tr></thead><tbody>${rows}</tbody></table>
     <div style="margin-top:14px"><button class="btn" onclick="saveCodes()">💾 Guardar cambios</button></div></div>`;
 }
 function verify2FA(){const v=(document.getElementById('twofa').value||'').trim();if(/^\d{6}$/.test(v)){twoFAok=true;show('mensajes');}else toast('Introduce 6 dígitos');}
 async function saveCodes(){
   const uni=await loadUnidades();let n=0;
-  for(const u of uni){const num=val('n_'+u.id),cod=val('c_'+u.id);
-    if(num!==u.numero||cod!==u.codigo){const tbl=u.kind==='e'?'mant_edificios':'mant_unidades';await sb.from(tbl).update({numero:num,codigo:cod}).eq('id',u.raw);
-      if(cod!==u.codigo)auditLog(`Cambió el código de acceso de ${u.nombre} (${u.codigo}→${cod})`,'codigo');n++;}}
+  for(const u of uni){const pl=val('p_'+u.id),cod=val('c_'+u.id);
+    if(pl!==(u.planta||'')||cod!==(u.codigo||'')){const tbl=u.kind==='e'?'mant_edificios':'mant_unidades';await sb.from(tbl).update({planta:pl,codigo:cod}).eq('id',u.raw);
+      if(cod!==(u.codigo||''))auditLog(`Cambió el código de acceso de ${u.nombre} (${u.codigo}→${cod})`,'codigo');n++;}}
   toast(n?`✓ ${n} cambio(s) guardados`:'Sin cambios');show('mensajes');
 }
 
