@@ -3441,10 +3441,9 @@ async function msgViewer(){
   const mine=(tpls||[]).filter(t=>(t.unidades||[]).map(String).includes(String(u.id)));
   const banner=`<div class="acc-banner">📍 Estás viendo: <span class="big">${esc(u.nombre)}</span> · ${esc(u.prop)}${u.planta?` · Planta <b>${esc(u.planta)}</b>`:''} · Código de acceso <span class="code">${esc(u.codigo||'—')}</span><br><small>Verifica que es el apartamento de la reserva antes de enviar el mensaje.</small></div>`;
   const cards=mine.map(t=>{const filled=fillTpl(t.cuerpo,u);const cat=TPL_CAT[t.cat]||'b-grey';
-    return `<div class="tpl-card ${t.cat==='Accesos'?'acc':''}"><div class="h"><span class="badge ${cat}">${esc(t.cat||'')}</span><b>${esc(t.titulo)}</b>
-      <button class="btn" style="margin-left:auto;padding:7px 14px" onclick="copyTxt(this)" data-t="${esc(filled).replace(/"/g,'&quot;')}">📋 Copiar</button></div>
-      <div class="tpl-text">${esc(filled)}</div>
-      <div class="foot">Creada por <b>${esc(t.autor_nombre||'')}</b>${t.editor_nombre?` · ✏️ editada por <b>${esc(t.editor_nombre)}</b> (${esc(t.edit_fecha||'')})`:''}</div></div>`;}).join('')||'<div class="panel">No hay plantillas asignadas a este apartamento.</div>';
+    return `<details class="msg-line"><summary><span class="badge ${cat}">${esc(t.cat||'')}</span><b style="font-size:14px">${esc(t.titulo)}</b><span style="margin-left:auto;display:flex;gap:8px;align-items:center;flex-shrink:0"><button class="btn" style="padding:6px 13px" onclick="event.preventDefault();event.stopPropagation();copyTxt(this)" data-t="${esc(filled).replace(/"/g,'&quot;')}">📋 Copiar</button><span class="msg-ver"></span></span></summary>
+      <div class="msg-full">${esc(filled)}</div>
+      <div class="msg-foot">Creada por <b>${esc(t.autor_nombre||'')}</b>${t.editor_nombre?` · ✏️ editada por <b>${esc(t.editor_nombre)}</b> (${esc(t.edit_fecha||'')})`:''}</div></details>`;}).join('')||'<div class="panel">No hay plantillas asignadas a este apartamento.</div>';
   return sel+banner+cards;
 }
 function copyTxt(btn){const t=btn.getAttribute('data-t');navigator.clipboard?navigator.clipboard.writeText(t).then(()=>toast('✓ Copiado')).catch(()=>toast('No se pudo copiar')):toast('No disponible');}
@@ -4891,6 +4890,15 @@ function asgEnsureStyle(){ if(document.getElementById('asgStyle')) return; const
   .bit-row-meta{font-size:12.5px;color:var(--suave);margin-top:2px}
   .bit-tag{display:inline-flex;align-items:center;gap:6px;background:var(--gris);border:1px solid var(--gris2);border-radius:8px;padding:5px 10px;font-size:13px}
   .bit-tag span.x{cursor:pointer;color:var(--rojo);font-weight:700}
+  .msg-line{border:1px solid var(--gris2);border-radius:10px;margin-bottom:8px;background:#fff;overflow:hidden}
+  .msg-line>summary{list-style:none;cursor:pointer;display:flex;align-items:center;gap:10px;padding:11px 14px;flex-wrap:wrap}
+  .msg-line>summary::-webkit-details-marker{display:none}
+  .msg-line>summary:hover{background:var(--gris)}
+  .msg-ver{font-size:12.5px;color:var(--azul);font-weight:700;white-space:nowrap}
+  .msg-ver::before{content:'Ver ▾'}
+  details.msg-line[open] .msg-ver::before{content:'Ocultar ▴'}
+  .msg-full{padding:2px 16px 14px;white-space:pre-wrap;font-size:13.5px;line-height:1.55;border-top:1px solid var(--gris)}
+  .msg-foot{padding:8px 16px;font-size:12px;color:var(--suave);border-top:1px solid var(--gris)}
   .asg-track{border:1px solid var(--gris2);border-top:none;border-radius:0 0 12px 12px;background:#fafbfc}
   .asg-track>summary{list-style:none;cursor:pointer;padding:9px 16px;font-size:13px;font-weight:600;color:var(--azul)}
   .asg-track>summary::-webkit-details-marker{display:none}
