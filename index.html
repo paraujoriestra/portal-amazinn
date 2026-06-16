@@ -3510,43 +3510,97 @@ async function saveCodes(){
 }
 
 /* ---------------- BITÁCORA ---------------- */
-let bitFormOpen=false;
-const EST_P={pendiente:['Pendiente','b-amber'],'en observacion':['En seguimiento','b-blue'],realizado:['Realizado','b-green']};
+let bitTab='bitacoras', bitFormOpen=false, bitEditId=null, bitView=null, bitDraft={pendientes:[]}, bitHistOpen=false, penCommentOpen=null, penEditOpen=null;
+function penMine(p){ return (p.por_id&&String(p.por_id)===String(ME.id))||(!p.por_id&&p.por_quien===PROFILE.nombre); }
+let BITS=[], PENS=[];
+function setBitTab(t){ bitTab=t; bitView=null; bitFormOpen=false; show('bitacora'); }
+function bitTeam(arr){ return (arr||[]).filter(x=> isAdmin() || (x.dept||'')===(PROFILE.dept||'')); }
+function bitMine(b){ return (b.autor_id&&String(b.autor_id)===String(ME.id))||(!b.autor_id&&b.autor_nombre===PROFILE.nombre); }
+function bitFmt(b){ return b.fecha?new Date(b.fecha+'T00:00:00').toLocaleDateString('es-ES',{day:'2-digit',month:'short',year:'numeric'}):(b.created_at?new Date(b.created_at).toLocaleDateString('es-ES'):''); }
 async function pageBitacora(){
-  const{data:pen}=await sb.from('bitacora_pendientes').select('*').order('created_at',{ascending:false});
-  const{data:bits}=await sb.from('bitacoras').select('*').order('created_at',{ascending:false});
-  const open=(pen||[]).filter(p=>p.estado!=='realizado'),done=(pen||[]).filter(p=>p.estado==='realizado');
-  const card=p=>{const e=EST_P[p.estado]||EST_P.pendiente;const cls=p.estado==='realizado'?'done':(p.estado==='en observacion'?'obs':'');
-    let acts=p.estado==='pendiente'?`<button class="btn ghost" style="padding:5px 11px" onclick="penSeg(${p.id})">👁 Seguimiento</button><button class="btn" style="padding:5px 11px" onclick="penDone(${p.id})">✅ Realizado</button>`
-      :p.estado==='en observacion'?`<button class="btn" style="padding:5px 11px" onclick="penDone(${p.id})">✅ Realizado</button><button class="btn ghost" style="padding:5px 11px" onclick="penReopen(${p.id})">↩ Pendiente</button>`
-      :`<button class="btn ghost" style="padding:5px 11px" onclick="penReopen(${p.id})">↩ Reabrir</button>`;
-    const meta=p.estado==='realizado'?`Dejado por ${esc(p.por_quien||'')} (${esc(p.turno||'')}) · ✅ ${esc(p.hecho_por||'')} el ${esc(p.hecho_fecha||'')}`:`Dejado por <b>${esc(p.por_quien||'')}</b> · turno ${esc(p.turno||'')}${p.seg_por?` · 👁 ${esc(p.seg_por)}`:''}`;
-    return `<div class="pend ${cls}"><div style="font-size:14px"><span class="badge ${e[1]}">${e[0]}</span> ${esc(p.texto)}</div><div style="font-size:12px;color:var(--suave);margin:6px 0">${meta}</div><div style="display:flex;gap:6px;flex-wrap:wrap">${acts}</div></div>`;};
-  document.getElementById('main').innerHTML=`<div class="page-title">Bitácora de turnos${PROFILE.dept?' · '+esc(PROFILE.dept):''}</div><div class="page-sub">Registra tu turno y deja los pendientes para el siguiente compañero</div>
-    <div class="panel"><h2>🔁 Pendientes del equipo (${open.length})</h2><div style="font-size:13px;color:var(--suave);margin-bottom:8px">Se traspasan de turno a turno hasta completarse.</div>
-      <div style="display:flex;gap:8px;margin-bottom:10px"><input id="penQ" placeholder="Añadir un pendiente rápido…" style="flex:1;padding:9px 12px;border:1px solid var(--gris2);border-radius:9px" onkeydown="if(event.key==='Enter')penAdd()"><button class="btn" onclick="penAdd()">+ Añadir</button></div>
-      ${open.length?open.map(card).join(''):'<div style="color:var(--suave);font-size:13.5px">🎉 No hay pendientes abiertos.</div>'}
-      ${done.length?`<details style="margin-top:10px"><summary style="cursor:pointer;color:var(--suave);font-size:13px">Resueltos recientemente (${done.length})</summary>${done.map(card).join('')}</details>`:''}</div>
-    <div style="margin:8px 0 16px"><button class="btn" onclick="bitFormOpen=!bitFormOpen;show('bitacora')">${bitFormOpen?'✕ Cerrar':'📝 Cerrar mi turno / nueva entrada'}</button></div>
-    ${bitFormOpen?bitForm():''}
-    <div class="panel"><h2>📚 Historial (${(bits||[]).length})</h2>${(bits||[]).map(b=>`<div style="border:1px solid var(--gris2);border-radius:10px;margin-bottom:12px;padding:12px 16px"><div style="display:flex;gap:8px;align-items:center"><b>${esc(b.autor_nombre||'')}</b><span class="badge b-blue">${esc(b.turno||'')}</span><small style="color:var(--suave)">${esc(b.fecha||'')}</small></div>
-      <div style="font-size:13px;margin-top:8px"><b style="color:var(--azul);font-size:11px">RESUMEN</b><br>${esc(b.resumen||'—')}<br><b style="color:var(--azul);font-size:11px">INCIDENCIAS</b><br>${esc(b.incidencias||'—')}<br><b style="color:var(--azul);font-size:11px">REALIZADAS</b><br>${esc(b.realizadas||'—')}</div></div>`).join('')||'<div style="color:var(--suave)">Sin entradas.</div>'}</div>`;
+  asgEnsureStyle();
+  const [pe,bi]=await Promise.all([
+    sb.from('bitacora_pendientes').select('*').order('created_at',{ascending:false}),
+    sb.from('bitacoras').select('*').order('created_at',{ascending:false})
+  ]);
+  PENS=bitTeam(pe.data); BITS=bitTeam(bi.data);
+  const nOpen=PENS.filter(p=>p.estado!=='realizado').length;
+  const tabs=`<div class="tabs">
+    <button class="${bitTab==='pendientes'?'on':''}" onclick="setBitTab('pendientes')">🔁 Pendientes del equipo${nOpen?` (${nOpen})`:''}</button>
+    <button class="${bitTab==='bitacoras'?'on':''}" onclick="setBitTab('bitacoras')">📓 Bitácoras</button></div>`;
+  let body;
+  if(bitFormOpen) body=bitForm();
+  else if(bitView!=null) body=bitDetail(bitView);
+  else if(bitTab==='pendientes') body=bitRenderPendientes();
+  else body=bitRenderList();
+  document.getElementById('main').innerHTML=`<div class="page-title">Bitácora de turnos${PROFILE.dept?' · '+esc(PROFILE.dept):''}</div><div class="page-sub">Registra tu turno y deja los pendientes para el siguiente compañero</div>${(bitFormOpen||bitView!=null)?'':tabs}${body}`;
 }
-function bitForm(){return `<div class="panel" style="max-width:760px"><h2>📝 Cerrar turno</h2><form class="box" onsubmit="return bitSave(event)" style="max-width:none">
-  <div class="row"><div><label>Turno</label><select id="bT"><option>Mañana</option><option>Tarde</option><option>Noche</option></select></div><div><label>Fecha</label><input id="bF" type="date" value="${hoyISO()}"></div></div>
-  <label>¿Cómo fue el turno?</label><textarea id="bR" rows="3" required></textarea><label>Incidencias</label><textarea id="bI" rows="2"></textarea>
-  <label>Tareas realizadas</label><textarea id="bH" rows="2"></textarea><label>Pendientes para el siguiente turno (uno por línea)</label><textarea id="bP" rows="3"></textarea>
-  <div><button class="btn" type="submit">Guardar bitácora</button> <button class="btn ghost" type="button" onclick="bitFormOpen=false;show('bitacora')">Cancelar</button></div></form></div>`;}
-async function bitSave(e){e.preventDefault();
-  const turno=document.getElementById('bT').value,fecha=val('bF')||hoyISO();
-  await sb.from('bitacoras').insert({autor_nombre:PROFILE.nombre,dept:PROFILE.dept,fecha,turno,resumen:val('bR'),incidencias:val('bI'),realizadas:val('bH')});
-  const lineas=document.getElementById('bP').value.split('\n').map(s=>s.trim()).filter(Boolean);
-  for(const tx of lineas) await sb.from('bitacora_pendientes').insert({texto:tx,por_quien:PROFILE.nombre,dept:PROFILE.dept,turno,estado:'pendiente'});
-  bitFormOpen=false;show('bitacora');return false;}
-async function penAdd(){const v=val('penQ');if(!v)return;await sb.from('bitacora_pendientes').insert({texto:v,por_quien:PROFILE.nombre,dept:PROFILE.dept,turno:'—',estado:'pendiente'});show('bitacora');}
-async function penSeg(id){await sb.from('bitacora_pendientes').update({estado:'en observacion',seg_por:PROFILE.nombre}).eq('id',id);show('bitacora');}
-async function penDone(id){await sb.from('bitacora_pendientes').update({estado:'realizado',hecho_por:PROFILE.nombre,hecho_fecha:new Date().toLocaleDateString('es-ES')}).eq('id',id);show('bitacora');}
-async function penReopen(id){await sb.from('bitacora_pendientes').update({estado:'pendiente',seg_por:null,hecho_por:null,hecho_fecha:null}).eq('id',id);show('bitacora');}
+function bitRenderPendientes(){
+  const open=PENS.filter(p=>p.estado!=='realizado'), done=PENS.filter(p=>p.estado==='realizado');
+  const fchP=p=>p.fecha?new Date(p.fecha+'T00:00:00').toLocaleDateString('es-ES'):(p.created_at?new Date(p.created_at).toLocaleDateString('es-ES'):'');
+  const coments=p=>(p.comentarios||[]).map(x=>`<div style="font-size:12.5px;color:#3a4654;margin-top:5px;padding-left:9px;border-left:2px solid var(--gris2)">💬 <b>${esc(x.who||'')}</b>${x.t?` <span style="color:var(--suave)">· ${esc(x.t)}</span>`:''}: ${esc(x.texto||'')}</div>`).join('');
+  const row=p=>`<div class="bit-row" style="align-items:flex-start"><div class="bit-row-main">${penEditOpen===p.id?`<div style="display:flex;gap:8px;flex-wrap:wrap"><input id="penE_${p.id}" value="${esc(p.texto)}" style="flex:1;min-width:180px;padding:9px 12px;border:1px solid var(--gris2);border-radius:9px;font-size:14px;font-family:inherit" onkeydown="if(event.key==='Enter'){event.preventDefault();penEditSave(${p.id});}"><button class="btn" type="button" style="padding:8px 16px" onclick="penEditSave(${p.id})">Guardar</button><button class="btn ghost" type="button" style="padding:8px 12px" onclick="penToggleEdit(${p.id})">Cancelar</button></div>`:`<b>${esc(p.texto)}</b>`}<div class="bit-row-meta">Dejado por ${esc(p.por_quien||'—')} · ${fchP(p)}${p.turno&&p.turno!=='—'?' · Turno: '+esc(p.turno):''}</div>${coments(p)}${penCommentOpen===p.id?`<div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap"><input id="penC_${p.id}" placeholder="Escribe un comentario o actualización…" style="flex:1;min-width:180px;padding:9px 12px;border:1px solid var(--gris2);border-radius:9px;font-size:14px;font-family:inherit" onkeydown="if(event.key==='Enter'){event.preventDefault();penAddComment(${p.id});}"><button class="btn" type="button" style="padding:8px 16px" onclick="penAddComment(${p.id})">Añadir</button><button class="btn ghost" type="button" style="padding:8px 12px" onclick="penToggleComment(${p.id})">Cancelar</button></div>`:''}</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">${penMine(p)?`<button class="btn ghost" style="padding:7px 12px" onclick="penToggleEdit(${p.id})" title="Editar el texto">✏️ Editar</button>`:''}<button class="btn ghost" style="padding:7px 14px" onclick="penToggleComment(${p.id})">💬 Comentar</button><button class="btn" style="padding:7px 15px" onclick="penDone(${p.id})">Realizado</button></div></div>`;
+  const drow=p=>`<div class="bit-row" style="align-items:flex-start"><div class="bit-row-main"><b style="text-decoration:line-through;color:var(--suave)">${esc(p.texto)}</b><div class="bit-row-meta">Dejado por ${esc(p.por_quien||'—')} · Realizado por <b>${esc(p.hecho_por||'—')}</b>${p.hecho_fecha?' el '+esc(p.hecho_fecha):''}</div>${coments(p)}</div><button class="btn ghost" style="padding:7px 14px" onclick="penReopen(${p.id})">Reabrir</button></div>`;
+  return `<div class="panel"><h2 style="margin-top:0">Pendientes abiertos (${open.length})</h2>
+      <p style="font-size:12.5px;color:var(--suave);margin:-4px 0 8px">Pendientes dejados en las bitácoras. Cualquier compañero puede marcarlos como realizados.</p>
+      ${open.length?open.map(row).join(''):'<div style="color:var(--suave);font-size:13.5px">🎉 No hay pendientes abiertos.</div>'}</div>
+    <div class="panel"><details ${bitHistOpen?'open':''} ontoggle="bitHistOpen=this.open"><summary style="cursor:pointer;font-weight:600;color:var(--azul)">🗂️ Histórico de realizados (${done.length})</summary>
+      <div style="margin-top:8px">${done.length?done.map(drow).join(''):'<div style="color:var(--suave);font-size:13px">Sin realizados todavía.</div>'}</div></details></div>`;
+}
+function bitRenderList(){
+  const rows=BITS.map(b=>{ const mine=bitMine(b);
+    return `<div class="bit-row"><div class="bit-row-main"><b>${esc(b.autor_nombre||'—')}</b>${b.turno?` <span class="badge b-blue" style="font-size:10px">${esc(b.turno)}</span>`:''}<div class="bit-row-meta">${bitFmt(b)}${b.editor_nombre?' · editada':''}</div></div>
+      <button class="btn ghost" style="padding:7px 16px" onclick="bitOpen(${b.id})">Abrir</button>
+      ${(mine||isAdmin())?`<details class="asg-kebab"><summary>⋮</summary><div class="asg-kebab-menu">${mine?`<button onclick="bitEdit(${b.id})">✏️ Editar</button>`:''}<button onclick="bitDelete(${b.id})" style="color:#c0392b">🗑 Eliminar</button></div></details>`:''}</div>`; }).join('');
+  return `<div style="display:flex;justify-content:flex-end;margin-bottom:12px"><button class="btn" onclick="bitNew()">+ Crear bitácora</button></div>
+    <div class="panel"><h2 style="margin-top:0">Bitácoras (${BITS.length})</h2>${rows||'<div style="color:var(--suave)">Aún no hay bitácoras. Crea la primera con «Crear bitácora».</div>'}</div>`;
+}
+function bitOpen(id){ bitView=id; bitFormOpen=false; show('bitacora'); }
+function bitBack(){ bitView=null; show('bitacora'); }
+function bitDetail(id){
+  const b=BITS.find(x=>String(x.id)===String(id)); if(!b) return `<button class="btn-sm ghost" onclick="bitBack()">← Volver</button><div class="panel" style="margin-top:12px">No encontrada.</div>`;
+  const mine=bitMine(b); const pend=PENS.filter(p=>String(p.bitacora_id)===String(b.id));
+  return `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><button class="btn-sm ghost" onclick="bitBack()">← Volver</button>${mine?`<button class="btn-sm ghost" onclick="bitEdit(${b.id})">✏️ Editar</button>`:''}</div>
+    <div class="panel" style="margin-top:12px"><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><b style="font-size:16px">${esc(b.autor_nombre||'')}</b>${b.turno?`<span class="badge b-blue">${esc(b.turno)}</span>`:''}<small style="color:var(--suave)">${bitFmt(b)}</small></div>
+      <div style="font-size:14px;margin-top:12px;line-height:1.6;white-space:pre-wrap">${esc(b.resumen||'—')}</div>
+      ${pend.length?`<div style="margin-top:14px"><b style="color:var(--azul);font-size:11px">PENDIENTES DEJADOS</b>${pend.map(p=>`<div style="font-size:13px;margin-top:5px">${p.estado==='realizado'?'✅':'🔸'} ${esc(p.texto)}${p.estado==='realizado'?` <small style="color:var(--suave)">(realizado por ${esc(p.hecho_por||'')})</small>`:''}</div>`).join('')}</div>`:''}
+    </div>`;
+}
+function bitNew(){ bitEditId=null; bitDraft={turno:'Mañana',fecha:hoyISO(),resumen:'',pendientes:[]}; bitFormOpen=true; bitView=null; show('bitacora'); }
+function bitEdit(id){ const b=BITS.find(x=>String(x.id)===String(id)); if(!b)return; bitEditId=id; bitDraft={turno:b.turno||'Mañana',fecha:b.fecha||hoyISO(),resumen:b.resumen||'',pendientes:[]}; bitFormOpen=true; bitView=null; show('bitacora'); }
+function bitForm(){
+  const d=bitDraft;
+  const chips=(d.pendientes||[]).map((t,i)=>`<span class="bit-tag">🔸 ${esc(t)} <span class="x" onclick="bitPendDel(${i})">✕</span></span>`).join(' ');
+  return `<div style="margin-bottom:12px"><button class="btn-sm ghost" onclick="bitFormOpen=false;show('bitacora')">← Volver</button></div>
+    <div class="panel" style="max-width:760px"><h2 style="margin-top:0">${bitEditId?'Editar bitácora':'Nueva bitácora'}</h2>
+    <form class="box" onsubmit="return bitSave(event)" style="max-width:none">
+      <div class="row"><div><label>Turno</label><select id="bT">${['Mañana','Tarde','Noche'].map(o=>`<option ${d.turno===o?'selected':''}>${o}</option>`).join('')}</select></div><div><label>Fecha</label><input id="bF" type="date" value="${esc(d.fecha||hoyISO())}"></div></div>
+      <label>Resumen del turno</label><textarea id="bR" rows="5" required placeholder="Cómo fue el turno, incidencias, tareas realizadas…">${esc(d.resumen||'')}</textarea>
+      <label>Pendientes para el equipo (tickets)</label>
+      <div class="row"><input id="bPnew" placeholder="Escribe un pendiente y pulsa Añadir…" onkeydown="if(event.key==='Enter'){event.preventDefault();bitPendAdd();}"><button class="btn ghost" type="button" onclick="bitPendAdd()" style="flex:0 0 auto">+ Añadir</button></div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">${chips}</div>
+      <div style="margin-top:14px"><button class="btn" type="submit">${bitEditId?'Guardar cambios':'Guardar bitácora'}</button> <button class="btn ghost" type="button" onclick="bitFormOpen=false;show('bitacora')">Cancelar</button></div>
+    </form></div>`;
+}
+function bitCaptureForm(){ const g=id=>{const e=document.getElementById(id);return e?e.value:undefined;};
+  if(g('bT')!==undefined)bitDraft.turno=g('bT'); if(g('bF')!==undefined)bitDraft.fecha=g('bF'); if(g('bR')!==undefined)bitDraft.resumen=g('bR'); }
+function bitPendAdd(){ bitCaptureForm(); const inp=document.getElementById('bPnew'); const v=(inp?inp.value:'').trim(); if(!v)return; bitDraft.pendientes=bitDraft.pendientes||[]; bitDraft.pendientes.push(v); show('bitacora'); }
+function bitPendDel(i){ bitCaptureForm(); bitDraft.pendientes.splice(i,1); show('bitacora'); }
+async function bitSave(e){ e.preventDefault(); bitCaptureForm();
+  const row={autor_nombre:PROFILE.nombre,autor_id:ME.id,dept:PROFILE.dept,fecha:bitDraft.fecha||hoyISO(),turno:bitDraft.turno,resumen:bitDraft.resumen};
+  let bid=bitEditId;
+  if(bitEditId){ row.editor_nombre=PROFILE.nombre; const {error}=await sb.from('bitacoras').update(row).eq('id',bitEditId); if(error){alert(error.message);return false;} }
+  else { const {data,error}=await sb.from('bitacoras').insert(row).select('id').single(); if(error){alert(error.message);return false;} bid=data&&data.id; }
+  for(const tx of (bitDraft.pendientes||[])){ await sb.from('bitacora_pendientes').insert({texto:tx,por_quien:PROFILE.nombre,por_id:ME.id,dept:PROFILE.dept,fecha:bitDraft.fecha||hoyISO(),turno:bitDraft.turno,estado:'pendiente',bitacora_id:bid}); }
+  bitFormOpen=false; bitTab='bitacoras'; show('bitacora'); return false; }
+async function bitDelete(id){ const b=BITS.find(x=>String(x.id)===String(id)); if(!b)return; if(!confirm('¿Eliminar esta bitácora de forma permanente?'))return; const {error}=await sb.from('bitacoras').delete().eq('id',id); if(error){alert(error.message);return;} bitView=null; show('bitacora'); }
+function penToggleComment(id){ penCommentOpen = (penCommentOpen===id)?null:id; penEditOpen=null; show('bitacora'); }
+function penToggleEdit(id){ penEditOpen = (penEditOpen===id)?null:id; penCommentOpen=null; show('bitacora'); }
+async function penEditSave(id){ const inp=document.getElementById('penE_'+id); const v=(inp?inp.value:'').trim(); if(!v)return; const {error}=await sb.from('bitacora_pendientes').update({texto:v}).eq('id',id); if(error){alert(error.message);return;} penEditOpen=null; show('bitacora'); }
+async function penAddComment(id){ const inp=document.getElementById('penC_'+id); const v=(inp?inp.value:'').trim(); if(!v)return; const p=PENS.find(x=>String(x.id)===String(id)); const arr=(p&&Array.isArray(p.comentarios))?p.comentarios.slice():[]; arr.push({t:new Date().toLocaleDateString('es-ES'),who:PROFILE.nombre,texto:v}); const {error}=await sb.from('bitacora_pendientes').update({comentarios:arr}).eq('id',id); if(error){alert(error.message);return;} penCommentOpen=null; show('bitacora'); }
+async function penDone(id){ await sb.from('bitacora_pendientes').update({estado:'realizado',hecho_por:PROFILE.nombre,hecho_id:ME.id,hecho_fecha:new Date().toLocaleDateString('es-ES')}).eq('id',id); show('bitacora'); }
+async function penReopen(id){ await sb.from('bitacora_pendientes').update({estado:'pendiente',hecho_por:null,hecho_id:null,hecho_fecha:null}).eq('id',id); show('bitacora'); }
 
 /* ---------------- FORMACIONES ---------------- */
 let forFormOpen=false;
@@ -4816,6 +4870,13 @@ function asgEnsureStyle(){ if(document.getElementById('asgStyle')) return; const
   .pubcard .pi b{font-size:15px}.pubcard .pi span{display:block;font-size:12.5px;color:var(--suave);margin-top:2px}
   .pubcard .pa{margin-left:auto;display:flex;align-items:center;gap:8px}
   .pubwrap{margin-bottom:12px}
+  .bit-row{display:flex;align-items:center;gap:12px;padding:12px 2px;border-bottom:1px solid var(--gris);flex-wrap:wrap}
+  .bit-row:last-child{border-bottom:none}
+  .bit-row-main{flex:1;min-width:140px}
+  .bit-row-main b{font-size:14.5px}
+  .bit-row-meta{font-size:12.5px;color:var(--suave);margin-top:2px}
+  .bit-tag{display:inline-flex;align-items:center;gap:6px;background:var(--gris);border:1px solid var(--gris2);border-radius:8px;padding:5px 10px;font-size:13px}
+  .bit-tag span.x{cursor:pointer;color:var(--rojo);font-weight:700}
   .asg-track{border:1px solid var(--gris2);border-top:none;border-radius:0 0 12px 12px;background:#fafbfc}
   .asg-track>summary{list-style:none;cursor:pointer;padding:9px 16px;font-size:13px;font-weight:600;color:var(--azul)}
   .asg-track>summary::-webkit-details-marker{display:none}
