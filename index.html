@@ -538,6 +538,24 @@
   table.sched thead th.wknd{background:#3a342a}
   table.sched select{border:1px solid var(--gris2);border-radius:5px;padding:5px;font-size:12px;background:#fff;width:100%;min-width:108px}
   .cell-b{display:inline-block;padding:5px 9px;font-size:12px;font-weight:700;min-width:36px;text-align:center}
+  /* ---- Horario rediseñado (días en filas, personas en columnas) ---- */
+  table.hsched{border-collapse:separate;border-spacing:0;width:100%;font-size:12.5px;min-width:640px;background:#fff}
+  table.hsched th,table.hsched td{border:1px solid #d3d8e0;padding:0;text-align:center;white-space:nowrap}
+  table.hsched thead th{background:#1f4e79;color:#fff;font-weight:700;font-size:12px;padding:8px 8px;position:sticky;top:0;z-index:2;vertical-align:middle}
+  table.hsched thead th:first-child{position:sticky;left:0;z-index:3;min-width:96px}
+  table.hsched td.hday{background:#f3f6fb;text-align:left;padding:7px 11px;position:sticky;left:0;z-index:1;min-width:96px}
+  table.hsched td.hday b{font-size:13px;color:#23303f}
+  table.hsched td.hday small{display:block;font-weight:500;color:#7b8595;font-size:10.5px;text-transform:capitalize}
+  table.hsched td.hday.wknd{background:#e9edf5}
+  table.hsched td.hcell-td{font-weight:800;font-size:12.5px;letter-spacing:.4px;height:36px;padding:3px 4px}
+  table.hsched td.hcell-td small{display:block;font-weight:600;font-size:8.8px;opacity:.92;letter-spacing:0}
+  table.hsched td.hcell-empty{color:#c2c2c2;font-weight:500;background:#fafafa}
+  table.hsched td.hedit{padding:4px;background:#fff}
+  table.hsched td.hedit.wknd{background:#f6f7fb}
+  table.hsched select.hctrl{display:block;width:100%;margin-top:5px;border:1px solid rgba(255,255,255,.5);border-radius:6px;padding:4px 6px;font-size:10.5px;font-family:inherit;background:rgba(255,255,255,.14);color:#fff}
+  table.hsched td.hday select.hctrl{border:1px solid var(--gris2);background:#fff;color:#333}
+  table.hsched td.hedit select{border:1px solid var(--gris2);border-radius:5px;padding:5px;font-size:12px;background:#fff;width:100%;min-width:96px;font-family:inherit}
+  table.hsched thead th .hsub{font-size:10px;font-weight:500;color:#cdd9ea}
   .pubbar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:4px 0 18px;padding:12px 16px;background:var(--azul-claro);border-radius:10px;font-size:13px}
   .pubbar .st{margin-left:auto;display:flex;gap:8px}
   .legend{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--suave);margin:14px 0 0}
@@ -1642,11 +1660,27 @@ function chip(v){const s=SH[v||""];return `<span class="cell-b" title="${s.l}" s
 async function teamOf(dept){const{data}=await sb.from('profiles').select('id,nombre,equipo,org_equipo').eq('dept',dept).eq('estado','aprobado').order('nombre');return (data||[]).map(p=>({id:p.id,nombre:p.nombre,team:p.org_equipo||p.equipo||''}));}
 async function turnosMap(dept){const{data}=await sb.from('turnos').select('*').eq('dept',dept);const m={};(data||[]).forEach(t=>m[t.empleado_id+'|'+t.fecha]=t);return m;}
 function isLibreTurno(t){ return /libre/i.test((t&&t.nombre)||''); }
+// Paleta viva por turno (colores marcados y distintos entre sí). Libre siempre verde.
+const HOR_VIVID=['#e23b3b','#f4b400','#2f7fe0','#d63bb5','#8b919b','#16a085','#e8771e','#7c4dff','#0ea5e9','#c026d3','#65a30d','#db2777'];
+function horVivid(t){ if(!t) return '#e5e7eb'; if(isLibreTurno(t)) return '#22c55e';
+  const list=(TURNOS_TIPO||[]).filter(x=>!isLibreTurno(x));
+  let idx=list.findIndex(x=>String(x.id)===String(t.id)); if(idx<0) idx=0;
+  return HOR_VIVID[idx%HOR_VIVID.length];
+}
+function horTextOn(hex){ const c=horParseColor(hex); const lum=0.299*c[0]+0.587*c[1]+0.114*c[2]; return lum>150?'#1a1a1a':'#ffffff'; }
 function horLegendFrom(rows){
   const seen={};
   (rows||[]).forEach(r=>{ if(!r||!r.tipo_id)return; const t=turnoTipo(r.tipo_id); if(!t)return; const ini=r.hora_ini||t.hora_ini, fin=r.hora_fin||t.hora_fin; const key=r.tipo_id+'|'+(ini||'')+'|'+(fin||''); if(!seen[key]) seen[key]={t,ini,fin}; });
   const items=Object.values(seen); if(!items.length) return '';
-  return `<div class="legend">${items.map(({t})=>{const col=isLibreTurno(t)?'#bfe7c4':t.color; return `<span><i style="background:${col}"></i>${esc(t.nombre)}</span>`;}).join('')}</div>`;
+  return `<div class="legend">${items.map(({t})=>`<span><i style="background:${horVivid(t)}"></i>${esc(t.nombre)}</span>`).join('')}</div>`;
+}
+// Celda <td> de turno para las vistas (color vivo, texto contrastado)
+function horCellTd(r,wk){
+  if(!r||!r.tipo_id) return `<td class="hcell-empty${wk?' wknd':''}">—</td>`;
+  const t=turnoTipo(r.tipo_id); if(!t) return `<td class="hcell-empty${wk?' wknd':''}">·</td>`;
+  const lib=isLibreTurno(t); const ini=r.hora_ini||t.hora_ini, fin=r.hora_fin||t.hora_fin; const h=ini?`${ini}–${fin}`:'';
+  const bg=horVivid(t), fg=horTextOn(bg);
+  return `<td class="hcell-td" style="background:${bg};color:${fg}" title="${esc(t.nombre)}${h?' '+esc(h):''}"><b>${esc((abreviaTurno(t)||'').toUpperCase())}</b>${(h&&!lib)?`<small>${esc(h)}</small>`:''}</td>`;
 }
 function tchipRow(r){ if(!r||!r.tipo_id) return `<span class="cell-b" style="background:#f2f2f2;color:#bbb">—</span>`; const t=turnoTipo(r.tipo_id); if(!t) return `<span class="cell-b">·</span>`; const lib=isLibreTurno(t); const ini=r.hora_ini||t.hora_ini, fin=r.hora_fin||t.hora_fin; const h=ini?`${ini}–${fin}`:''; const col=lib?'#bfe7c4':t.color; return `<span class="cell-b" title="${esc(t.nombre)}${h?' '+esc(h):''}" style="background:${col};color:#333;display:inline-block;text-align:center;line-height:1.2;padding:4px 7px"><b>${esc(abreviaTurno(t))}</b>${(h&&!lib)?`<br><small style="font-size:9px;font-weight:400;opacity:.85">${esc(h)}</small>`:''}</span>`; }
 
@@ -1738,11 +1772,20 @@ async function horGrid(){
   const abs={};(solR.data||[]).forEach(s=>{ let d=new Date(s.desde+'T00:00:00'); const hh=new Date((s.hasta||s.desde)+'T00:00:00'); let g=0; while(d<=hh&&g<400){ abs[s.user_id+'|'+isoD(d)]=s.tipo; d.setDate(d.getDate()+1); g++; } });
   const chosen=TURNOS_TIPO.filter(t=>horW.turnos.includes(t.id));
   const turnoOpts=chosen.map(t=>`<option value="${t.id}">${esc(t.nombre)}</option>`).join('');
-  const ubicOpts=cur=>`<option value="">— Ninguna —</option>${CAT.ubicaciones.map(u=>`<option ${cur===u?'selected':''}>${esc(u)}</option>`).join('')}`;
-  const head=`<tr><th class="emp">Empleado</th><th>📍 Ubicación</th>${days.map(d=>`<th class="${isWk(d)?'wknd':''}">${lblD(d)}<br><select onchange="horFillCol('${isoD(d)}',this.value)" style="font-size:10px;margin-top:3px;max-width:78px;font-family:inherit"><option value="__">▾ todos</option>${turnoOpts}<option value="">vaciar</option></select></th>`).join('')}</tr>`;
-  const rows=people.map(p=>`<tr><td class="emp">${esc(p.nombre)}<br><small style="color:var(--suave)">${esc(p.dept||p.area||'')}</small><br><select onchange="horFillRow('${p.id}',this.value)" style="display:block;font-size:10px;margin-top:3px;max-width:130px;font-family:inherit"><option value="__">▾ Elige turno</option>${turnoOpts}<option value="">vaciar</option></select><select onchange="horFillDayOff('${p.id}',this.value)" style="display:block;font-size:10px;margin-top:4px;max-width:130px;font-family:inherit"><option value="__">▾ día libre</option><option value="1">Lunes</option><option value="2">Martes</option><option value="3">Miércoles</option><option value="4">Jueves</option><option value="5">Viernes</option><option value="6">Sábado</option><option value="0">Domingo</option></select></td>
-    <td><select class="uloc" data-emp="${p.id}">${ubicOpts(locMap[p.id]||'')}</select></td>${days.map(d=>{const iso=isoD(d); const ab=abs[p.id+'|'+iso]; if(ab) return `<td class="${isWk(d)?'wknd':''}" style="text-align:center"><span class="badge ${ab==='vacaciones'?'b-grey':'b-amber'}" title="${ab==='vacaciones'?'Vacaciones aprobadas':'Baja aprobada'}">${ab==='vacaciones'?'🌴':'🤕'}</span></td>`; const cur=map[p.id+'|'+iso]||'';
-    return `<td class="${isWk(d)?'wknd':''}"><select class="tcell2" data-emp="${p.id}" data-name="${esc(p.nombre)}" data-dept="${esc(p.dept||'')}" data-fecha="${iso}"><option value="">—</option>${chosen.map(t=>`<option value="${t.id}" ${String(cur)===String(t.id)?'selected':''}>${esc(t.nombre)}</option>`).join('')}</select></td>`;}).join('')}</tr>`).join('');
+  const ubicOpts=cur=>`<option value="">— Ubicación —</option>${CAT.ubicaciones.map(u=>`<option ${cur===u?'selected':''}>${esc(u)}</option>`).join('')}`;
+  const diaLibreSel=id=>`<select onchange="horFillDayOff('${id}',this.value)" class="hctrl"><option value="__">▾ día libre</option><option value="1">Lunes</option><option value="2">Martes</option><option value="3">Miércoles</option><option value="4">Jueves</option><option value="5">Viernes</option><option value="6">Sábado</option><option value="0">Domingo</option></select>`;
+  // Cabecera: DÍA + una columna por persona (con sus controles)
+  const head=`<tr><th>DÍA</th>${people.map(p=>`<th><div>${esc(p.nombre)}</div><div class="hsub">${esc(p.dept||p.area||'')}</div>
+    <select onchange="horFillRow('${p.id}',this.value)" class="hctrl"><option value="__">▾ Elige turno</option>${turnoOpts}<option value="">vaciar</option></select>
+    ${diaLibreSel(p.id)}
+    <select class="uloc hctrl" data-emp="${p.id}">${ubicOpts(locMap[p.id]||'')}</select></th>`).join('')}</tr>`;
+  // Filas: una por día (con su control "todos" para rellenar el día)
+  const rows=days.map(d=>{ const iso=isoD(d); const wk=isWk(d);
+    return `<tr><td class="hday${wk?' wknd':''}"><b>${d.getDate()} ${HOR_MES[d.getMonth()]}</b><small>${HOR_DOW[d.getDay()]}</small>
+      <select onchange="horFillCol('${iso}',this.value)" class="hctrl"><option value="__">▾ todos</option>${turnoOpts}<option value="">vaciar</option></select></td>
+      ${people.map(p=>{ const ab=abs[p.id+'|'+iso]; if(ab) return `<td class="hedit${wk?' wknd':''}" style="text-align:center"><span class="badge ${ab==='vacaciones'?'b-grey':'b-amber'}" title="${ab==='vacaciones'?'Vacaciones aprobadas':'Baja aprobada'}">${ab==='vacaciones'?'🌴':'🤕'}</span></td>`; const cur=map[p.id+'|'+iso]||'';
+        return `<td class="hedit${wk?' wknd':''}"><select class="tcell2" data-emp="${p.id}" data-name="${esc(p.nombre)}" data-dept="${esc(p.dept||'')}" data-fecha="${iso}"><option value="">—</option>${chosen.map(t=>`<option value="${t.id}" ${String(cur)===String(t.id)?'selected':''}>${esc(t.nombre)}</option>`).join('')}</select></td>`;
+      }).join('')}</tr>`; }).join('');
   return `<div class="panel"><div style="margin-bottom:12px;display:flex;gap:8px;flex-wrap:wrap">
       <button class="btn" onclick="horGuardar()">💾 Guardar y publicar</button>
       <button class="btn ghost" onclick="horCopyPrev()">📋 Copiar semana anterior</button>
@@ -1751,7 +1794,7 @@ async function horGrid(){
       <button class="btn ghost" onclick="horPDF()">📥 Descargar PDF</button>
       <span style="font-size:12.5px;color:var(--suave);align-self:center">${people.length} persona(s) · ${days.length} día(s) · 🌴/🤕 = ausencia aprobada</span></div>
     <div id="horResumenBox"></div>
-    <div id="horSched" class="grid-wrap"><table class="sched"><thead>${head}</thead><tbody>${rows}</tbody></table></div></div>`;
+    <div id="horSched" class="grid-wrap"><table class="hsched"><thead>${head}</thead><tbody>${rows}</tbody></table></div></div>`;
 }
 function horFillRow(emp,val){ if(val==='__')return; document.querySelectorAll('.tcell2[data-emp="'+emp+'"]').forEach(c=>{ if([...c.options].some(o=>String(o.value)===String(val))) c.value=val; }); }
 function horFillDayOff(emp,dow){
@@ -1835,18 +1878,23 @@ async function horMine(days){
 function descargarHorarioPDF(){ const el=document.getElementById('miHorarioPrint'); if(!el) return;
   if(typeof html2pdf==='undefined'){ window.print(); return; }
   html2pdf().set({margin:6,filename:'Mi_horario_Amazinn.pdf',image:{type:'jpeg',quality:.98},html2canvas:{scale:2,backgroundColor:'#ffffff'},jsPDF:{unit:'mm',format:'a4',orientation:'portrait'}}).from(el).save(); }
+const HOR_DOW=['domingo','lunes','martes','miércoles','jueves','viernes','sábado'];
+const HOR_MES=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+function horDayCell(d){ const wk=isWk(d); return `<td class="hday${wk?' wknd':''}"><b>${d.getDate()} ${HOR_MES[d.getMonth()]}</b><small>${HOR_DOW[d.getDay()]}</small></td>`; }
 async function horTeam(dept,days,equipoFilter){
   if(!dept) return `<div class="panel">Sin departamento asignado.</div>`;
   let team=await teamOf(dept);
   if(equipoFilter) team=team.filter(e=>e.team===equipoFilter);
   if(!team.length) return `<div class="panel">No hay empleados${equipoFilter?' en el equipo '+esc(equipoFilter):''} en ${esc(dept)}.</div>`;
   const map=await turnosMap(dept);
-  const head=`<tr><th class="emp">Empleado</th>${days.map(d=>`<th class="${isWk(d)?'wknd':''}">${lblD(d)}</th>`).join('')}</tr>`;
-  const rows=team.map(e=>`<tr><td class="emp">${e.id===ME.id?'<b style="color:var(--azul)">'+esc(e.nombre)+' (tú)</b>':esc(e.nombre)}</td>${days.map(d=>`<td class="${isWk(d)?'wknd':''}">${tchipRow(map[e.id+'|'+isoD(d)])}</td>`).join('')}</tr>`).join('');
+  // Cabecera: DÍA + una columna por persona
+  const head=`<tr><th>DÍA</th>${team.map(e=>`<th>${e.id===ME.id?esc(e.nombre)+' (tú)':esc(e.nombre)}</th>`).join('')}</tr>`;
+  // Filas: una por día
+  const rows=days.map(d=>{ const iso=isoD(d); return `<tr>${horDayCell(d)}${team.map(e=>horCellTd(map[e.id+'|'+iso], isWk(d))).join('')}</tr>`; }).join('');
   const legend=horLegendFrom(Object.values(map));
   const periodo=`${days[0].toLocaleDateString('es-ES',{day:'2-digit',month:'short'})} – ${days[days.length-1].toLocaleDateString('es-ES',{day:'2-digit',month:'short',year:'numeric'})}`;
   const ttlTxt=`Horario · ${dept}${equipoFilter?' · '+equipoFilter:''}`;
-  return `<div id="horSched" data-pdftitle="${esc(ttlTxt)}" data-pdfperiodo="${esc(periodo)}" data-dept="${esc(dept||'')}" data-equipo="${esc(equipoFilter||'')}"><div class="hor-pdf-title" style="display:none;margin-bottom:10px"><div style="font-size:20px;font-weight:800;color:#1f4e79">${esc(ttlTxt)}</div><div style="font-size:13px;color:#555555">Periodo: ${esc(periodo)}</div></div><div class="grid-wrap"><table class="sched"><thead>${head}</thead><tbody>${rows}</tbody></table></div>${legend||'<div class="legend" style="color:var(--suave)">Sin turnos publicados en este periodo.</div>'}</div>`;
+  return `<div id="horSched" data-pdftitle="${esc(ttlTxt)}" data-pdfperiodo="${esc(periodo)}" data-dept="${esc(dept||'')}" data-equipo="${esc(equipoFilter||'')}"><div class="hor-pdf-title" style="display:none;margin-bottom:10px"><div style="font-size:20px;font-weight:800;color:#1f4e79">${esc(ttlTxt)}</div><div style="font-size:13px;color:#555555">Periodo: ${esc(periodo)}</div></div><div class="grid-wrap"><table class="hsched"><thead>${head}</thead><tbody>${rows}</tbody></table></div>${legend||'<div class="legend" style="color:var(--suave)">Sin turnos publicados en este periodo.</div>'}</div>`;
 }
 function horParseColor(c){ c=(c||'').trim();
   if(c[0]==='#'){ let h=c.slice(1); if(h.length===3)h=h.split('').map(x=>x+x).join(''); const n=parseInt(h,16); return [(n>>16)&255,(n>>8)&255,n&255]; }
@@ -1873,26 +1921,26 @@ function horPDF(){
   const equiT=src.getAttribute('data-equipo')||'';
   const fname=((titleTxt||'Horario').replace(/[·\\/:]/g,'-').replace(/\s+/g,'_').replace(/_+/g,'_').replace(/^_|_$/g,''))+'.pdf';
   const jsPDFlib=(window.jspdf&&window.jspdf.jsPDF)||window.jsPDF||(typeof jsPDF!=='undefined'?jsPDF:null);
-  const table=src.querySelector('table.sched');
-  const isEditor=!src.querySelector('.cell-b') && !!src.querySelector('select');
+  const table=src.querySelector('table.hsched')||src.querySelector('table.sched');
+  const isEditor=!!src.querySelector('select.tcell2');
   if(!jsPDFlib || !table || isEditor){ horPDFcanvasFallback(src,fname); return; }
   const clean=s=>(s||'').replace(/[–—]/g,'-').replace(/ /g,' ').trim();
-  // ---- cabecera (días) ----
-  const headThs=[...table.querySelectorAll('thead th')];
-  const dayLabels=headThs.slice(1).map(th=>{ const c=th.cloneNode(true); c.querySelectorAll('select,br').forEach(n=>n.remove()); return clean(c.textContent); });
-  // ---- filas ----
+  // columnas = personas (cabecera, saltando "DÍA")
+  const people=[...table.querySelectorAll('thead th')].slice(1).map(th=>{ const c=th.cloneNode(true); c.querySelectorAll('select,.hsub').forEach(n=>n.remove()); return clean(c.textContent); });
+  // filas = días
   const rows=[...table.querySelectorAll('tbody tr')].map(tr=>{
     const tds=[...tr.children];
-    const name=clean((tds[0]?tds[0].textContent:'').replace(/\s+/g,' '));
+    const dl=tds[0], db=dl?dl.querySelector('b'):null, ds=dl?dl.querySelector('small'):null;
+    const dia=clean(db?db.textContent:(dl?dl.textContent:'')), dow=clean(ds?ds.textContent:'');
     const cells=tds.slice(1).map(td=>{
-      const chip=td.querySelector('.cell-b'), badge=td.querySelector('.badge');
+      const badge=td.querySelector('.badge');
       if(badge){ const t=(badge.getAttribute('title')||'').toLowerCase(); return {kind:'abs',text:/vacacion/.test(t)?'Vac.':(/baja/.test(t)?'Baja':clean(badge.textContent))}; }
-      if(!chip) return {kind:'empty'};
-      const bg=(chip.getAttribute('style')||'').match(/background:\s*([^;]+)/);
-      const b=chip.querySelector('b'), sm=chip.querySelector('small');
-      return {kind:'shift',color:bg?bg[1].trim():'#eeeeee',abbr:clean(b?b.textContent:chip.textContent),hours:clean(sm?sm.textContent:'')};
+      const bg=(td.getAttribute('style')||'').match(/background:\s*([^;]+)/);
+      if(td.classList.contains('hcell-empty')||!bg) return {kind:'empty'};
+      const cb=td.querySelector('b'), cs=td.querySelector('small');
+      return {kind:'shift',color:bg[1].trim(),abbr:clean(cb?cb.textContent:td.textContent),hours:clean(cs?cs.textContent:'')};
     });
-    return {name,cells};
+    return {dia,dow,cells};
   });
   // ---- leyenda ----
   const legend=[...src.querySelectorAll('.legend span')].map(sp=>{ const i=sp.querySelector('i'); const bg=i?(i.getAttribute('style')||'').match(/background:\s*([^;]+)/):null; return {name:clean(sp.textContent),color:bg?bg[1].trim():'#cccccc'}; }).filter(l=>l.name);
@@ -1906,22 +1954,24 @@ function horPDF(){
   if(depT){ pdf.text('Departamento: '+clean(depT)+'        Equipo: '+(clean(equiT)||'Todos los equipos'),M,y+2); y+=5; }
   if(periodo){ pdf.setFontSize(9); pdf.setTextColor(110,110,110); pdf.text('Periodo: '+clean(periodo),M,y+2); y+=5; }
   y+=2;
-  const nDays=dayLabels.length||1, nameW=34, dayW=(usable-nameW)/nDays, headH=8, rowH=11;
+  const nPpl=people.length||1, dayColW=24, colW=(usable-dayColW)/nPpl, headH=9;
+  let rowH=Math.min(12, Math.max(7,(PH-M-8-y)/(rows.length||1)));
   const drawHeader=(yy)=>{ pdf.setFillColor(31,78,121); pdf.rect(M,yy,usable,headH,'F');
-    pdf.setTextColor(255,255,255); pdf.setFont('helvetica','bold'); pdf.setFontSize(7.5); pdf.text('EMPLEADO',M+2,yy+headH/2+1.4);
-    pdf.setFontSize(6.6); dayLabels.forEach((d,i)=>{ pdf.text(d,M+nameW+i*dayW+dayW/2,yy+headH/2+1.4,{align:'center',maxWidth:dayW-1}); }); return yy+headH; };
+    pdf.setTextColor(255,255,255); pdf.setFont('helvetica','bold'); pdf.setFontSize(7.5); pdf.text('DÍA',M+2,yy+headH/2+1.4);
+    pdf.setFontSize(7); people.forEach((p,i)=>{ pdf.text(p,M+dayColW+i*colW+colW/2,yy+headH/2+1.4,{align:'center',maxWidth:colW-1}); }); return yy+headH; };
   y=drawHeader(y);
   rows.forEach(r=>{
-    if(y+rowH>PH-M-10){ pdf.addPage(); y=M+1; y=drawHeader(y); }
-    pdf.setDrawColor(160,168,182); pdf.setLineWidth(0.3);
-    pdf.rect(M,y,nameW,rowH);
-    pdf.setTextColor(40,40,40); pdf.setFont('helvetica','bold'); pdf.setFontSize(7); pdf.text(r.name,M+2,y+rowH/2+1,{maxWidth:nameW-3});
-    r.cells.forEach((c,i)=>{ const x=M+nameW+i*dayW; pdf.setDrawColor(160,168,182); pdf.setLineWidth(0.3); pdf.rect(x,y,dayW,rowH);
-      if(c.kind==='shift'){ const col=horParseColor(c.color); pdf.setFillColor(col[0],col[1],col[2]); const p=1.2; pdf.roundedRect(x+p,y+p,dayW-2*p,rowH-2*p,1,1,'F'); pdf.setTextColor(45,45,45);
-        if(c.hours){ pdf.setFont('helvetica','bold'); pdf.setFontSize(6.6); pdf.text(c.abbr,x+dayW/2,y+rowH/2-0.4,{align:'center'}); pdf.setFont('helvetica','normal'); pdf.setFontSize(5.3); pdf.text(c.hours,x+dayW/2,y+rowH/2+2.7,{align:'center'}); }
-        else { pdf.setFont('helvetica','bold'); pdf.setFontSize(6.8); pdf.text(c.abbr,x+dayW/2,y+rowH/2+1,{align:'center'}); } }
-      else if(c.kind==='abs'){ pdf.setTextColor(120,120,120); pdf.setFont('helvetica','normal'); pdf.setFontSize(6.5); pdf.text(c.text,x+dayW/2,y+rowH/2+1,{align:'center'}); }
-      else { pdf.setTextColor(195,195,195); pdf.setFont('helvetica','normal'); pdf.setFontSize(8); pdf.text('-',x+dayW/2,y+rowH/2+1,{align:'center'}); } });
+    if(y+rowH>PH-M-8){ pdf.addPage(); y=M+1; y=drawHeader(y); }
+    pdf.setFillColor(243,246,251); pdf.setDrawColor(150,155,165); pdf.setLineWidth(0.3); pdf.rect(M,y,dayColW,rowH,'FD');
+    pdf.setTextColor(35,48,63); pdf.setFont('helvetica','bold'); pdf.setFontSize(7.2); pdf.text(r.dia,M+2.2,y+rowH/2-0.2);
+    pdf.setFont('helvetica','normal'); pdf.setFontSize(5.6); pdf.setTextColor(120,128,140); pdf.text(r.dow,M+2.2,y+rowH/2+3);
+    r.cells.forEach((c,i)=>{ const x=M+dayColW+i*colW;
+      if(c.kind==='shift'){ const col=horParseColor(c.color); pdf.setFillColor(col[0],col[1],col[2]); pdf.rect(x,y,colW,rowH,'F'); pdf.setDrawColor(150,155,165); pdf.setLineWidth(0.3); pdf.rect(x,y,colW,rowH,'S');
+        const lum=0.299*col[0]+0.587*col[1]+0.114*col[2], tc=lum>150?26:255; pdf.setTextColor(tc,tc,tc);
+        if(c.hours){ pdf.setFont('helvetica','bold'); pdf.setFontSize(7); pdf.text(c.abbr,x+colW/2,y+rowH/2-0.3,{align:'center'}); pdf.setFont('helvetica','normal'); pdf.setFontSize(5.2); pdf.text(c.hours,x+colW/2,y+rowH/2+2.9,{align:'center'}); }
+        else { pdf.setFont('helvetica','bold'); pdf.setFontSize(7.6); pdf.text(c.abbr,x+colW/2,y+rowH/2+1,{align:'center'}); } }
+      else if(c.kind==='abs'){ pdf.setFillColor(236,238,242); pdf.setDrawColor(150,155,165); pdf.setLineWidth(0.3); pdf.rect(x,y,colW,rowH,'FD'); pdf.setTextColor(120,120,120); pdf.setFont('helvetica','normal'); pdf.setFontSize(6.5); pdf.text(c.text,x+colW/2,y+rowH/2+1,{align:'center'}); }
+      else { pdf.setFillColor(250,250,250); pdf.setDrawColor(150,155,165); pdf.setLineWidth(0.3); pdf.rect(x,y,colW,rowH,'FD'); pdf.setTextColor(200,200,200); pdf.setFont('helvetica','normal'); pdf.setFontSize(8); pdf.text('-',x+colW/2,y+rowH/2+1,{align:'center'}); } });
     y+=rowH;
   });
   if(legend.length){ y+=5; if(y>PH-M-4){ pdf.addPage(); y=M+4; } pdf.setFont('helvetica','normal'); pdf.setFontSize(7.5); let lx=M;
