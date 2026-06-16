@@ -3368,7 +3368,7 @@ const TPL_CAT={'Bienvenida':'b-green','Accesos':'b-red','Confirmación transport
 const TPL_CATS=['Bienvenida','Accesos','Confirmación transporte','Confirmación extras','Mascotas','Early check in','Late check out','Aceptación de invitados','Piscina compartida'];
 let msgTab='ver', msgUnit=null, twoFAok=false, tplEditId=null, tplFormOpen=false, TPL_UNI=[], msgProp='';
 function tplCancel(){ tplFormOpen=false; tplEditId=null; tplDraft={}; show('mensajes'); }
-function tplFormProp(){ const p=(document.getElementById('tProp')||{}).value||''; const sel=document.getElementById('tUni'); if(!sel)return; const entries=TPL_UNI.filter(u=>u.prop===p); const whole=p&&entries.length===1&&entries[0].kind==='e'; if(!p||whole){ sel.innerHTML='<option value="">Todas las unidades</option>'; sel.disabled=true; } else { sel.disabled=false; sel.innerHTML='<option value="">Todas las unidades</option>'+entries.filter(u=>u.kind==='u').map(u=>`<option value="${u.id}">${esc(u.nombre)}</option>`).join(''); } }
+function tplFormProp(){ const p=(document.getElementById('tProp')||{}).value||''; const dl=document.getElementById('tUniDL'); const inp=document.getElementById('tUni'); if(!dl||!inp)return; const entries=TPL_UNI.filter(u=>u.prop===p); const whole=p&&entries.length===1&&entries[0].kind==='e'; inp.value=''; if(!p||whole){ dl.innerHTML=''; inp.disabled=true; inp.placeholder=whole?'Propiedad completa':'Todas las unidades'; } else { inp.disabled=false; inp.placeholder='Todas / escribe nº…'; dl.innerHTML=entries.filter(u=>u.kind==='u').map(u=>`<option value="${esc(u.nombre)}"></option>`).join(''); } }
 function canMsg(){return PROFILE.dept==='Atención al cliente'||isAdmin();}
 function canMsgEdit(){return isAdmin()||(PROFILE.role==='responsable'&&PROFILE.dept==='Atención al cliente');}
 function fillTpl(c,u){return (c||'')
@@ -3405,6 +3405,9 @@ async function loadUnidades(){
   });
   return out;
 }
+let MSG_APTS=[];
+function msgPropPick(v){ msgProp=v; msgUnit=null; show('mensajes'); }
+function msgUnitPick(v){ const u=(MSG_APTS||[]).find(x=>x.nombre===v); msgUnit=u?u.id:null; show('mensajes'); }
 async function msgViewer(){
   const out=await loadUnidades();
   const props=[...new Set(out.map(u=>u.prop))];
@@ -3413,15 +3416,16 @@ async function msgViewer(){
   const whole=!!msgProp && entries.length===1 && entries[0].kind==='e';
   if(whole) msgUnit=entries[0].id;
   const ss='padding:10px 12px;border:1px solid var(--gris2);border-radius:9px;font-size:15px;min-width:190px;font-family:inherit';
-  const propSel=`<select onchange="msgProp=this.value;msgUnit=null;show('mensajes')" style="${ss}"><option value="">— Propiedad —</option>${props.map(p=>`<option ${msgProp===p?'selected':''}>${esc(p)}</option>`).join('')}</select>`;
-  const aptEntries=entries.filter(u=>u.kind==='u');
-  const uniSel = (msgProp && !whole)? `<select onchange="msgUnit=this.value||null;show('mensajes')" style="${ss}"><option value="">— Nº / unidad —</option>${aptEntries.map(u=>`<option value="${u.id}" ${String(u.id)===String(msgUnit)?'selected':''}>${esc(u.nombre)}</option>`).join('')}</select>` : (whole?`<span style="color:var(--suave);font-size:13px;font-style:italic">Propiedad completa</span>`:'');
+  const propSel=`<input list="msgPropDL" value="${esc(msgProp||'')}" placeholder="Escribe o elige propiedad…" onchange="msgPropPick(this.value)" style="${ss}"><datalist id="msgPropDL">${props.map(p=>`<option value="${esc(p)}"></option>`).join('')}</datalist>`;
+  const aptEntries=entries.filter(u=>u.kind==='u'); MSG_APTS=aptEntries.map(u=>({id:u.id,nombre:u.nombre}));
+  const curAptName=(()=>{const cu=aptEntries.find(u=>String(u.id)===String(msgUnit));return cu?cu.nombre:'';})();
+  const uniSel = (msgProp && !whole)? `<input list="msgUniDL" value="${esc(curAptName)}" placeholder="Escribe o elige nº…" onchange="msgUnitPick(this.value)" style="${ss}"><datalist id="msgUniDL">${aptEntries.map(u=>`<option value="${esc(u.nombre)}"></option>`).join('')}</datalist>` : (whole?`<span style="color:var(--suave);font-size:13px;font-style:italic">Propiedad completa</span>`:'');
   const sel=`<div style="margin-bottom:16px;display:flex;gap:10px;flex-wrap:wrap;align-items:center"><label style="font-weight:600;font-size:14px">🏠 Apartamento:</label>${propSel}${uniSel}</div>`;
   if(!msgUnit) return sel+`<div class="panel">Selecciona <b>propiedad</b> (y nº si la tiene) para ver sus plantillas. ⚠️ El código de acceso es específico de cada uno.</div>`;
   const u=out.find(x=>String(x.id)===String(msgUnit)); if(!u) return sel+`<div class="panel">Apartamento no encontrado.</div>`;
   const{data:tpls}=await sb.from('plantillas').select('*');
   const mine=(tpls||[]).filter(t=>(t.unidades||[]).map(String).includes(String(u.id)));
-  const banner=`<div class="acc-banner">📍 Estás viendo: <span class="big">${esc(u.nombre)}</span> · Nº <b>${esc(u.numero)}</b> · Código de acceso <span class="code">${esc(u.codigo)}</span><br><small>Verifica que es el apartamento de la reserva antes de enviar el mensaje.</small></div>`;
+  const banner=`<div class="acc-banner">📍 Estás viendo: <span class="big">${esc(u.nombre)}</span> · ${esc(u.prop)}${u.planta?` · Planta <b>${esc(u.planta)}</b>`:''} · Código de acceso <span class="code">${esc(u.codigo||'—')}</span><br><small>Verifica que es el apartamento de la reserva antes de enviar el mensaje.</small></div>`;
   const cards=mine.map(t=>{const filled=fillTpl(t.cuerpo,u);const cat=TPL_CAT[t.cat]||'b-grey';
     return `<div class="tpl-card ${t.cat==='Accesos'?'acc':''}"><div class="h"><span class="badge ${cat}">${esc(t.cat||'')}</span><b>${esc(t.titulo)}</b>
       <button class="btn" style="margin-left:auto;padding:7px 14px" onclick="copyTxt(this)" data-t="${esc(filled).replace(/"/g,'&quot;')}">📋 Copiar</button></div>
@@ -3456,24 +3460,25 @@ async function tplForm(){
   // derivar selección actual al editar
   const selIds=new Set((t.unidades||[]).map(String)); let selProp='', selUni='';
   if(selIds.size){ const sel=out.filter(u=>selIds.has(String(u.id))); if(sel.length===1){ selProp=sel[0].prop; if(sel[0].kind==='u') selUni=String(sel[0].id); } else { const ps=[...new Set(sel.map(u=>u.prop))]; if(ps.length===1) selProp=ps[0]; } }
-  const propOpts=`<option value="">Todas las propiedades</option>`+props.map(p=>`<option ${selProp===p?'selected':''}>${esc(p)}</option>`).join('');
   const selEntries=out.filter(u=>u.prop===selProp);
   const selWhole=selProp && selEntries.length===1 && selEntries[0].kind==='e';
-  const uniOpts=`<option value="">Todas las unidades</option>`+selEntries.filter(u=>u.kind==='u').map(u=>`<option value="${u.id}" ${selUni===String(u.id)?'selected':''}>${esc(u.nombre)}</option>`).join('');
+  const curUniName=(()=>{ if(!selUni)return''; const cu=out.find(u=>String(u.id)===String(selUni)); return cu?cu.nombre:''; })();
+  const propDL=`<datalist id="tPropDL">${props.map(p=>`<option value="${esc(p)}"></option>`).join('')}</datalist>`;
+  const uniDL=`<datalist id="tUniDL">${selEntries.filter(u=>u.kind==='u').map(u=>`<option value="${esc(u.nombre)}"></option>`).join('')}</datalist>`;
   return `<div class="panel" style="max-width:760px"><form class="box" onsubmit="return tplSave(event)" style="max-width:none">
     <div class="row"><div><label>Título</label><input id="tT" required value="${t.titulo?esc(t.titulo):''}"></div><div><label>Categoría</label><select id="tC">${TPL_CATS.map(c=>`<option ${t.cat===c?'selected':''}>${c}</option>`).join('')}</select></div></div>
     <label>Contenido</label><textarea id="tB" rows="6" required>${t.cuerpo?esc(t.cuerpo):''}</textarea>
     <small style="color:var(--suave)">Variables: {propiedad} {NºUnidad} {NºPlanta} {código} {wifi}</small>
-    <div class="row" style="margin-top:10px"><div><label>Propiedad</label><select id="tProp" onchange="tplFormProp()">${propOpts}</select></div>
-    <div><label>Nº / unidad <small style="color:var(--suave);font-weight:400">(vacío = propiedad completa)</small></label><select id="tUni" ${selWhole?'disabled':''}>${uniOpts}</select></div></div>
+    <div class="row" style="margin-top:10px"><div><label>Propiedad</label><input id="tProp" list="tPropDL" value="${esc(selProp)}" placeholder="Escribe o elige…" oninput="tplFormProp()">${propDL}</div>
+    <div><label>Nº / unidad <small style="color:var(--suave);font-weight:400">(vacío = propiedad completa)</small></label><input id="tUni" list="tUniDL" value="${esc(curUniName)}" placeholder="Todas / escribe nº…" ${selWhole?'disabled':''}>${uniDL}</div></div>
     <div style="margin-top:14px"><button class="btn" type="submit">${tplEditId?'Guardar':'Crear plantilla'}</button> <button class="btn ghost" type="button" onclick="tplCancel()">Cancelar</button></div></form></div>`;
 }
 async function tplSave(e){e.preventDefault();
-  const prop=(document.getElementById('tProp')||{}).value||''; const uniSel=(document.getElementById('tUni')||{}).value||'';
+  const prop=(document.getElementById('tProp')||{}).value||''; const uniName=(document.getElementById('tUni')||{}).value||'';
   const entries=TPL_UNI.filter(u=>u.prop===prop); const whole=prop && entries.length===1 && entries[0].kind==='e';
   let unidades=[];
   if(whole){ unidades=[entries[0].id]; }
-  else if(uniSel){ unidades=[isNaN(+uniSel)?uniSel:+uniSel]; }
+  else if(uniName){ const u=entries.find(x=>x.kind==='u'&&x.nombre===uniName); if(!u){ alert('No se encontró la unidad «'+uniName+'» en esa propiedad. Elígela de la lista.'); return false; } unidades=[u.id]; }
   else if(prop){ unidades=entries.filter(u=>u.kind==='u').map(u=>u.id); }
   else { unidades=TPL_UNI.map(u=>u.id); }
   if(!unidades.length){alert('No hay propiedades en el catálogo. Crea edificios/unidades en Catálogos.');return false;}
