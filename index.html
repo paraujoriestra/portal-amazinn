@@ -1149,6 +1149,7 @@ function isoD(x){return `${x.getFullYear()}-${String(x.getMonth()+1).padStart(2,
 function lblD(x){const ds=['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'],ms=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];return `${ds[x.getDay()]} ${x.getDate()} ${ms[x.getMonth()]}`;}
 function isWk(x){return x.getDay()===0||x.getDay()===6;}
 let horTab='mi', horOtherDept=null, horEditDept=null, horOtherEquipo='';
+let horHistDept='', horHistEq='';
 let ACCESS_DENY=new Set();  // ids de áreas ocultas para el usuario actual (config. de Permisos)
 async function loadAccesos(){ ACCESS_DENY=new Set(); if(isOwner()) return;   // el propietario siempre ve todo
   try{ const {data}=await sb.from('accesos').select('item_id,visible').eq('dept',PROFILE.dept||'').eq('role',PROFILE.role);
@@ -1694,13 +1695,14 @@ async function pageHorarios(){
   await loadTurnosTipo();
   const dept=PROFILE.dept||'';
   const canEdit=CAN_MANAGE.includes(PROFILE.role);
-  const tabs=canEdit?[['editor','🗓️ Crear horario'],['equipo','👥 Horario del equipo'],['otros','🏢 Otros equipos']]
+  const tabs=canEdit?[['editor','🗓️ Crear horario'],['equipo','👥 Horario del equipo'],['otros','🏢 Otros equipos'],['historial','🗂️ Histórico']]
                     :[['mi','📅 Mi horario'],['equipo','👥 Horario del equipo'],['otros','🏢 Otros equipos']];
   if(!tabs.some(t=>t[0]===horTab)) horTab=tabs[0][0];
   const days=nextDays(15);
   let body='';
   if(horTab==='mi') body=await horMine(days);
   else if(horTab==='editor') body=await horCrear();
+  else if(horTab==='historial') body=await horHistorial();
   else if(horTab==='equipo') body=`<div style="display:flex;justify-content:flex-end;margin-bottom:10px"><button class="btn ghost" style="padding:9px 16px" onclick="horPDF()">📥 Descargar PDF</button></div>`+await horTeam(dept,days);
   else body=await horOthers(days);
   const legend=`<div class="legend">${TURNOS_TIPO.map(t=>`<span><i style="background:${isLibreTurno(t)?'#bfe7c4':t.color}"></i>${esc(t.nombre)}</span>`).join('')}</div>`;
@@ -1718,6 +1720,38 @@ async function horGenerar(){ if(!horW.desde||!horW.hasta){alert('Elige las fecha
   horW.gen=true; const steps=document.getElementById('horWizardSteps'); if(steps) steps.style.display='none';
   const b=document.getElementById('horGridBox'); if(!b){ show('horarios'); return; } b.innerHTML='<div class="panel" style="color:var(--suave)">Generando cuadrícula…</div>'; b.innerHTML=await horGrid(); window.scrollTo({top:0,behavior:'smooth'}); }
 function horDays(a,b){ const out=[]; let d=new Date(a+'T00:00:00'), end=new Date(b+'T00:00:00'); if(isNaN(d)||isNaN(end)||end<d) return out; let g=0; while(d<=end && g++<92){ out.push(new Date(d)); d.setDate(d.getDate()+1); } return out; }
+/* ----- Histórico de horarios publicados (filtro por departamento y equipo) ----- */
+async function horHistorial(){
+  let list=[];
+  try{ const {data}=await sb.from('horarios_pub').select('*').order('created_at',{ascending:false}); list=data||[]; }
+  catch(e){ return `<div class="panel">No se pudo cargar el histórico. ¿Ejecutaste <b>supabase_horarios_hist.sql</b> en Supabase?<br><small style="color:var(--suave)">${esc(e.message||e)}</small></div>`; }
+  const depts=[...new Set(list.map(r=>r.dept).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
+  const eqs=[...new Set(list.map(r=>r.equipo).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
+  let fl=list;
+  if(horHistDept) fl=fl.filter(r=>(r.dept||'')===horHistDept);
+  if(horHistEq) fl=fl.filter(r=>(r.equipo||'')===horHistEq);
+  const filtros=`<div class="panel" style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;margin-bottom:14px">
+    <div><label style="display:block;font-size:12px;font-weight:600;color:var(--suave);margin-bottom:4px">Departamento</label>
+      <select onchange="horHistDept=this.value;show('horarios')" style="padding:8px 11px;border:1px solid var(--gris2);border-radius:8px;font-family:inherit;min-width:170px"><option value="">Todos</option>${depts.map(d=>`<option ${d===horHistDept?'selected':''}>${esc(d)}</option>`).join('')}</select></div>
+    <div><label style="display:block;font-size:12px;font-weight:600;color:var(--suave);margin-bottom:4px">Equipo</label>
+      <select onchange="horHistEq=this.value;show('horarios')" style="padding:8px 11px;border:1px solid var(--gris2);border-radius:8px;font-family:inherit;min-width:170px"><option value="">Todos</option>${eqs.map(e=>`<option ${e===horHistEq?'selected':''}>${esc(e)}</option>`).join('')}</select></div>
+    ${(horHistDept||horHistEq)?`<button class="btn ghost" onclick="horHistDept='';horHistEq='';show('horarios')">Limpiar filtros</button>`:''}
+  </div>`;
+  if(!fl.length) return filtros+`<div class="panel" style="color:var(--suave)">No hay horarios publicados${(horHistDept||horHistEq)?' con esos filtros':' todavía'}.</div>`;
+  const fmt=iso=>iso?new Date(iso+'T00:00:00').toLocaleDateString('es-ES',{day:'2-digit',month:'short',year:'numeric'}):'';
+  const items=fl.map(r=>`<div class="pubwrap"><div class="pubcard"><div class="pi"><b>📅 ${fmt(r.desde)} → ${fmt(r.hasta)}</b><span>${esc(r.dept||'—')}${r.equipo?` · ${esc(r.equipo)}`:''} · ${r.npers||0} persona(s) · ${r.ndias||0} día(s)${r.creado_nombre?` · publicado por ${esc(r.creado_nombre)}`:''}</span></div>
+    <div class="pa"><button class="btn ghost" onclick="horHistVer(${r.id})">👁 Ver</button><button class="btn ghost" onclick="horHistPDF(${r.id})">📥 PDF</button></div></div></div>`).join('');
+  return filtros+items+`<div id="horHistView" style="margin-top:16px"></div>`;
+}
+async function horHistRender(id){
+  let r=null; try{ const {data}=await sb.from('horarios_pub').select('*').eq('id',id).limit(1); r=(data||[])[0]; }catch(e){}
+  if(!r) return null;
+  const days=horDays(r.desde,r.hasta); if(!days.length) return null;
+  const eq=(r.equipo && !/[,+]/.test(r.equipo))? r.equipo : '';
+  return await horTeam(r.dept||'', days, eq);
+}
+async function horHistVer(id){ const box=document.getElementById('horHistView'); if(!box) return; box.innerHTML='<div class="panel" style="color:var(--suave)">Cargando…</div>'; box.innerHTML=(await horHistRender(id))||'<div class="panel">No se pudo reconstruir este horario.</div>'; box.scrollIntoView({behavior:'smooth',block:'start'}); }
+async function horHistPDF(id){ const box=document.getElementById('horHistView'); if(!box) return; const html=await horHistRender(id); if(!html){ alert('No se pudo reconstruir este horario.'); return; } box.innerHTML=html; if(box.querySelector('#horSched')) horPDF(); }
 function horAddTurnoForm(){ const box=document.getElementById('horNewTurno'); if(!box) return; box.innerHTML=box.innerHTML?'':`<div style="background:var(--gris);border-radius:9px;padding:12px;margin-top:10px;display:grid;gap:8px;max-width:420px">
     <input id="ntN" placeholder="Nombre del turno (ej: Madrugada)"><div class="row"><input id="ntI" placeholder="Hora inicio (09:00)"><input id="ntF" placeholder="Hora fin (17:00)"></div>
     <div style="display:flex;align-items:center;gap:8px"><label style="font-size:13px">Color:</label><input id="ntC" type="color" value="#cfe0f2"><button class="btn" style="padding:6px 12px;margin-left:auto" onclick="horSaveTurno()">Añadir turno</button></div></div>`; }
@@ -1847,6 +1881,8 @@ async function horGuardar(){
   if(error){alert('No se pudo guardar: '+error.message);return;}
   const empIds=[...new Set(rows.filter(r=>r.tipo_id).map(r=>r.empleado_id))];
   for(const eid of empIds){ if(eid===ME.id) continue; const nm=(rows.find(r=>r.empleado_id===eid)||{}).empleado_nombre||''; try{ await sb.from('mensajes').insert({de_id:ME.id,para_id:eid,de_nombre:PROFILE.nombre,para_nombre:nm,texto:`📅 ${PROFILE.nombre} ha publicado tu horario. Revisa tus turnos.`,leido:false}); }catch(e){} }
+  try{ const depts=[...new Set(rows.map(r=>r.dept).filter(d=>d&&d!=='—'))]; const fechas=rows.map(r=>r.fecha).filter(Boolean).sort();
+    await sb.from('horarios_pub').insert({ area:horW.area||'', dept:(horW.dept||depts[0]||''), equipo:(horW.equipos||[]).join(', '), desde:fechas[0]||horW.desde||'', hasta:fechas[fechas.length-1]||horW.hasta||'', npers:new Set(rows.filter(r=>r.tipo_id).map(r=>r.empleado_id)).size, ndias:new Set(rows.map(r=>r.fecha)).size, creado_por:ME.id, creado_nombre:PROFILE.nombre||'' }); }catch(e){}
   toast('✓ Horario publicado'); horW.gen=false; show('horarios');
 }
 async function horMine(days){
