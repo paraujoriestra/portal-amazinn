@@ -1664,7 +1664,7 @@ function isLibreTurno(t){ return /libre/i.test((t&&t.nombre)||''); }
 const HOR_VIVID=['#e23b3b','#f4b400','#2f7fe0','#d63bb5','#8b919b','#16a085','#e8771e','#7c4dff','#0ea5e9','#c026d3','#65a30d','#db2777'];
 function horVivid(t){ if(!t) return '#e5e7eb';
   const n=(t.nombre||'').toLowerCase();
-  if(/libre/.test(n)) return '#e23b3b';       // Rojo: día libre
+  if(/libre/.test(n)) return '#9ca3af';       // Gris: día libre
   if(/ma[ñn]ana/.test(n)) return '#22c55e';   // Verde: mañana
   if(/noche/.test(n)) return '#e8771e';        // Naranja: noche
   if(/medi/.test(n)) return '#f4b400';         // Amarillo: media
