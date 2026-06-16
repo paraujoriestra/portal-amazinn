@@ -1662,17 +1662,23 @@ async function turnosMap(dept){const{data}=await sb.from('turnos').select('*').e
 function isLibreTurno(t){ return /libre/i.test((t&&t.nombre)||''); }
 // Paleta viva por turno (colores marcados y distintos entre sí). Libre siempre verde.
 const HOR_VIVID=['#e23b3b','#f4b400','#2f7fe0','#d63bb5','#8b919b','#16a085','#e8771e','#7c4dff','#0ea5e9','#c026d3','#65a30d','#db2777'];
-function horVivid(t){ if(!t) return '#e5e7eb'; if(isLibreTurno(t)) return '#22c55e';
-  const list=(TURNOS_TIPO||[]).filter(x=>!isLibreTurno(x));
+function horVivid(t){ if(!t) return '#e5e7eb';
+  const n=(t.nombre||'').toLowerCase();
+  if(/libre/.test(n)) return '#e23b3b';       // Rojo: día libre
+  if(/ma[ñn]ana/.test(n)) return '#22c55e';   // Verde: mañana
+  if(/tarde/.test(n)) return '#f4b400';        // Amarillo: tarde
+  if(/noche/.test(n)) return '#2f7fe0';        // Azul: noche
+  if(/medi/.test(n)) return '#e8771e';         // Naranja: media
+  const list=(TURNOS_TIPO||[]).filter(x=>!/libre|ma[ñn]ana|tarde|noche|medi/.test((x.nombre||'').toLowerCase()));
   let idx=list.findIndex(x=>String(x.id)===String(t.id)); if(idx<0) idx=0;
   return HOR_VIVID[idx%HOR_VIVID.length];
 }
 function horTextOn(hex){ const c=horParseColor(hex); const lum=0.299*c[0]+0.587*c[1]+0.114*c[2]; return lum>150?'#1a1a1a':'#ffffff'; }
 function horLegendFrom(rows){
   const seen={};
-  (rows||[]).forEach(r=>{ if(!r||!r.tipo_id)return; const t=turnoTipo(r.tipo_id); if(!t)return; const ini=r.hora_ini||t.hora_ini, fin=r.hora_fin||t.hora_fin; const key=r.tipo_id+'|'+(ini||'')+'|'+(fin||''); if(!seen[key]) seen[key]={t,ini,fin}; });
+  (rows||[]).forEach(r=>{ if(!r||!r.tipo_id)return; const t=turnoTipo(r.tipo_id); if(!t)return; if(!seen[r.tipo_id]) seen[r.tipo_id]=t; });
   const items=Object.values(seen); if(!items.length) return '';
-  return `<div class="legend">${items.map(({t})=>`<span><i style="background:${horVivid(t)}"></i>${esc(t.nombre)}</span>`).join('')}</div>`;
+  return `<div class="legend">${items.map(t=>`<span><i style="background:${horVivid(t)}"></i>${esc(t.nombre)}</span>`).join('')}</div>`;
 }
 // Celda <td> de turno para las vistas (color vivo, texto contrastado)
 function horCellTd(r,wk){
@@ -1851,14 +1857,14 @@ async function horMine(days){
   const card=d=>{const iso=isoD(d);const t=map[iso];const tp=t?turnoTipo(t.tipo_id):null;
     const esVac=tp&&/vacacion/i.test(tp.nombre), esLibre=!tp||/libre/i.test(tp.nombre||'');
     if(esVac)vac++; else if(esLibre)libres++; else trab++;
-    const col=(tp&&esLibre)?'#bfe7c4':(tp?tp.color:'#eee'), nombre=tp?tp.nombre:'Sin turno';
+    const col=tp?horVivid(tp):'#eee', nombre=tp?tp.nombre:'Sin turno', colFg=tp?horTextOn(col):'#2a2a2a';
     const ini=(t&&t.hora_ini)||(tp&&tp.hora_ini), fin=(t&&t.hora_fin)||(tp&&tp.hora_fin);
     const hrs=ini?`${ini} – ${fin}`:(esVac?'🌴 Descanso':(esLibre?'Día libre':'—'));
     const lugar=(t&&t.lugar)?t.lugar:'';
     const wknd=(d.getDay()===0||d.getDay()===6);
     return `<div class="dia-card${wknd?' wknd':''}" style="border-top:4px solid ${tp?col:'#dcd6ca'}">
       <div class="dc-top"><span class="dc-wd">${ds[d.getDay()]}</span><span class="dc-date">${d.getDate()} ${ms[d.getMonth()]}</span></div>
-      <div class="dc-shift" style="background:${col};color:#2a2a2a">${esc(nombre)}</div>
+      <div class="dc-shift" style="background:${col};color:${colFg}">${esc(nombre)}</div>
       <div class="dc-hrs">${esc(hrs)}</div>
       ${lugar?`<div class="dc-loc">📍 ${esc(lugar)}</div>`:'<div class="dc-loc" style="opacity:.35">—</div>'}</div>`;
   };
@@ -1871,7 +1877,7 @@ async function horMine(days){
       <div class="mh-head"><div><div class="mh-name">${esc(PROFILE.nombre||'')}</div><div class="mh-meta">${esc(PROFILE.dept||PROFILE.area||'')} · ${lblD(days[0])} → ${lblD(days[days.length-1])}</div></div><img src="${LOGO}" alt="Amazinn Places" style="height:30px"></div>
       <div class="mh-summary"><span><b>${trab}</b> días de trabajo</span><span><b>${libres}</b> libres</span>${vac?`<span><b>${vac}</b> vacaciones</span>`:''}</div>
       ${weeks}
-      <div class="mh-legend">${TURNOS_TIPO.map(t=>`<span><i style="background:${t.color}"></i>${esc(t.nombre)}</span>`).join('')}</div>
+      <div class="mh-legend">${TURNOS_TIPO.map(t=>`<span><i style="background:${horVivid(t)}"></i>${esc(t.nombre)}</span>`).join('')}</div>
     </div>
     <div style="margin-top:16px"><button class="btn" onclick="descargarHorarioPDF()">📥 Descargar PDF</button></div>`;
 }
