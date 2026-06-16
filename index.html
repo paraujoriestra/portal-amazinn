@@ -3371,7 +3371,13 @@ function tplCancel(){ tplFormOpen=false; tplEditId=null; tplDraft={}; show('mens
 function tplFormProp(){ const p=(document.getElementById('tProp')||{}).value||''; const sel=document.getElementById('tUni'); if(!sel)return; const entries=TPL_UNI.filter(u=>u.prop===p); const whole=p&&entries.length===1&&entries[0].kind==='e'; if(!p||whole){ sel.innerHTML='<option value="">Todas las unidades</option>'; sel.disabled=true; } else { sel.disabled=false; sel.innerHTML='<option value="">Todas las unidades</option>'+entries.filter(u=>u.kind==='u').map(u=>`<option value="${u.id}">${esc(u.nombre)}</option>`).join(''); } }
 function canMsg(){return PROFILE.dept==='Atención al cliente'||isAdmin();}
 function canMsgEdit(){return isAdmin()||(PROFILE.role==='responsable'&&PROFILE.dept==='Atención al cliente');}
-function fillTpl(c,u){return (c||'').split('{apartamento}').join(u.nombre).split('{numero}').join(u.numero).split('{codigo}').join(u.codigo).split('{wifi}').join(u.wifi||'').split('{propiedad}').join(u.prop);}
+function fillTpl(c,u){return (c||'')
+  .split('{propiedad}').join(u.prop||'')
+  .split('{NºUnidad}').join(u.nombre||'').split('{NoUnidad}').join(u.nombre||'')
+  .split('{NºPlanta}').join(u.planta||'').split('{NoPlanta}').join(u.planta||'')
+  .split('{código}').join(u.codigo||'')
+  /* compatibilidad con variables antiguas */
+  .split('{apartamento}').join(u.nombre||'').split('{numero}').join(u.numero||'').split('{codigo}').join(u.codigo||'').split('{wifi}').join(u.wifi||'');}
 async function auditLog(accion,tipo){await sb.from('auditoria').insert({user_nombre:PROFILE.nombre,accion,tipo});}
 function setMsgTab(t){msgTab=t;tplFormOpen=false;show('mensajes');}
 async function pageMensajes(){
@@ -3457,7 +3463,7 @@ async function tplForm(){
   return `<div class="panel" style="max-width:760px"><form class="box" onsubmit="return tplSave(event)" style="max-width:none">
     <div class="row"><div><label>Título</label><input id="tT" required value="${t.titulo?esc(t.titulo):''}"></div><div><label>Categoría</label><select id="tC">${TPL_CATS.map(c=>`<option ${t.cat===c?'selected':''}>${c}</option>`).join('')}</select></div></div>
     <label>Contenido</label><textarea id="tB" rows="6" required>${t.cuerpo?esc(t.cuerpo):''}</textarea>
-    <small style="color:var(--suave)">Variables: {apartamento} {numero} {codigo} {wifi} {propiedad}</small>
+    <small style="color:var(--suave)">Variables: {propiedad} {NºUnidad} {NºPlanta} {código} {wifi}</small>
     <div class="row" style="margin-top:10px"><div><label>Propiedad</label><select id="tProp" onchange="tplFormProp()">${propOpts}</select></div>
     <div><label>Nº / unidad <small style="color:var(--suave);font-weight:400">(vacío = propiedad completa)</small></label><select id="tUni" ${selWhole?'disabled':''}>${uniOpts}</select></div></div>
     <div style="margin-top:14px"><button class="btn" type="submit">${tplEditId?'Guardar':'Crear plantilla'}</button> <button class="btn ghost" type="button" onclick="tplCancel()">Cancelar</button></div></form></div>`;
