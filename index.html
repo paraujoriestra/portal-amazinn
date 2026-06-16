@@ -773,10 +773,14 @@
   /* ===== OVERRIDE MÓVIL (al final para ganar al orden del CSS) ===== */
   @media(max-width:760px){
     .layout{display:block}                 /* main a ancho completo */
-    nav.side{position:fixed;left:0;top:60px;bottom:0;height:auto;min-height:0;
+    /* Respeta la barra de estado / notch del móvil (app instalada con viewport-fit=cover) */
+    header.top{padding-top:env(safe-area-inset-top);height:calc(60px + env(safe-area-inset-top));box-sizing:border-box}
+    header.top #logoHdr{height:30px}
+    nav.side{position:fixed;left:0;top:calc(60px + env(safe-area-inset-top));bottom:0;height:auto;min-height:0;
       width:84vw;max-width:300px;z-index:45;transform:translateX(-100%);
       transition:transform .25s ease;box-shadow:0 0 40px rgba(0,0,0,.25);overflow-y:auto}
     body.nav-open nav.side{transform:translateX(0)}
+    body.nav-open .nav-backdrop{inset:calc(60px + env(safe-area-inset-top)) 0 0 0}
     main{flex:none;width:100%;max-width:100%;box-sizing:border-box;padding:16px 14px;margin-left:0}
   }
 
