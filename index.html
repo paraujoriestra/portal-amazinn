@@ -1666,9 +1666,9 @@ function horVivid(t){ if(!t) return '#e5e7eb';
   const n=(t.nombre||'').toLowerCase();
   if(/libre/.test(n)) return '#e23b3b';       // Rojo: día libre
   if(/ma[ñn]ana/.test(n)) return '#22c55e';   // Verde: mañana
-  if(/tarde/.test(n)) return '#f4b400';        // Amarillo: tarde
-  if(/noche/.test(n)) return '#2f7fe0';        // Azul: noche
-  if(/medi/.test(n)) return '#e8771e';         // Naranja: media
+  if(/noche/.test(n)) return '#e8771e';        // Naranja: noche
+  if(/medi/.test(n)) return '#f4b400';         // Amarillo: media
+  if(/tarde/.test(n)) return '#2f7fe0';        // Azul: tarde
   const list=(TURNOS_TIPO||[]).filter(x=>!/libre|ma[ñn]ana|tarde|noche|medi/.test((x.nombre||'').toLowerCase()));
   let idx=list.findIndex(x=>String(x.id)===String(t.id)); if(idx<0) idx=0;
   return HOR_VIVID[idx%HOR_VIVID.length];
