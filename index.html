@@ -3657,13 +3657,13 @@ function cpCard(c){
 }
 function cpNueva(){ cpEditId=null; cpDraftFiles=[]; cpFormOpen=true; show('cotiprov'); }
 function cpEditar(id){ cpEditId=id; const c=CP.find(x=>String(x.id)===String(id)); cpDraftFiles=(c&&c.archivos)?c.archivos.slice():[]; cpFormOpen=true; show('cotiprov'); }
-function cpAddFiles(input){ const fs=input.files||[]; for(const f of fs){ cpDraftFiles.push({nombre:f.name, file:f, tipo:f.type}); } show('cotiprov'); }
-function cpDelFile(i){ cpDraftFiles.splice(i,1); show('cotiprov'); }
+function cpChipsHTML(){ return cpDraftFiles.map((f,i)=>`<span style="display:inline-flex;align-items:center;gap:6px;font-size:12.5px;background:var(--gris);border:1px solid var(--gris2);border-radius:20px;padding:5px 11px">📎 ${esc(f.nombre)} <span style="cursor:pointer;color:var(--rojo);font-weight:700" onclick="cpDelFile(${i})">✕</span></span>`).join(' '); }
+function cpAddFiles(input){ const fs=input.files||[]; for(const f of fs){ cpDraftFiles.push({nombre:f.name, file:f, tipo:f.type}); } const el=document.getElementById('cpChips'); if(el) el.innerHTML=cpChipsHTML(); try{input.value='';}catch(e){} }
+function cpDelFile(i){ cpDraftFiles.splice(i,1); const el=document.getElementById('cpChips'); if(el) el.innerHTML=cpChipsHTML(); }
 function cpForm(){
   const c=cpEditId?(CP.find(x=>String(x.id)===String(cpEditId))||{}):{};
   const ss='width:100%;padding:10px 12px;border:1px solid var(--gris2);border-radius:8px;font-family:inherit;font-size:14px';
   const provName=c.proveedor_nombre||cpProvName(c.proveedor_id)||'';
-  const chips=cpDraftFiles.map((f,i)=>`<span style="display:inline-flex;align-items:center;gap:6px;font-size:12.5px;background:var(--gris);border:1px solid var(--gris2);border-radius:20px;padding:5px 11px">📎 ${esc(f.nombre)} <span style="cursor:pointer;color:var(--rojo);font-weight:700" onclick="cpDelFile(${i})">✕</span></span>`).join(' ');
   const incOpts=['<option value="">— Ninguna —</option>'].concat(CP_INC.slice(0,80).map(i=>`<option value="${i.id}" ${String(c.ref_id)===String(i.id)?'selected':''}>${esc((i.edificio||'')+' '+(i.unidad||'')+' · '+(i.descripcion||'').slice(0,40))}</option>`)).join('');
   return `<div style="margin-bottom:12px"><button class="btn ghost" onclick="cpFormOpen=false;show('cotiprov')">← Volver</button></div>
     <div class="panel" style="max-width:720px"><h2 style="margin-top:0">${cpEditId?'Editar cotización':'Subir cotización de proveedor'}</h2>
@@ -3674,7 +3674,7 @@ function cpForm(){
       <div class="row"><div><label>Importe ($)</label><input id="cpImporte" type="number" min="0" step="0.01" value="${esc(c.importe!=null?c.importe:'')}" style="${ss}"></div><div><label>Vincular a incidencia (opcional)</label><select id="cpRef" style="${ss}">${incOpts}</select></div></div>
       <label>Notas</label><textarea id="cpNotas" rows="2" style="${ss}">${esc(c.notas||'')}</textarea>
       <label>Archivos (PDF, fotos…)</label><input type="file" multiple onchange="cpAddFiles(this)" style="${ss}">
-      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">${chips}</div>
+      <div id="cpChips" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">${cpChipsHTML()}</div>
       <div style="margin-top:14px"><button class="btn" type="submit">${cpEditId?'Guardar cambios':'Guardar cotización'}</button> <button class="btn ghost" type="button" onclick="cpFormOpen=false;show('cotiprov')">Cancelar</button></div>
     </form></div>`;
 }
