@@ -3557,6 +3557,15 @@ function trfEnsureStyle(){ if(document.getElementById('trfStyle'))return; const 
 .trf-acts .btn,.trf-acts select{padding:6px 11px!important;font-size:11px!important;min-height:0!important}
 .trf-fbtn{padding:6px 13px;border:1px solid var(--gris2);border-radius:20px;background:#fff;font-size:12px;font-weight:600;cursor:pointer;color:var(--suave)}
 .trf-fbtn.on{background:var(--azul);color:#fff;border-color:var(--azul)}
+@media(max-width:760px){
+  #trfBoard{grid-template-columns:1fr!important}
+  .trf-acts{gap:8px}
+  .trf-acts .btn,.trf-acts select{min-height:44px!important;font-size:13px!important;padding:10px 12px!important}
+  .trf-acts .btn{flex:1 1 auto}
+  .trf-fbtn{min-height:40px;padding:8px 14px}
+  .trf-card .trf-h b{font-size:15px}
+  .trf-grid div{font-size:13px}
+}
 `; document.head.appendChild(s); }
 const TRF_EST={pendiente:{lbl:'Pendiente de asignar',c:'#b9770e',b:'#fdf3e2'},asignado:{lbl:'Asignado',c:'#2563aa',b:'#e7eff8'},realizado:{lbl:'Viaje realizado',c:'#1e8a5a',b:'#e4f5ec'},cancelado:{lbl:'Cancelado',c:'#7f8c8d',b:'#eef0f2'}};
 function trfCanManage(){ return isAdmin()||PROFILE.role==='direccion'||PROFILE.dept==='Atención al cliente'; }
@@ -3761,15 +3770,15 @@ function trfLiquidaciones(){
   const tbody=rows.length?rows.map(r=>`<tr><td><b>${esc(r.nombre)}</b></td><td style="text-align:center">${r.n}</td><td style="text-align:right">${trfMoney(r.n?r.total/r.n:0)}</td><td style="text-align:right"><b>${trfMoney(r.total)}</b></td></tr>`).join(''):`<tr><td colspan="4" style="color:var(--suave)">No hay viajes realizados en este periodo.</td></tr>`;
   return filtros+`<div class="panel"><h2 style="margin-top:0">Comisión por conductor</h2>
     <p style="font-size:12.5px;color:var(--suave);margin:-4px 0 10px">Viajes realizados en el periodo y comisión que cada conductor debe pagar a Amazinn.</p>
-    <table class="asg-table"><thead><tr><th>Conductor</th><th style="text-align:center">Viajes</th><th style="text-align:right">Comisión/viaje</th><th style="text-align:right">Total comisión</th></tr></thead>
-    <tbody>${tbody}</tbody></table></div>`;
+    <div class="asg-scroll"><table class="asg-table"><thead><tr><th>Conductor</th><th style="text-align:center">Viajes</th><th style="text-align:right">Comisión/viaje</th><th style="text-align:right">Total comisión</th></tr></thead>
+    <tbody>${tbody}</tbody></table></div></div>`;
 }
 function trfConductores(){
   const rows=TRF_COND.map(c=>`<tr><td><b>${esc(c.nombre)}</b></td><td>${esc(c.telefono||'')}</td><td style="text-align:right">${trfMoney(c.comision)}</td>
     <td class="asg-act"><button onclick="trfCondEdit('${c.id}')" title="Editar comisión">✏️</button></td></tr>`).join('')||`<tr><td colspan="4" style="color:var(--suave)">Aún no hay conductores. Crea un usuario y márcalo como «Conductor» en Usuarios.</td></tr>`;
   return `<div class="panel" style="background:#eef5ff;border:1px solid #d7e6fb;margin-bottom:12px;font-size:13px">ℹ️ Los conductores se crean como usuarios marcados como <b>Conductor</b> (en Usuarios); entran con su cuenta y solo ven el área Transfer. Aquí ajustas su <b>comisión fija por viaje</b>.</div>
     <div class="panel"><h2 style="margin-top:0">Conductores (${TRF_COND.length})</h2>
-    <table class="asg-table"><thead><tr><th>Nombre</th><th>Teléfono</th><th style="text-align:right">Comisión/viaje</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`;
+    <div class="asg-scroll"><table class="asg-table"><thead><tr><th>Nombre</th><th>Teléfono</th><th style="text-align:right">Comisión/viaje</th><th></th></tr></thead><tbody>${rows}</tbody></table></div></div>`;
 }
 async function trfCondEdit(id){ const c=TRF_COND.find(x=>String(x.id)===String(id)); if(!c)return; const v=prompt('Comisión fija por viaje (USD) que '+c.nombre+' paga a Amazinn:', (c.comision!=null?c.comision:'')); if(v===null)return; const n=parseFloat(v); if(isNaN(n)){alert('Introduce un número válido.');return;} const {error}=await sb.from('profiles').update({comision:n}).eq('id',id); if(error){alert(error.message);return;} show('transfer'); }
 
