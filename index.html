@@ -1277,7 +1277,7 @@ async function loadNotifs(){
   NOTIF_READ=new Set((r||[]).map(x=>x.notif_id));
   refreshBell();
 }
-function visNotifs(){return NOTIFS.filter(n=>n.dept==='*'||n.dept===PROFILE.dept||isAdmin());}
+function visNotifs(){return NOTIFS.filter(n=> isAdmin()||!n.dept||n.dept==='*'||String(n.dept).split('|').map(s=>s.trim()).includes(PROFILE.dept));}
 function refreshBell(){const d=document.getElementById('bellDot');if(!d)return;const n=visNotifs().filter(x=>!NOTIF_READ.has(x.id)).length;d.textContent=n;d.style.display=n?'block':'none';}
 function toggleBell(e){
   if(e)e.stopPropagation();
@@ -1326,13 +1326,28 @@ function scopeSelects(ids,cur){ cur=cur||{};
     <div><label>Departamento</label><select id="${ids.d}"><option value="*">Todos</option>${DEPTS.map(d=>`<option ${(cur.dept||cur.dirigido)===d?'selected':''}>${esc(d)}</option>`).join('')}</select></div>
     <div><label>Equipo</label><select id="${ids.e}"><option value="">Cualquiera</option>${CAT.equipos.map(e=>`<option ${cur.equipo===e?'selected':''}>${esc(e)}</option>`).join('')}</select></div></div>`;
 }
-function inScopeFor(o,u){ const dept=(o.dirigido!==undefined&&o.dirigido!==null)?o.dirigido:o.dept;
-  const okA=!o.area||o.area===u.area; const okD=(dept==='*'||!dept)||dept===u.dept; const okE=!o.equipo||o.equipo===u.equipo;
-  return okA&&okD&&okE; }
+function scopeMatch(stored,val){ if(stored==null||stored===''||stored==='*') return true; const arr=String(stored).split('|').map(s=>s.trim()).filter(Boolean); return arr.length? arr.includes(val||'') : true; }
+function inScopeFor(o,u){ const dept=(o.dirigido!==undefined&&o.dirigido!==null)?o.dirigido:o.dept; const ueq=(u.org_equipo||u.equipo||'');
+  return scopeMatch(o.area,u.area)&&scopeMatch(dept,u.dept)&&scopeMatch(o.equipo,ueq); }
 function inScope(o){ return isAdmin()||inScopeFor(o,PROFILE); }
+function scopeFmt(v){ return String(v).split('|').map(s=>s.trim()).filter(Boolean).join(', '); }
 function scopeLabel(o){ const dept=(o.dirigido!==undefined&&o.dirigido!==null)?o.dirigido:o.dept; const p=[];
-  if(o.area)p.push(o.area); if(dept&&dept!=='*')p.push(dept); if(o.equipo)p.push('Equipo '+o.equipo);
+  if(o.area)p.push(scopeFmt(o.area)); if(dept&&dept!=='*')p.push(scopeFmt(dept)); if(o.equipo)p.push('Equipo '+scopeFmt(o.equipo));
   return p.length?p.join(' · '):'Toda la empresa'; }
+let comScA=[], comScD=[], comScE=[], SCOPE_EQ={};
+function comCkGroup(opts,onch,sel){ return opts.length? opts.map(o=>`<label style="display:inline-flex;align-items:center;gap:6px;font-size:13px;background:#fff;border:1px solid var(--gris2);border-radius:20px;padding:5px 11px;cursor:pointer"><input type="checkbox" value="${esc(o)}" ${sel.includes(o)?'checked':''} onchange="${onch}">${esc(o)}</label>`).join('') : '<span style="color:var(--suave);font-size:12.5px">— sin opciones para esta selección —</span>'; }
+function comDeptsForAreas(){ if(!comScA.length) return DEPTS.slice(); const s=new Set(); (CAT.deptos||[]).forEach(d=>{ if(comScA.includes(d.area)) s.add(d.nombre); }); return [...s].sort((a,b)=>a.localeCompare(b)); }
+function comEquiposForAreas(){ if(!comScA.length) return (CAT.equipos||[]).slice(); const s=new Set(); comScA.forEach(a=>{ (SCOPE_EQ[a]||[]).forEach(e=>s.add(e)); }); return [...s].sort((a,b)=>a.localeCompare(b)); }
+function comScReadDOM(){ const rd=id=>{const b=document.getElementById(id);return b?[...b.querySelectorAll('input:checked')].map(c=>c.value):[];}; comScA=rd('comScAreaBox'); comScD=rd('comScDeptBox'); comScE=rd('comScEqBox'); }
+function comScAreaChange(){ comScReadDOM(); const deps=comDeptsForAreas(); comScD=comScD.filter(d=>deps.includes(d)); const eqs=comEquiposForAreas(); comScE=comScE.filter(e=>eqs.includes(e)); const db=document.getElementById('comScDeptBox'); if(db) db.innerHTML=comCkGroup(deps,'',comScD); const eb=document.getElementById('comScEqBox'); if(eb) eb.innerHTML=comCkGroup(eqs,'',comScE); }
+function comScopeInit(c){ comScA=c&&c.area? String(c.area).split('|').map(s=>s.trim()).filter(Boolean):[]; comScD=(c&&c.dirigido&&c.dirigido!=='*')? String(c.dirigido).split('|').map(s=>s.trim()).filter(Boolean):[]; comScE=c&&c.equipo? String(c.equipo).split('|').map(s=>s.trim()).filter(Boolean):[]; }
+function comScopeHTML(){
+  return `<div style="display:grid;gap:11px;margin-bottom:8px">
+    <div><div style="font-size:12.5px;color:var(--suave);font-weight:600;margin-bottom:5px">🏢 Área <small style="font-weight:400">· puedes marcar varias (ninguna = todas)</small></div><div id="comScAreaBox" style="display:flex;flex-wrap:wrap;gap:6px">${comCkGroup(CAT.areas||[],'comScAreaChange()',comScA)}</div></div>
+    <div><div style="font-size:12.5px;color:var(--suave);font-weight:600;margin-bottom:5px">🗂️ Departamento <small style="font-weight:400">· según el área (ninguno = todos)</small></div><div id="comScDeptBox" style="display:flex;flex-wrap:wrap;gap:6px">${comCkGroup(comDeptsForAreas(),'',comScD)}</div></div>
+    <div><div style="font-size:12.5px;color:var(--suave);font-weight:600;margin-bottom:5px">👥 Equipo <small style="font-weight:400">· (ninguno = cualquiera)</small></div><div id="comScEqBox" style="display:flex;flex-wrap:wrap;gap:6px">${comCkGroup(comEquiposForAreas(),'',comScE)}</div></div>
+  </div>`;
+}
 /* Presencia (última conexión) */
 async function ping(){ try{ await sb.from('profiles').update({last_seen:new Date().toISOString()}).eq('id',ME.id); }catch(e){} }
 function isOnline(iso){ return iso ? (Date.now()-new Date(iso).getTime())<120000 : false; }
@@ -1531,10 +1546,11 @@ async function pageComunicados(){
   const { data:coms, error } = await sb.from('comunicados').select('*').order('created_at',{ascending:false});
   if(error){ document.getElementById('main').innerHTML='<div class="page-title">Comunicados</div><div class="panel">Error al cargar: '+error.message+'</div>'; return; }
   const { data:lect } = await sb.from('comunicado_lecturas').select('comunicado_id,user_id');
-  const { data:profs } = await sb.from('profiles').select('id,nombre,dept,area,equipo,color,foto,cargo');
+  const { data:profs } = await sb.from('profiles').select('id,nombre,dept,area,equipo,org_equipo,color,foto,cargo');
   const { data:adjs } = await sb.from('comunicado_adjuntos').select('*');
   CC.coms=(coms||[]).filter(inScope);
   CC.lect=lect||[]; CC.pr=profs||[]; CC.adj=adjs||[];
+  SCOPE_EQ={}; (profs||[]).forEach(p=>{ const e=p.org_equipo||p.equipo; if(p.area&&e){ (SCOPE_EQ[p.area]=SCOPE_EQ[p.area]||[]); if(!SCOPE_EQ[p.area].includes(e)) SCOPE_EQ[p.area].push(e); } });
   renderComu();
 }
 function comLeido(c){ return CC.lect.some(l=>l.comunicado_id===c.id && l.user_id===ME.id); }
@@ -1632,14 +1648,14 @@ function comSetFilter(f){comFilter=f; renderComu();}
 function comSetQuery(v){comQuery=v; const el=document.getElementById('comInboxList'); if(el) el.innerHTML=comInboxItemsHTML();}
 function comSelect(id){comSel=id; renderComu();}
 let comFormOpen=false, comEditId=null;
-function comFormHTML(c){ c=c||{};
+function comFormHTML(c){ c=c||{}; comScopeInit(c);
   const niv=n=>`<option value="${n}" ${(c.nivel||'info')===n?'selected':''}>`;
   return `<div class="panel" style="max-width:760px"><h2>${c.id?'✏️ Editar comunicado':'✍️ Nuevo comunicado'}</h2>
       <form class="box" onsubmit="return createCom(event)" style="max-width:none">
         <label>Título</label><input id="cTit" required value="${esc(c.titulo||'')}">
         <label style="font-weight:700;color:var(--azul)">Dirigido a (alcance)</label>
-        ${scopeSelects({a:'cArea',d:'cDir',e:'cEq'},{area:c.area,dirigido:c.dirigido,equipo:c.equipo})}
-        <div style="font-size:12px;color:var(--suave);margin:-4px 0 12px">Déjalo en "Todas / Todos / Cualquiera" para toda la empresa, o acota por área, departamento y/o equipo.</div>
+        ${comScopeHTML()}
+        <div style="font-size:12px;color:var(--suave);margin:-4px 0 12px">Marca varias áreas/departamentos/equipos si quieres. Sin marcar nada = toda la empresa. El área filtra los departamentos y equipos disponibles.</div>
         <label>Nivel</label><select id="cNiv" style="max-width:260px">${niv('info')}Informativo</option>${niv('imp')}Importante</option>${niv('urg')}Urgente</option></select>
         <label>Contenido</label><textarea id="cCpo" rows="5" required>${esc(c.cuerpo||'')}</textarea>
         <label>📅 Asociar a una fecha del calendario (opcional)</label>
@@ -1656,11 +1672,12 @@ function comCancelForm(){ comFormOpen=false; comEditId=null; const b=document.ge
 function comRowMenu(e,id){ e.stopPropagation(); let m=document.getElementById('rowMenuPop'); if(!m){ m=document.createElement('div'); m.id='rowMenuPop'; m.className='rowmenu-pop'; document.body.appendChild(m); } m.innerHTML=`<button onclick="closeRowMenu();comEdit(${id})">✏️ Editar</button><button onclick="closeRowMenu();deleteCom(${id})">🗑️ Eliminar</button>`; const r=e.currentTarget.getBoundingClientRect(); m.style.display='flex'; m.style.top=(r.bottom+window.scrollY+4)+'px'; m.style.left=(Math.max(8,Math.min(r.left,window.innerWidth-168))+window.scrollX)+'px'; setTimeout(()=>document.addEventListener('click',closeRowMenu),0); }
 async function createCom(e){
   e.preventDefault();
+  comScReadDOM();
   const base={ titulo:document.getElementById('cTit').value.trim(), cuerpo:document.getElementById('cCpo').value.trim(),
     nivel:document.getElementById('cNiv').value,
-    dirigido:document.getElementById('cDir').value||'*',
-    area:(document.getElementById('cArea').value||null),
-    equipo:(document.getElementById('cEq').value||null),
+    dirigido:(comScD.length?comScD.join('|'):'*'),
+    area:(comScA.length?comScA.join('|'):null),
+    equipo:(comScE.length?comScE.join('|'):null),
     fecha_evento:(document.getElementById('cFecha').value||null) };
   const btn = e.target.querySelector('button[type=submit]');
   if(comEditId){
