@@ -5762,7 +5762,7 @@ async function pagePermisos(){
 function val(id){const el=document.getElementById(id);return el?el.value.trim():'';}
 async function delRow(table,id,page){if(!confirm('¿Eliminar este registro?'))return;const{error}=await sb.from(table).delete().eq('id',id);if(error){alert('Error: '+error.message);return;}show(page);}
 
-function esc(t){return (t||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+function esc(t){return (t==null?'':''+t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
 </script>
 </body>
 </html>
