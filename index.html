@@ -1173,6 +1173,7 @@ const NAV=[
   {id:'registros',ic:'🆕',t:'Registros pendientes', roles:['admin']},
   {id:'admin',ic:'⚙️',t:'Usuarios', roles:['admin']},
   {id:'catalogos',ic:'🗂️',t:'Catálogos', owner:true},
+  {id:'backup',ic:'💾',t:'Copia de seguridad', owner:true},
 ];
 const CAN_MANAGE=['responsable','direccion','admin','propietario'];
 let supTab='electricidad', navOpen=null;
@@ -1236,6 +1237,7 @@ const ICONS={
   mensajes:'<path d="M21 15a2 2 0 0 1-2 2H8l-4 4V5a2 2 0 0 1 2-2h13a2 2 0 0 1 2 2z"/>',
   bitacora:'<rect x="5" y="4" width="14" height="17" rx="1"/><path d="M9 4V3h6v1M8 10h8M8 14h8M8 18h5"/>',
   transfer:'<path d="M3 13l2-5a2 2 0 0 1 1.9-1.4h6.2A2 2 0 0 1 17 8l2 5"/><path d="M3 13h18v4a1 1 0 0 1-1 1h-1a2 2 0 0 1-4 0H9a2 2 0 0 1-4 0H4a1 1 0 0 1-1-1z"/><circle cx="7" cy="17" r="1.3"/><circle cx="17" cy="17" r="1.3"/>',
+  backup:'<path d="M5 4h11l3 3v13H5z"/><path d="M8 4v5h7"/><circle cx="12" cy="14" r="3"/>',
   marca:'<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8" cy="9" r="1.6"/><path d="M3 17l5-4 4 3 3-2 6 5"/>',
   carteles:'<rect x="4" y="4" width="16" height="11" rx="1"/><path d="M12 15v5M8 20h8"/>',
   tutoriales:'<path d="M2 9l10-5 10 5-10 5z"/><path d="M6 11v4c0 1.5 3 3 6 3s6-1.5 6-3v-4"/>',
@@ -1404,6 +1406,7 @@ function show(id){
   else if(id==='catalogos'){ ld('<div class="page-title">Catálogos</div><div class="page-sub">Cargando…</div>'); pageCatalogos(); }
   else if(id==='mensajes'){ ld('<div class="page-title">Mensajes y plantillas</div><div class="page-sub">Cargando…</div>'); pageMensajes(); }
   else if(id==='transfer'){ ld('<div class="page-title">Transfer</div><div class="page-sub">Cargando…</div>'); pageTransfer(); }
+  else if(id==='backup'){ ld('<div class="page-title">Copia de seguridad</div><div class="page-sub">Cargando…</div>'); pageBackup(); }
   else if(id==='bitacora'){ ld('<div class="page-title">Bitácora</div><div class="page-sub">Cargando…</div>'); pageBitacora(); }
   else if(id==='cierres'){ m.innerHTML='<div class="page-title">Cierres de caja</div><div class="panel" style="color:var(--suave)">🧾 Sección en construcción. Estará disponible próximamente.</div>'; }
   else if(id==='formacion'){ ld('<div class="page-title">Formaciones</div><div class="page-sub">Cargando…</div>'); pageFormacion(); }
@@ -1455,7 +1458,16 @@ async function pageInicio(){
   const bdNext=(bd||[]).map(x=>{const a=(x.cumple||'').split('-');const mo=+a[1],da=+a[2];let nx=new Date(now.getFullYear(),mo-1,da);if(nx<new Date(now.getFullYear(),now.getMonth(),now.getDate()))nx=new Date(now.getFullYear()+1,mo-1,da);return{nombre:x.nombre,mo,da,dias:(nx-new Date(now.getFullYear(),now.getMonth(),now.getDate()))/864e5};}).sort((a,b)=>a.dias-b.dias).slice(0,3);
   const kudos=(kud||[]).map(k=>`<div style="font-size:13.5px;padding:7px 0;border-bottom:1px solid var(--gris)"><b>${esc(k.de_nombre)}</b> → <b style="color:var(--acento)">${esc(k.para_nombre)}</b>: ${esc(k.texto)}</div>`).join('')||'<div style="color:var(--suave);font-size:13.5px">Aún no hay reconocimientos.</div>';
   const deptBlock=await inicioDeptBlock(p);
+  let bkBanner='';
+  if(isOwner()){
+    try{ const {data:lb}=await sb.from('app_backups').select('at').order('at',{ascending:false}).limit(1);
+      const last=lb&&lb[0]?new Date(lb[0].at):null;
+      const dd2=last?Math.floor((Date.now()-last.getTime())/864e5):999;
+      if(dd2>=7) bkBanner=`<div style="background:#fff4e0;border:1px solid #f0c98a;border-radius:10px;padding:12px 15px;margin-bottom:14px;display:flex;gap:12px;align-items:center;flex-wrap:wrap"><span style="font-size:13.5px">💾 ${last?`Han pasado <b>${dd2} días</b> desde tu última copia de seguridad.`:'Aún no has descargado ninguna copia de seguridad.'} Conviene descargar una copia cada semana.</span><button class="btn" style="margin-left:auto" onclick="show('backup')">Descargar copia ahora</button></div>`;
+    }catch(e){}
+  }
   document.getElementById('main').innerHTML=`
+    ${bkBanner}`+`
     <div style="display:flex;align-items:center;gap:18px;margin-bottom:18px">
       ${av(p.nombre,p.color,88,p.foto)}
       <div>
@@ -3532,6 +3544,56 @@ async function saveCodes(){
     if(pl!==(u.planta||'')||cod!==(u.codigo||'')){const tbl=u.kind==='e'?'mant_edificios':'mant_unidades';await sb.from(tbl).update({planta:pl,codigo:cod}).eq('id',u.raw);
       if(cod!==(u.codigo||''))auditLog(`Cambió el código de acceso de ${u.nombre} (${u.codigo}→${cod})`,'codigo');n++;}}
   toast(n?`✓ ${n} cambio(s) guardados`:'Sin cambios');show('mensajes');
+}
+
+/* ---------------- COPIA DE SEGURIDAD (solo propietario) ---------------- */
+const TABLES_BACKUP=['profiles','areas','departamentos','posiciones','equipos','ubicaciones','mant_edificios','mant_unidades','mant_incidencias','mant_fotos','mant_preventivo','limpieza_pub','limpieza_pub_unidades','limpieza_pub_comunes','limpieza_trabajadores','limpieza_unidades_cat','limpieza_areas_cat','transfers','bitacoras','bitacora_pendientes','horarios_pub','turnos','turnos_tipo','solicitudes','fichajes','comunicados','comunicado_lecturas','comunicado_adjuntos','mensajes','plantillas','accesos','notificaciones','notif_leidas','proveedores','propietarios','suministros','sugerencias','kudos','formaciones','videos','eventos','cotizaciones','auditoria'];
+async function pageBackup(){
+  if(!isOwner()){ document.getElementById('main').innerHTML='<div class="page-title">Copia de seguridad</div><div class="panel" style="color:var(--suave)">Acceso restringido al propietario.</div>'; return; }
+  let log=[]; try{ const {data}=await sb.from('app_backups').select('*').order('at',{ascending:false}).limit(12); log=data||[]; }catch(e){}
+  const last=log[0]?new Date(log[0].at):null;
+  const days=last?Math.floor((Date.now()-last.getTime())/864e5):null;
+  const rowsHTML=log.length?log.map(b=>`<tr><td>${new Date(b.at).toLocaleString('es-ES')}</td><td>${esc(b.by_nombre||'')}</td><td style="text-align:center">${b.n_tablas||''}</td><td style="text-align:right">${b.n_filas||''}</td></tr>`).join(''):'<tr><td colspan="4" style="color:var(--suave)">Aún no hay copias registradas.</td></tr>';
+  const aviso = !last
+    ? `<div style="background:#fff4e0;border:1px solid #f0c98a;border-radius:10px;padding:11px 14px;margin-bottom:14px;font-size:13.5px">Aún no has descargado ninguna copia. Te recomendamos hacerlo cada semana.</div>`
+    : (days>=7?`<div style="background:#fff4e0;border:1px solid #f0c98a;border-radius:10px;padding:11px 14px;margin-bottom:14px;font-size:13.5px">⏰ Han pasado <b>${days} días</b> desde la última copia. Conviene descargar una ahora.</div>`:'');
+  document.getElementById('main').innerHTML=`<div class="page-title">Copia de seguridad</div><div class="page-sub">Descarga una copia completa de todos los datos del portal. Solo visible para el propietario.</div>
+    ${aviso}
+    <div class="panel"><h2 style="margin-top:0">Descargar copia ahora</h2>
+      <p style="font-size:13px;color:var(--suave)">Genera un archivo <b>Excel</b> con una hoja por cada tabla del sistema (incidencias, transfers, bitácoras, horarios, usuarios, cotizaciones, etc.). Guárdalo en tu ordenador o súbelo a Google Drive.</p>
+      <button class="btn" id="bkBtn" onclick="doBackup()">💾 Descargar copia completa (Excel)</button>
+      ${last?`<div style="font-size:12.5px;color:var(--suave);margin-top:10px">Última copia descargada: <b>${last.toLocaleString('es-ES')}</b></div>`:''}
+    </div>
+    <div class="panel"><h2 style="margin-top:0">📌 Cómo funciona la protección de tus datos</h2>
+      <div style="font-size:13px;line-height:1.6">
+        <div>🟢 <b>Automático (servidor):</b> Supabase (plan Pro) guarda copias automáticas <b>diarias</b> de toda la base de datos, con 7 días de retención.</div>
+        <div>🟡 <b>Aviso semanal:</b> cada vez que entres al portal, si han pasado más de 7 días desde tu última descarga, verás un recordatorio en el inicio.</div>
+        <div>🔵 <b>Copia local:</b> con el botón de arriba descargas tu propia copia en Excel para guardarla donde quieras.</div>
+      </div>
+    </div>
+    <div class="panel"><h2 style="margin-top:0">Historial de copias descargadas</h2>
+      <div class="asg-scroll"><table class="asg-table"><thead><tr><th>Fecha y hora</th><th>Por</th><th style="text-align:center">Tablas</th><th style="text-align:right">Registros</th></tr></thead><tbody>${rowsHTML}</tbody></table></div></div>`;
+}
+async function doBackup(){
+  const btn=document.getElementById('bkBtn'); if(btn){btn.disabled=true; btn.textContent='Generando copia…';}
+  try{
+    if(typeof XLSX==='undefined'){ alert('No se pudo cargar el generador de Excel. Reintenta con conexión a internet.'); return; }
+    const wb=XLSX.utils.book_new(); let nT=0,nF=0;
+    for(const t of TABLES_BACKUP){
+      let rows=[];
+      try{ const {data,error}=await sb.from(t).select('*'); if(error) throw error; rows=data||[]; }
+      catch(e){ rows=[{_error:String((e&&e.message)||e)}]; }
+      const ws=XLSX.utils.json_to_sheet(rows.length?rows:[{_vacio:'(sin registros)'}]);
+      XLSX.utils.book_append_sheet(wb,ws,t.slice(0,31));
+      nT++; nF+=rows.length;
+    }
+    const d=new Date(); const p=n=>(''+n).padStart(2,'0');
+    const name=`amazinn_backup_${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}_${p(d.getHours())}${p(d.getMinutes())}.xlsx`;
+    XLSX.writeFile(wb,name);
+    try{ await sb.from('app_backups').insert({at:new Date().toISOString(),by:ME.id,by_nombre:PROFILE.nombre,n_tablas:nT,n_filas:nF}); }catch(e){}
+    toast('✓ Copia descargada ('+nF+' registros de '+nT+' tablas)');
+    show('backup');
+  } finally { if(btn){btn.disabled=false; btn.textContent='💾 Descargar copia completa (Excel)';} }
 }
 
 /* ---------------- TRANSFER (transporte aeropuerto) ---------------- */
