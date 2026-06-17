@@ -975,6 +975,8 @@ function isOwner(){ return PROFILE.role==='propietario'; }
 function isProvider(){ return !!(PROFILE&&PROFILE.proveedor); }     // técnico/proveedor externo
 function provEsp(){ return (PROFILE&&PROFILE.especialidad)||''; }   // su categoría (ej. climatizacion)
 const PROV_NAV_OK=['inicio','incidencias','preventivo','perfil'];
+function isConductor(){ return !!(PROFILE&&PROFILE.conductor); }    // conductor de transfers (acceso limitado)
+const CONDUCTOR_NAV_OK=['inicio','transfer','perfil'];
 
 let sb=null, ME=null, PROFILE=null, curPage='';
 
@@ -1150,7 +1152,8 @@ const NAV=[
   {id:'videos',ic:'🎥',t:'Videos explicativos', lockRoles:['empleado','responsable']},
   {grp:'Atención al cliente', depts:['Atención al cliente']},
   {id:'mensajes',ic:'💬',t:'Mensajes y plantillas', depts:['Atención al cliente']},
-  {id:'bitacora',ic:'📝',t:'Bitácoras', depts:['Atención al cliente']},
+  {id:'transfer',ic:'🚐',t:'Transfer', depts:['Atención al cliente'], seeRoles:['direccion']},
+  {id:'bitacora',ic:'📝',t:'Bitácoras', depts:['Atención al cliente'], seeRoles:['direccion']},
   {id:'cierres',ic:'🧾',t:'Cierres de caja', depts:['Atención al cliente'], lockRoles:['empleado','responsable','direccion']},
   {grp:'Marketing'},
   {id:'marca',ic:'🎨',t:'Marca y recursos'},
@@ -1201,9 +1204,10 @@ function navGroups(){
   NAV.forEach(it=>{
     if(it.owner && !isOwner()) return;
     if(isProvider() && it.id && !PROV_NAV_OK.includes(it.id)) return;   // proveedor: solo incidencias/preventivo
+    if(isConductor() && it.id && !CONDUCTOR_NAV_OK.includes(it.id)) return;   // conductor: solo transfer
     const er = PROFILE.role==='propietario' ? 'admin' : PROFILE.role;
     if(it.roles && !it.roles.includes(er)) return;
-    if(it.depts && !it.depts.includes(PROFILE.dept) && !isAdmin() && !isProvider()) return;
+    if(it.depts && !it.depts.includes(PROFILE.dept) && !isAdmin() && !isProvider() && !isConductor() && !(it.seeRoles && it.seeRoles.includes(PROFILE.role))) return;
     if(it.id && !isOwner() && ACCESS_DENY.has(it.id)) return;   // oculto por configuración de Permisos
     if(it.grp){ cur={name:it.grp,items:[]}; groups.push(cur); }
     else if(cur){ cur.items.push(it); }
@@ -1231,6 +1235,7 @@ const ICONS={
   suministros:'<path d="M9 2v6M15 2v6M7 8h10v3a5 5 0 0 1-10 0z"/><path d="M12 16v5"/>',
   mensajes:'<path d="M21 15a2 2 0 0 1-2 2H8l-4 4V5a2 2 0 0 1 2-2h13a2 2 0 0 1 2 2z"/>',
   bitacora:'<rect x="5" y="4" width="14" height="17" rx="1"/><path d="M9 4V3h6v1M8 10h8M8 14h8M8 18h5"/>',
+  transfer:'<path d="M3 13l2-5a2 2 0 0 1 1.9-1.4h6.2A2 2 0 0 1 17 8l2 5"/><path d="M3 13h18v4a1 1 0 0 1-1 1h-1a2 2 0 0 1-4 0H9a2 2 0 0 1-4 0H4a1 1 0 0 1-1-1z"/><circle cx="7" cy="17" r="1.3"/><circle cx="17" cy="17" r="1.3"/>',
   marca:'<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8" cy="9" r="1.6"/><path d="M3 17l5-4 4 3 3-2 6 5"/>',
   carteles:'<rect x="4" y="4" width="16" height="11" rx="1"/><path d="M12 15v5M8 20h8"/>',
   tutoriales:'<path d="M2 9l10-5 10 5-10 5z"/><path d="M6 11v4c0 1.5 3 3 6 3s6-1.5 6-3v-4"/>',
@@ -1398,6 +1403,7 @@ function show(id){
   else if(id==='registros'){ ld('<div class="page-title">Registros pendientes</div><div class="page-sub">Cargando…</div>'); pageRegistros(); }
   else if(id==='catalogos'){ ld('<div class="page-title">Catálogos</div><div class="page-sub">Cargando…</div>'); pageCatalogos(); }
   else if(id==='mensajes'){ ld('<div class="page-title">Mensajes y plantillas</div><div class="page-sub">Cargando…</div>'); pageMensajes(); }
+  else if(id==='transfer'){ ld('<div class="page-title">Transfer</div><div class="page-sub">Cargando…</div>'); pageTransfer(); }
   else if(id==='bitacora'){ ld('<div class="page-title">Bitácora</div><div class="page-sub">Cargando…</div>'); pageBitacora(); }
   else if(id==='cierres'){ m.innerHTML='<div class="page-title">Cierres de caja</div><div class="panel" style="color:var(--suave)">🧾 Sección en construcción. Estará disponible próximamente.</div>'; }
   else if(id==='formacion'){ ld('<div class="page-title">Formaciones</div><div class="page-sub">Cargando…</div>'); pageFormacion(); }
@@ -3310,6 +3316,10 @@ function userForm(){const u=userDraft;const colores=['#1F4E79','#16a085','#8e44a
       <div><label>Especialidad (categoría)</label>
         <select id="uEsp"><option value="">— Ninguna —</option>${INC_CAT.map(([v,l])=>`<option value="${v}" ${u.especialidad===v?'selected':''}>${l}</option>`).join('')}</select></div></div>
     <small style="color:var(--suave);display:block;margin-top:-4px">Si es <b>proveedor</b>, al entrar solo verá <b>Incidencias</b> y <b>Mantenimiento preventivo</b> de su especialidad. Ponle el departamento <b>Mantenimiento</b> para que se le puedan asignar.</small>
+    <div class="row"><div><label>Conductor de transfers</label>
+        <select id="uCond"><option value="0" ${!u.conductor?'selected':''}>No</option><option value="1" ${u.conductor?'selected':''}>Sí — conductor</option></select></div>
+      <div><label>Comisión fija por viaje ($)</label><input id="uComision" type="number" min="0" step="0.01" value="${esc(u.comision!=null?u.comision:'')}" placeholder="Ej. 5"></div></div>
+    <small style="color:var(--suave);display:block;margin-top:-4px">Si es <b>conductor</b>, al entrar solo verá el área <b>Transfer</b>. La comisión es lo que paga a Amazinn por cada viaje realizado (para las liquidaciones).</small>
     <div class="row"><div><label>Nº de teléfono</label><input id="uTel" value="${esc(u.telefono||'')}"></div>
       <div><label>Nº de identificación</label><input id="uIdent" value="${esc(u.identificacion||'')}"></div></div>
     <label>Cumpleaños</label><input id="uC" type="date" value="${u.cumple||''}">
@@ -3331,6 +3341,8 @@ function captureUserForm(){
   if(g('uOrgT')!==null) userDraft.org_titulo=g('uOrgT');
   const pv=g('uProv'); if(pv!==null) userDraft.proveedor=(pv==='1');
   const ep=g('uEsp'); if(ep!==null) userDraft.especialidad=ep||null;
+  const cv=g('uCond'); if(cv!==null) userDraft.conductor=(cv==='1');
+  const cm=g('uComision'); if(cm!==null) userDraft.comision=(cm===''?null:parseFloat(cm));
   if(g('uC')!==null) userDraft.cumple=g('uC')||null;
   const col=document.querySelector('input[name="uCol"]:checked'); if(col) userDraft.color=col.value;
 }
@@ -3369,7 +3381,7 @@ async function userSave(e){e.preventDefault();
   let role;
   if(userDraft.role==='propietario'){ role='propietario'; }
   else { const rn=g('uR'); role=(rn&&rn!=='__new__')?rn:userDraft.role; }
-  const row={nombre:val('uN'),dept,area,role,posicion,vac:+val('uV')||0,cumple:val('uC')||null,equipo,telefono:val('uTel'),identificacion:val('uIdent'),org_titulo:val('uOrgT'),color:col?col.value:'#1F4E79',proveedor:(g('uProv')==='1'),especialidad:(g('uEsp')||null)};
+  const row={nombre:val('uN'),dept,area,role,posicion,vac:+val('uV')||0,cumple:val('uC')||null,equipo,telefono:val('uTel'),identificacion:val('uIdent'),org_titulo:val('uOrgT'),color:col?col.value:'#1F4E79',proveedor:(g('uProv')==='1'),especialidad:(g('uEsp')||null),conductor:(g('uCond')==='1'),comision:(g('uComision')===''||g('uComision')==null?null:parseFloat(g('uComision')))};
   const f=document.getElementById('uFoto').files[0];
   if(f){ row.foto=await fileToAvatar(f); }            // respaldo si no se usó el recorte
   else { row.foto = (userDraft.foto!==undefined ? userDraft.foto : null); }  // recorte aplicado, foto existente, o "Quitar foto"
@@ -3522,6 +3534,245 @@ async function saveCodes(){
   toast(n?`✓ ${n} cambio(s) guardados`:'Sin cambios');show('mensajes');
 }
 
+/* ---------------- TRANSFER (transporte aeropuerto) ---------------- */
+let trfTab='solicitudes', trfFormOpen=false, trfEditId=null, trfFiltroEstado='pendiente', trfSearch='', trfFrom='', trfTo='', trfCondFormOpen=false, trfCondEditId=null;
+let TRF=[], TRF_COND=[], TRF_PROPS=[];
+function trfEnsureStyle(){ if(document.getElementById('trfStyle'))return; const s=document.createElement('style'); s.id='trfStyle'; s.textContent=`
+#trfBoard{display:grid!important;grid-template-columns:repeat(auto-fill,minmax(230px,1fr))!important;gap:10px!important;align-items:start}
+.trf-card{background:#fff;border:1px solid var(--gris2);border-left:4px solid var(--gris2);border-radius:11px;padding:10px 13px;box-shadow:var(--sombra)}
+.trf-grid{grid-template-columns:1fr!important}
+@media(min-width:560px){#trfBoard{grid-template-columns:repeat(auto-fill,minmax(250px,1fr))!important}}
+.trf-card .trf-h{display:flex;align-items:center;gap:7px;flex-wrap:wrap}
+.trf-card .trf-h b{font-size:14px}
+.trf-grid{display:grid;grid-template-columns:1fr 1fr;gap:1px 14px;margin-top:6px}
+.trf-grid div{font-size:12px;line-height:1.5}
+.trf-card.est-pendiente{border-left-color:#e0a23a;animation:trfBlink 1.1s ease-in-out infinite}
+.trf-card.est-asignado{border-left-color:#2563aa}
+.trf-card.est-realizado{border-left-color:#9aa0a6;opacity:.6;filter:grayscale(.5)}
+.trf-card.est-realizado:hover{opacity:1;filter:none}
+.trf-card.est-cancelado{border-left-color:#b0b0b0;opacity:.55;filter:grayscale(.6)}
+.trf-card.est-cancelado:hover{opacity:1;filter:none}
+@keyframes trfBlink{0%,100%{box-shadow:0 0 0 0 rgba(224,162,58,0)}50%{box-shadow:0 0 13px 2px rgba(224,162,58,.6)}}
+.trf-acts{display:flex;gap:6px;flex-wrap:wrap;margin-top:9px}
+.trf-acts .btn,.trf-acts select{padding:6px 11px!important;font-size:11px!important;min-height:0!important}
+.trf-fbtn{padding:6px 13px;border:1px solid var(--gris2);border-radius:20px;background:#fff;font-size:12px;font-weight:600;cursor:pointer;color:var(--suave)}
+.trf-fbtn.on{background:var(--azul);color:#fff;border-color:var(--azul)}
+`; document.head.appendChild(s); }
+const TRF_EST={pendiente:{lbl:'Pendiente de asignar',c:'#b9770e',b:'#fdf3e2'},asignado:{lbl:'Asignado',c:'#2563aa',b:'#e7eff8'},realizado:{lbl:'Viaje realizado',c:'#1e8a5a',b:'#e4f5ec'},cancelado:{lbl:'Cancelado',c:'#7f8c8d',b:'#eef0f2'}};
+function trfCanManage(){ return isAdmin()||PROFILE.role==='direccion'||PROFILE.dept==='Atención al cliente'; }
+function trfEstBadge(e){const o=TRF_EST[e]||TRF_EST.pendiente;return `<span style="background:${o.b};color:${o.c};padding:3px 11px;border-radius:20px;font-size:11px;font-weight:700;white-space:nowrap">${o.lbl}</span>`;}
+function trfMoney(n){ return '$'+((parseFloat(n)||0).toFixed(2)); }
+function trfFechaHora(s){ if(!s) return '—'; const d=new Date(/T/.test(s)?s:s.replace(' ','T')); if(isNaN(d)) return esc(s); return d.toLocaleString('es-ES',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}); }
+function trfCondName(id){ const c=TRF_COND.find(x=>String(x.id)===String(id)); return c?c.nombre:''; }
+function trfCondComision(id){ const c=TRF_COND.find(x=>String(x.id)===String(id)); return c?(parseFloat(c.comision)||0):0; }
+async function pageTransfer(){
+  asgEnsureStyle(); trfEnsureStyle();
+  const [tr,pf,ed]=await Promise.all([
+    sb.from('transfers').select('*').order('created_at',{ascending:false}),
+    sb.from('profiles').select('*'),
+    sb.from('mant_edificios').select('nombre').order('nombre')
+  ]);
+  TRF=tr.data||[];
+  TRF_COND=(pf.data||[]).filter(p=>p.conductor);
+  TRF_PROPS=[...new Set((ed.data||[]).map(e=>e.nombre).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
+  const cond=isConductor();
+  let body, tabs='';
+  if(!cond){
+    tabs=`<div class="tabs">
+      <button class="${trfTab==='solicitudes'?'on':''}" onclick="trfSetTab('solicitudes')">🚐 Solicitudes</button>
+      <button class="${trfTab==='liquidaciones'?'on':''}" onclick="trfSetTab('liquidaciones')">🧾 Liquidaciones viajes</button>
+      ${(isAdmin()||PROFILE.role==='direccion')?`<button class="${trfTab==='conductores'?'on':''}" onclick="trfSetTab('conductores')">👤 Conductores</button>`:''}
+      <button class="${trfTab==='panel'?'on':''}" onclick="trfSetTab('panel')">📊 Panel</button></div>`;
+  }
+  if(trfFormOpen) body=trfForm();
+  else if(cond) body=trfBoard(true);
+  else if(trfTab==='panel') body=trfPanel();
+  else if(trfTab==='liquidaciones') body=trfLiquidaciones();
+  else if(trfTab==='conductores') body=trfConductores();
+  else body=trfBoard(false);
+  const sub = cond
+    ? 'Toma los traslados disponibles y marca cuándo los realizas.'
+    : 'Registra y gestiona los traslados de aeropuerto de los huéspedes.';
+  document.getElementById('main').innerHTML=`<div class="page-title">Transfer · transporte aeropuerto</div><div class="page-sub">${sub}</div>${trfFormOpen?'':tabs}${body}`;
+}
+function trfSetTab(t){ trfTab=t; trfFormOpen=false; show('transfer'); }
+function trfBoard(cond){
+  let list=TRF.slice();
+  if(cond){ list=list.filter(t=>t.estado==='pendiente' || (String(t.conductor_id)===String(ME.id))); }
+  else {
+    if(trfFiltroEstado) list=list.filter(t=>t.estado===trfFiltroEstado);
+    const q=trfSearch.trim().toLowerCase();
+    if(q) list=list.filter(t=>((t.cliente||'')+' '+(t.aerolinea_vuelo||'')+' '+(t.whatsapp||'')+' '+(t.conductor_nombre||'')).toLowerCase().includes(q));
+  }
+  const order={pendiente:0,asignado:1,realizado:2,cancelado:3};
+  list.sort((a,b)=>(order[a.estado]-order[b.estado])||(new Date(b.created_at)-new Date(a.created_at)));
+  const cards=list.map(t=>trfCard(t,cond)).join('')||`<div class="panel" style="color:var(--suave)">No hay traslados ${cond?'disponibles ni asignados a ti':'en esta vista'}.</div>`;
+  let top='';
+  if(!cond){
+    const estados=[['pendiente','Pendiente'],['asignado','Asignado'],['realizado','Viaje realizado'],['cancelado','Cancelado'],['','Todos']];
+    const chips=estados.map(([v,l])=>`<button class="trf-fbtn ${trfFiltroEstado===v?'on':''}" onclick="trfFiltroEstado='${v}';show('transfer')">${l}${v?` (${TRF.filter(t=>t.estado===v).length})`:''}</button>`).join('');
+    top=`<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:12px">
+      <button class="btn" onclick="trfNuevo()">+ Nuevo transfer</button>
+      <input value="${esc(trfSearch)}" oninput="trfSearch=this.value;trfRerenderBoard()" placeholder="🔍 Buscar cliente, vuelo, WhatsApp…" style="flex:1;min-width:200px;padding:9px 14px;border:1px solid var(--gris2);border-radius:22px;font-family:inherit;font-size:13.5px">
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px">${chips}</div>`;
+  } else {
+    const mis=TRF.filter(t=>String(t.conductor_id)===String(ME.id)&&t.estado==='realizado').length;
+    top=`<div class="panel" style="background:#eef5ff;border:1px solid #d7e6fb;margin-bottom:12px;font-size:13px">🚐 Toma los traslados <b>pendientes</b> y, al terminar, pulsa <b>Viaje realizado</b>. Llevas <b>${mis}</b> viaje(s) realizado(s).</div>`;
+  }
+  return top+`<div id="trfBoard" class="inc-cards">${cards}</div>`;
+}
+function trfRerenderBoard(){ const el=document.getElementById('trfBoard'); if(!el) return; let list=TRF.slice(); if(trfFiltroEstado) list=list.filter(t=>t.estado===trfFiltroEstado); const q=trfSearch.trim().toLowerCase(); if(q) list=list.filter(t=>((t.cliente||'')+' '+(t.aerolinea_vuelo||'')+' '+(t.whatsapp||'')+' '+(t.conductor_nombre||'')).toLowerCase().includes(q)); const order={pendiente:0,asignado:1,realizado:2,cancelado:3}; list.sort((a,b)=>(order[a.estado]-order[b.estado])||(new Date(b.created_at)-new Date(a.created_at))); el.innerHTML=list.map(t=>trfCard(t,false)).join('')||`<div class="panel" style="color:var(--suave)">No hay traslados en esta vista.</div>`; }
+function trfCard(t,cond){
+  const mine=String(t.conductor_id)===String(ME.id);
+  const g=(ic,lbl,v)=> (v==null||v==='')?'':`<div><span style="color:var(--suave)">${ic} ${lbl}:</span> <b>${esc(''+v)}</b></div>`;
+  const grid=`<div class="trf-grid">
+    ${g('🏠','Destino',t.destino)}
+    ${g('📍','Recogida',t.aeropuerto)}
+    ${g('✈️','Vuelo',t.aerolinea_vuelo)}
+    ${g('🛬','Llegada',t.llegada?trfFechaHora(t.llegada):'')}
+    ${g('🕐','Hora recogida',t.recogida)}
+    ${g('👤','Pax',t.pax)}
+    ${g('🧳','Equipaje',t.equipaje)}
+    ${g('📱','WhatsApp',t.whatsapp)}
+    ${g('💵','Costo',t.costo!=null&&t.costo!==''?trfMoney(t.costo):'')}
+  </div>`;
+  const comLine = (!cond && t.conductor_id && t.comision!=null)
+    ? `<div style="font-size:11px;margin-top:5px;color:var(--suave)">Comisión ${trfMoney(t.comision)}</div>` : '';
+  const notas = t.notas?`<div style="font-size:11.5px;margin-top:5px;color:#3a4654;background:var(--gris);padding:5px 9px;border-radius:7px">📝 ${esc(t.notas)}</div>`:'';
+  let acts='';
+  if(cond){
+    if(t.estado==='pendiente') acts=`<button class="btn" onclick="trfTomar(${t.id})">✋ Tomar</button>`;
+    else if(t.estado==='asignado'&&mine) acts=`<button class="btn" onclick="trfDone(${t.id})">✓ Viaje realizado</button><button class="btn ghost" onclick="trfDevolver(${t.id})">↩ Devolver</button>`;
+    else if(t.estado==='realizado'&&mine) acts=`<span style="color:#1e8a5a;font-weight:700;font-size:12px">✓ Realizado</span>`;
+  } else {
+    const selCond=`<select onchange="if(this.value)trfAsignar(${t.id},this.value)"><option value="">Asignar a…</option>${TRF_COND.map(c=>`<option value="${c.id}" ${String(t.conductor_id)===String(c.id)?'selected':''}>${esc(c.nombre)}</option>`).join('')}</select>`;
+    if(t.estado==='pendiente') acts=`${selCond}<button class="btn ghost" onclick="trfEditar(${t.id})">✏️</button><button class="btn ghost" onclick="trfCancelar(${t.id})">✕</button>`;
+    else if(t.estado==='asignado') acts=`<button class="btn" onclick="trfDone(${t.id})">✓ Realizado</button>${selCond}<button class="btn ghost" onclick="trfDevolver(${t.id})">↩</button><button class="btn ghost" onclick="trfEditar(${t.id})">✏️</button><button class="btn ghost" onclick="trfCancelar(${t.id})">✕</button>`;
+    else if(t.estado==='realizado') acts=`<button class="btn ghost" onclick="trfReabrir(${t.id})">↩ Reabrir</button><button class="btn ghost" onclick="trfEditar(${t.id})">✏️</button>`;
+    else if(t.estado==='cancelado') acts=`<button class="btn ghost" onclick="trfReactivar(${t.id})">↩ Reactivar</button><button class="btn ghost" onclick="trfBorrar(${t.id})" style="color:#c0392b">🗑</button>`;
+  }
+  const condHead = t.conductor_id
+    ? `<span style="margin-left:auto;font-size:11.5px;font-weight:700;color:#2563aa;white-space:nowrap">🧑‍✈️ ${esc(t.conductor_nombre||trfCondName(t.conductor_id))}</span>`
+    : `<span style="margin-left:auto;font-size:11px;font-weight:700;color:#b9770e;white-space:nowrap">⚠ Sin asignar</span>`;
+  return `<div class="trf-card est-${t.estado}">
+    <div class="trf-h"><b>${esc(t.cliente||'(sin nombre)')}</b>${trfEstBadge(t.estado)}${condHead}</div>
+    ${grid}${comLine}${notas}
+    <div class="trf-acts">${acts}</div>
+  </div>`;
+}
+function trfNuevo(){ trfEditId=null; trfFormOpen=true; show('transfer'); }
+function trfEditar(id){ trfEditId=id; trfFormOpen=true; show('transfer'); }
+function trfForm(){
+  const t=trfEditId?(TRF.find(x=>String(x.id)===String(trfEditId))||{}):{};
+  const ss='width:100%;padding:10px 12px;border:1px solid var(--gris2);border-radius:8px;font-family:inherit;font-size:14px';
+  return `<div style="margin-bottom:12px"><button class="btn ghost" onclick="trfFormOpen=false;show('transfer')">← Volver</button></div>
+    <div class="panel" style="max-width:720px"><h2 style="margin-top:0">${trfEditId?'Editar transfer':'Nuevo transfer'}</h2>
+    <p style="font-size:12.5px;color:var(--suave);margin:-4px 0 10px">Rellena los datos que envió el huésped.</p>
+    ${(trfEditId&&t.created_by_nombre)?`<div style="font-size:12px;color:var(--suave);margin:0 0 14px;padding:7px 11px;background:var(--gris);border-radius:8px">📝 Solicitado por <b>${esc(t.created_by_nombre)}</b>${t.created_at?' · '+new Date(t.created_at).toLocaleString('es-ES',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}):''}</div>`:''}
+    <form class="box" onsubmit="return trfSave(event)" style="max-width:none">
+      <label>Nombre del cliente *</label><input id="trfCliente" required value="${esc(t.cliente||'')}" style="${ss}">
+      <label>Destino (propiedad)</label><input id="trfDestino" list="trfPropDL" value="${esc(t.destino||'')}" placeholder="Elige o escribe la propiedad…" style="${ss}"><datalist id="trfPropDL">${TRF_PROPS.map(p=>`<option value="${esc(p)}"></option>`).join('')}</datalist>
+      <label>Aerolínea, Nº de vuelo, Ciudad</label><input id="trfVuelo" value="${esc(t.aerolinea_vuelo||'')}" placeholder="Ej. Copa CM802, Miami" style="${ss}">
+      <div class="row"><div><label>Fecha y hora de llegada</label><input id="trfLlegada" type="datetime-local" value="${esc(t.llegada||'')}" style="${ss}"></div><div><label>Hora de recogida (exterior)</label><input id="trfRecogida" value="${esc(t.recogida||'')}" placeholder="Ej. 16:00" style="${ss}"></div></div>
+      <div class="row"><div><label>Nº de personas</label><select id="trfPax" style="${ss}"><option value="">—</option>${Array.from({length:12},(_,i)=>i+1).map(n=>`<option ${String(t.pax)===String(n)?'selected':''}>${n}</option>`).join('')}</select></div><div><label>Piezas de equipaje</label><input id="trfEquipaje" type="number" min="0" value="${esc(t.equipaje||'')}" style="${ss}"></div></div>
+      <div class="row"><div><label>WhatsApp</label><input id="trfWhatsapp" value="${esc(t.whatsapp||'')}" placeholder="+507 …" style="${ss}"></div><div><label>Lugar de recogida</label><input id="trfAeropuerto" list="trfLugarDL" value="${esc(t.aeropuerto||'')}" placeholder="Elige o escribe…" style="${ss}"><datalist id="trfLugarDL"><option value="Tocumen Aeropuerto"></option><option value="Albrook Aeropuerto"></option></datalist></div></div>
+      <div class="row"><div><label>Costo del traslado ($)</label><input id="trfCosto" type="number" min="0" step="0.01" value="${esc(t.costo!=null?t.costo:'')}" placeholder="35" style="${ss}"></div><div><label>Asignar a conductor (opcional)</label><select id="trfConductor" style="${ss}"><option value="">— Dejar pendiente —</option>${TRF_COND.map(c=>`<option value="${c.id}" ${String(t.conductor_id)===String(c.id)?'selected':''}>${esc(c.nombre)}</option>`).join('')}</select></div></div>
+      <label>Notas internas</label><textarea id="trfNotas" rows="2" style="${ss}">${esc(t.notas||'')}</textarea>
+      <div style="margin-top:14px"><button class="btn" type="submit">${trfEditId?'Guardar cambios':'Guardar transfer'}</button> <button class="btn ghost" type="button" onclick="trfFormOpen=false;show('transfer')">Cancelar</button></div>
+    </form></div>`;
+}
+async function trfSave(e){ e.preventDefault();
+  const g=id=>{const el=document.getElementById(id);return el?el.value:'';};
+  const cid=g('trfConductor');
+  const row={cliente:g('trfCliente'),destino:g('trfDestino'),aerolinea_vuelo:g('trfVuelo'),llegada:g('trfLlegada'),recogida:g('trfRecogida'),pax:g('trfPax'),equipaje:g('trfEquipaje'),whatsapp:g('trfWhatsapp'),aeropuerto:g('trfAeropuerto'),costo:g('trfCosto')===''?null:parseFloat(g('trfCosto')),notas:g('trfNotas')};
+  if(cid){ row.conductor_id=cid; row.conductor_nombre=trfCondName(cid); row.comision=trfCondComision(cid); const cur=trfEditId?(TRF.find(x=>String(x.id)===String(trfEditId))||{}):{}; row.estado=(cur.estado==='realizado'||cur.estado==='cancelado')?cur.estado:'asignado'; }
+  else { row.conductor_id=null; row.conductor_nombre=''; row.comision=null; const cur=trfEditId?(TRF.find(x=>String(x.id)===String(trfEditId))||{}):{}; row.estado=(cur.estado==='realizado'||cur.estado==='cancelado')?cur.estado:'pendiente'; }
+  if(trfEditId){ const {error}=await sb.from('transfers').update(row).eq('id',trfEditId); if(error){alert(error.message);return false;} }
+  else { row.created_by=ME.id; row.created_by_nombre=PROFILE.nombre; row.created_at=new Date().toISOString(); const {error}=await sb.from('transfers').insert(row); if(error){alert(error.message);return false;} }
+  trfFormOpen=false; trfTab='solicitudes'; show('transfer'); return false; }
+async function trfUpd(id,patch){ const {error}=await sb.from('transfers').update(patch).eq('id',id); if(error){alert(error.message);return;} show('transfer'); }
+function trfAsignar(id,cid){ trfUpd(id,{conductor_id:cid,conductor_nombre:trfCondName(cid),comision:trfCondComision(cid),estado:'asignado'}); }
+function trfTomar(id){ trfUpd(id,{conductor_id:ME.id,conductor_nombre:PROFILE.nombre,comision:(parseFloat(PROFILE.comision)||0),estado:'asignado'}); }
+function trfDevolver(id){ trfUpd(id,{conductor_id:null,conductor_nombre:'',comision:null,estado:'pendiente'}); }
+function trfDone(id){ trfUpd(id,{estado:'realizado',realizado_at:new Date().toISOString()}); }
+function trfReabrir(id){ trfUpd(id,{estado:'asignado',realizado_at:null}); }
+function trfCancelar(id){ if(!confirm('¿Cancelar este transfer?'))return; trfUpd(id,{estado:'cancelado'}); }
+function trfReactivar(id){ trfUpd(id,{estado:'pendiente',conductor_id:null,conductor_nombre:'',comision:null}); }
+async function trfBorrar(id){ if(!confirm('¿Eliminar este transfer del historial?'))return; const {error}=await sb.from('transfers').delete().eq('id',id); if(error){alert(error.message);return;} show('transfer'); }
+function trfPanel(){
+  const pad=n=>(''+n).padStart(2,'0');
+  const dkey=d=>d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());
+  const hoy=new Date(); const hoyK=dkey(hoy);
+  const all=TRF.slice();
+  const byEst=e=>all.filter(t=>t.estado===e);
+  const pend=byEst('pendiente'), asig=byEst('asignado'), real=byEst('realizado'), canc=byEst('cancelado');
+  const baseTot=all.length-canc.length;
+  const tasa=baseTot?Math.round(real.length/baseTot*100):0;
+  const ingresos=real.reduce((s,t)=>s+(parseFloat(t.costo)||0),0);
+  const comis=real.reduce((s,t)=>s+(parseFloat(t.comision)||0),0);
+  const realHoy=real.filter(t=>dkey(new Date(t.realizado_at||t.created_at))===hoyK).length;
+  const nuevHoy=all.filter(t=>dkey(new Date(t.created_at))===hoyK).length;
+  const porCond={}, porLugar={}, porDest={}, comPorCond={};
+  real.forEach(t=>{ const c=t.conductor_nombre||trfCondName(t.conductor_id)||'(sin)'; porCond[c]=(porCond[c]||0)+1; comPorCond[c]=(comPorCond[c]||0)+(parseFloat(t.comision)||0); });
+  all.forEach(t=>{ if(t.aeropuerto) porLugar[t.aeropuerto]=(porLugar[t.aeropuerto]||0)+1; if(t.destino) porDest[t.destino]=(porDest[t.destino]||0)+1; });
+  const rank=(obj,top,money)=>{ const arr=Object.entries(obj).sort((a,b)=>b[1]-a[1]).slice(0,top||10); const mx=Math.max(1,...arr.map(x=>x[1])); return arr.length?arr.map(([k,v])=>`<div class="kp-row"><span class="kp-k">${esc(k)}</span><span class="kp-bar"><i style="width:${Math.round(v/mx*100)}%"></i></span><b class="kp-v">${money?trfMoney(v):v}</b></div>`).join(''):'<div style="color:var(--suave);font-size:13px">Sin datos todavía</div>'; };
+  const dias=[]; for(let i=13;i>=0;i--){ const d=new Date(hoy); d.setDate(hoy.getDate()-i); const k=dkey(d); dias.push({label:pad(d.getDate())+'/'+pad(d.getMonth()+1), c:all.filter(t=>dkey(new Date(t.created_at))===k).length, r:real.filter(t=>dkey(new Date(t.realizado_at||t.created_at))===k).length}); }
+  const maxDia=Math.max(1,...dias.map(x=>Math.max(x.r,x.c)));
+  return `
+    <div class="kpi-cards">
+      <div class="kpi"><div class="kpi-n">${all.length}</div><div class="kpi-l">Solicitudes totales</div></div>
+      <div class="kpi"><div class="kpi-n" style="color:#b9770e">${pend.length}</div><div class="kpi-l">Pendientes de asignar</div></div>
+      <div class="kpi"><div class="kpi-n" style="color:#2563aa">${asig.length}</div><div class="kpi-l">Asignados</div></div>
+      <div class="kpi"><div class="kpi-n" style="color:#1e8a5a">${real.length}</div><div class="kpi-l">Viajes realizados</div></div>
+      <div class="kpi"><div class="kpi-n" style="color:var(--suave)">${canc.length}</div><div class="kpi-l">Cancelados</div></div>
+      <div class="kpi"><div class="kpi-n">${tasa}%</div><div class="kpi-l">Tasa de realización</div></div>
+      <div class="kpi"><div class="kpi-n">${realHoy}</div><div class="kpi-l">Realizados hoy</div></div>
+      <div class="kpi"><div class="kpi-n">${nuevHoy}</div><div class="kpi-l">Nuevos hoy</div></div>
+      <div class="kpi"><div class="kpi-n">${trfMoney(ingresos)}</div><div class="kpi-l">Ingresos (viajes realizados)</div></div>
+      <div class="kpi"><div class="kpi-n" style="color:#1e8a5a">${trfMoney(comis)}</div><div class="kpi-l">Comisión a cobrar</div></div>
+    </div>
+    <div class="panel"><h2>📈 Solicitudes vs realizados · últimos 14 días</h2>
+      <div class="kp-days">${dias.map(x=>`<div class="kp-day"><div class="kp-day-bar2"><i class="b1" style="height:${Math.round(x.c/maxDia*100)}%" title="Solicitudes: ${x.c}"></i><i class="b2" style="height:${Math.round(x.r/maxDia*100)}%" title="Realizados: ${x.r}"></i></div><small>${x.label}</small></div>`).join('')}</div>
+      <div class="kp-legend"><span><i style="background:var(--gris2)"></i>Solicitudes</span><span><i style="background:var(--azul)"></i>Realizados</span></div></div>
+    <div class="kp-grid2">
+      <div class="panel"><h2>🧑‍✈️ Viajes realizados por conductor</h2>${rank(porCond,10)}</div>
+      <div class="panel"><h2>💵 Comisión por conductor</h2>${rank(comPorCond,10,true)}</div>
+    </div>
+    <div class="kp-grid2">
+      <div class="panel"><h2>📍 Por lugar de recogida</h2>${rank(porLugar,8)}</div>
+      <div class="panel"><h2>🏠 Por destino (propiedad)</h2>${rank(porDest,10)}</div>
+    </div>
+    <div class="panel"><h2>📊 Estado actual</h2>${rank({['🟠 Pendiente']:pend.length,['🔵 Asignado']:asig.length,['🟢 Realizado']:real.length,['⚪ Cancelado']:canc.length},4)}</div>`;
+}
+function trfLiquidaciones(){
+  const inRange=t=>{ if(t.estado!=='realizado') return false; const d=(t.realizado_at||t.created_at||'').slice(0,10); if(trfFrom&&d<trfFrom) return false; if(trfTo&&d>trfTo) return false; return true; };
+  const done=TRF.filter(inRange);
+  const map={};
+  done.forEach(t=>{ const k=t.conductor_id||'(sin)'; if(!map[k]) map[k]={nombre:t.conductor_nombre||trfCondName(t.conductor_id)||'(sin asignar)',n:0,total:0}; map[k].n++; map[k].total+=(parseFloat(t.comision)||0); });
+  const rows=Object.values(map).sort((a,b)=>b.total-a.total);
+  const tot=rows.reduce((s,r)=>s+r.total,0), totN=rows.reduce((s,r)=>s+r.n,0);
+  const filtros=`<div class="panel" style="display:flex;gap:14px;flex-wrap:wrap;align-items:flex-end;margin-bottom:14px">
+    <div><label style="display:block;font-size:12px;color:var(--suave);font-weight:600;margin-bottom:4px">Desde</label><input type="date" value="${esc(trfFrom)}" onchange="trfFrom=this.value;show('transfer')" style="padding:9px 11px;border:1px solid var(--gris2);border-radius:8px;font-family:inherit"></div>
+    <div><label style="display:block;font-size:12px;color:var(--suave);font-weight:600;margin-bottom:4px">Hasta</label><input type="date" value="${esc(trfTo)}" onchange="trfTo=this.value;show('transfer')" style="padding:9px 11px;border:1px solid var(--gris2);border-radius:8px;font-family:inherit"></div>
+    ${(trfFrom||trfTo)?`<button class="btn ghost" onclick="trfFrom='';trfTo='';show('transfer')">Limpiar</button>`:''}
+    <div style="margin-left:auto;text-align:right"><div style="font-size:12px;color:var(--suave)">Total a cobrar a conductores</div><div style="font-size:24px;font-weight:800;color:var(--azul)">${trfMoney(tot)}</div><div style="font-size:11.5px;color:var(--suave)">${totN} viaje(s)</div></div>
+  </div>`;
+  const tbody=rows.length?rows.map(r=>`<tr><td><b>${esc(r.nombre)}</b></td><td style="text-align:center">${r.n}</td><td style="text-align:right">${trfMoney(r.n?r.total/r.n:0)}</td><td style="text-align:right"><b>${trfMoney(r.total)}</b></td></tr>`).join(''):`<tr><td colspan="4" style="color:var(--suave)">No hay viajes realizados en este periodo.</td></tr>`;
+  return filtros+`<div class="panel"><h2 style="margin-top:0">Comisión por conductor</h2>
+    <p style="font-size:12.5px;color:var(--suave);margin:-4px 0 10px">Viajes realizados en el periodo y comisión que cada conductor debe pagar a Amazinn.</p>
+    <table class="asg-table"><thead><tr><th>Conductor</th><th style="text-align:center">Viajes</th><th style="text-align:right">Comisión/viaje</th><th style="text-align:right">Total comisión</th></tr></thead>
+    <tbody>${tbody}</tbody></table></div>`;
+}
+function trfConductores(){
+  const rows=TRF_COND.map(c=>`<tr><td><b>${esc(c.nombre)}</b></td><td>${esc(c.telefono||'')}</td><td style="text-align:right">${trfMoney(c.comision)}</td>
+    <td class="asg-act"><button onclick="trfCondEdit('${c.id}')" title="Editar comisión">✏️</button></td></tr>`).join('')||`<tr><td colspan="4" style="color:var(--suave)">Aún no hay conductores. Crea un usuario y márcalo como «Conductor» en Usuarios.</td></tr>`;
+  return `<div class="panel" style="background:#eef5ff;border:1px solid #d7e6fb;margin-bottom:12px;font-size:13px">ℹ️ Los conductores se crean como usuarios marcados como <b>Conductor</b> (en Usuarios); entran con su cuenta y solo ven el área Transfer. Aquí ajustas su <b>comisión fija por viaje</b>.</div>
+    <div class="panel"><h2 style="margin-top:0">Conductores (${TRF_COND.length})</h2>
+    <table class="asg-table"><thead><tr><th>Nombre</th><th>Teléfono</th><th style="text-align:right">Comisión/viaje</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`;
+}
+async function trfCondEdit(id){ const c=TRF_COND.find(x=>String(x.id)===String(id)); if(!c)return; const v=prompt('Comisión fija por viaje (USD) que '+c.nombre+' paga a Amazinn:', (c.comision!=null?c.comision:'')); if(v===null)return; const n=parseFloat(v); if(isNaN(n)){alert('Introduce un número válido.');return;} const {error}=await sb.from('profiles').update({comision:n}).eq('id',id); if(error){alert(error.message);return;} show('transfer'); }
+
 /* ---------------- BITÁCORA ---------------- */
 let bitTab='bitacoras', bitFormOpen=false, bitEditId=null, bitView=null, bitDraft={pendientes:[]}, bitHistOpen=false, penCommentOpen=null, penEditOpen=null, bitSearch='', bitEquipo='', bitPrioFiltro='';
 function penMine(p){ return (p.por_id&&String(p.por_id)===String(ME.id))||(!p.por_id&&p.por_quien===PROFILE.nombre); }
@@ -3550,7 +3801,7 @@ function setBitTab(t){ bitTab=t; bitView=null; bitFormOpen=false; show('bitacora
 function bitTeam(arr){
   const myTeam=bitMyTeam();
   return (arr||[]).filter(x=>{
-    if(!(isAdmin() || (x.dept||'')===(PROFILE.dept||''))) return false;
+    if(!(bitCanAllTeams() || (x.dept||'')===(PROFILE.dept||''))) return false;
     if(bitCanAllTeams()){ return !bitEquipo || (x.equipo||'')===bitEquipo; }
     const xe=x.equipo||''; return !(myTeam && xe && xe!==myTeam);
   });
