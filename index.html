@@ -3902,10 +3902,11 @@ function trfCard(t,cond){
     else if(t.estado==='realizado'&&mine) acts=`<span style="color:#1e8a5a;font-weight:700;font-size:12px">✓ Realizado</span>`;
   } else {
     const selCond=`<select onchange="if(this.value)trfAsignar(${t.id},this.value)"><option value="">Asignar a…</option>${TRF_COND.map(c=>`<option value="${c.id}" ${String(t.conductor_id)===String(c.id)?'selected':''}>${esc(c.nombre)}</option>`).join('')}</select>`;
-    if(t.estado==='pendiente') acts=`${selCond}<button class="btn ghost" onclick="trfEditar(${t.id})">✏️</button><button class="btn ghost" onclick="trfCancelar(${t.id})">✕</button>`;
-    else if(t.estado==='asignado') acts=`<button class="btn" onclick="trfDone(${t.id})">✓ Realizado</button>${selCond}<button class="btn ghost" onclick="trfDevolver(${t.id})">↩</button><button class="btn ghost" onclick="trfEditar(${t.id})">✏️</button><button class="btn ghost" onclick="trfCancelar(${t.id})">✕</button>`;
-    else if(t.estado==='realizado') acts=`<button class="btn ghost" onclick="trfReabrir(${t.id})">↩ Reabrir</button><button class="btn ghost" onclick="trfEditar(${t.id})">✏️</button>`;
-    else if(t.estado==='cancelado') acts=`<button class="btn ghost" onclick="trfReactivar(${t.id})">↩ Reactivar</button><button class="btn ghost" onclick="trfBorrar(${t.id})" style="color:#c0392b">🗑</button>`;
+    const kebab=`<details class="asg-kebab"><summary>⋮</summary><div class="asg-kebab-menu"><button onclick="trfEditar(${t.id})">✏️ Editar</button>${(t.estado==='pendiente'||t.estado==='asignado')?`<button onclick="trfCancelar(${t.id})">✕ Cancelar</button>`:''}<button onclick="trfBorrar(${t.id})" style="color:#c0392b">🗑 Eliminar</button></div></details>`;
+    if(t.estado==='pendiente') acts=`${selCond}${kebab}`;
+    else if(t.estado==='asignado') acts=`<button class="btn" onclick="trfDone(${t.id})">✓ Realizado</button>${selCond}<button class="btn ghost" onclick="trfDevolver(${t.id})">↩ A pendiente</button>${kebab}`;
+    else if(t.estado==='realizado') acts=`<button class="btn ghost" onclick="trfReabrir(${t.id})">↩ Reabrir</button>${kebab}`;
+    else if(t.estado==='cancelado') acts=`<button class="btn ghost" onclick="trfReactivar(${t.id})">↩ Reactivar</button>${kebab}`;
   }
   const condHead = t.conductor_id
     ? `<span style="margin-left:auto;font-size:11.5px;font-weight:700;color:#2563aa;white-space:nowrap">🧑‍✈️ ${esc(t.conductor_nombre||trfCondName(t.conductor_id))}</span>`
