@@ -1339,13 +1339,28 @@ function comCkGroup(opts,onch,sel){ return opts.length? opts.map(o=>`<label styl
 function comDeptsForAreas(){ if(!comScA.length) return DEPTS.slice(); const s=new Set(); (CAT.deptos||[]).forEach(d=>{ if(comScA.includes(d.area)) s.add(d.nombre); }); return [...s].sort((a,b)=>a.localeCompare(b)); }
 function comEquiposForAreas(){ if(!comScA.length) return (CAT.equipos||[]).slice(); const s=new Set(); comScA.forEach(a=>{ (SCOPE_EQ[a]||[]).forEach(e=>s.add(e)); }); return [...s].sort((a,b)=>a.localeCompare(b)); }
 function comScReadDOM(){ const rd=id=>{const b=document.getElementById(id);return b?[...b.querySelectorAll('input:checked')].map(c=>c.value):[];}; comScA=rd('comScAreaBox'); comScD=rd('comScDeptBox'); comScE=rd('comScEqBox'); }
-function comScAreaChange(){ comScReadDOM(); const deps=comDeptsForAreas(); comScD=comScD.filter(d=>deps.includes(d)); const eqs=comEquiposForAreas(); comScE=comScE.filter(e=>eqs.includes(e)); const db=document.getElementById('comScDeptBox'); if(db) db.innerHTML=comCkGroup(deps,'',comScD); const eb=document.getElementById('comScEqBox'); if(eb) eb.innerHTML=comCkGroup(eqs,'',comScE); }
+function comScLbl(kind,arr){ if(!arr.length) return kind==='A'?'Todas':kind==='D'?'Todos':'Cualquiera'; return arr.length<=2?arr.join(', '):(arr.length+' seleccionados'); }
+function comScUpdLbl(kind){ const map={A:['comScAreaBox','msAreaLbl'],D:['comScDeptBox','msDeptLbl'],E:['comScEqBox','msEqLbl']}; const x=map[kind]; const b=document.getElementById(x[0]); const arr=b?[...b.querySelectorAll('input:checked')].map(c=>c.value):[]; const s=document.getElementById(x[1]); if(s) s.textContent=comScLbl(kind,arr); }
+function comScAreaChange(){ comScReadDOM(); const deps=comDeptsForAreas(); comScD=comScD.filter(d=>deps.includes(d)); const eqs=comEquiposForAreas(); comScE=comScE.filter(e=>eqs.includes(e)); const db=document.getElementById('comScDeptBox'); if(db) db.innerHTML=comCkGroup(deps,"comScUpdLbl('D')",comScD); const eb=document.getElementById('comScEqBox'); if(eb) eb.innerHTML=comCkGroup(eqs,"comScUpdLbl('E')",comScE); comScUpdLbl('A'); comScUpdLbl('D'); comScUpdLbl('E'); }
 function comScopeInit(c){ comScA=c&&c.area? String(c.area).split('|').map(s=>s.trim()).filter(Boolean):[]; comScD=(c&&c.dirigido&&c.dirigido!=='*')? String(c.dirigido).split('|').map(s=>s.trim()).filter(Boolean):[]; comScE=c&&c.equipo? String(c.equipo).split('|').map(s=>s.trim()).filter(Boolean):[]; }
-function comScopeHTML(){
-  return `<div style="display:grid;gap:11px;margin-bottom:8px">
-    <div><div style="font-size:12.5px;color:var(--suave);font-weight:600;margin-bottom:5px">🏢 Área <small style="font-weight:400">· puedes marcar varias (ninguna = todas)</small></div><div id="comScAreaBox" style="display:flex;flex-wrap:wrap;gap:6px">${comCkGroup(CAT.areas||[],'comScAreaChange()',comScA)}</div></div>
-    <div><div style="font-size:12.5px;color:var(--suave);font-weight:600;margin-bottom:5px">🗂️ Departamento <small style="font-weight:400">· según el área (ninguno = todos)</small></div><div id="comScDeptBox" style="display:flex;flex-wrap:wrap;gap:6px">${comCkGroup(comDeptsForAreas(),'',comScD)}</div></div>
-    <div><div style="font-size:12.5px;color:var(--suave);font-weight:600;margin-bottom:5px">👥 Equipo <small style="font-weight:400">· (ninguno = cualquiera)</small></div><div id="comScEqBox" style="display:flex;flex-wrap:wrap;gap:6px">${comCkGroup(comEquiposForAreas(),'',comScE)}</div></div>
+function comScEnsureStyle(){ if(document.getElementById('comScStyle'))return; const s=document.createElement('style'); s.id='comScStyle'; s.textContent=`
+.ms{position:relative}
+.ms>summary{list-style:none;cursor:pointer;padding:9px 12px;border:1px solid var(--gris2);border-radius:8px;background:#fff;font-size:14px;display:flex;align-items:center;gap:6px;justify-content:space-between;min-width:190px}
+.ms>summary::-webkit-details-marker{display:none}
+.ms>summary::after{content:'▾';color:var(--suave);font-size:12px;margin-left:auto}
+.ms[open]>summary{border-color:var(--azul)}
+.ms-pop{position:absolute;z-index:40;top:calc(100% + 4px);left:0;min-width:230px;max-height:260px;overflow:auto;background:#fff;border:1px solid var(--gris2);border-radius:10px;box-shadow:0 10px 26px rgba(0,0,0,.16);padding:7px;display:flex;flex-direction:column;gap:2px}
+.ms-pop label{display:flex;align-items:center;gap:9px;font-size:13.5px;padding:7px 8px;border-radius:7px;cursor:pointer}
+.ms-pop label:hover{background:var(--gris)}
+.ms-pop label input{width:16px;height:16px}
+@media(max-width:760px){.ms,.ms>summary{width:100%}}
+`; document.head.appendChild(s); }
+function comScDD(kind,label,boxId,lblId,opts,onch,sel){ return `<div style="flex:1;min-width:190px"><div style="font-size:12px;color:var(--suave);font-weight:600;margin-bottom:4px">${label}</div><details class="ms"><summary><span id="${lblId}">${comScLbl(kind,sel)}</span></summary><div class="ms-pop" id="${boxId}">${comCkGroup(opts,onch,sel)}</div></details></div>`; }
+function comScopeHTML(){ comScEnsureStyle();
+  return `<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:6px;align-items:flex-start">
+    ${comScDD('A','🏢 Área','comScAreaBox','msAreaLbl',(CAT.areas||[]),"comScAreaChange()",comScA)}
+    ${comScDD('D','🗂️ Departamento','comScDeptBox','msDeptLbl',comDeptsForAreas(),"comScUpdLbl('D')",comScD)}
+    ${comScDD('E','👥 Equipo','comScEqBox','msEqLbl',comEquiposForAreas(),"comScUpdLbl('E')",comScE)}
   </div>`;
 }
 /* Presencia (última conexión) */
