@@ -1149,6 +1149,7 @@ const NAV=[
   {grp:'Mantenimiento'},
   {id:'incidencias',ic:'🛠️',t:'Incidencias'},
   {id:'preventivo',ic:'🗓️',t:'Mantenimiento preventivo', depts:['Mantenimiento']},
+  {id:'cotiprov',ic:'📑',t:'Cotizaciones proveedores', roles:['responsable','direccion','admin']},
   {id:'videos',ic:'🎥',t:'Videos explicativos', lockRoles:['empleado','responsable']},
   {grp:'Atención al cliente', depts:['Atención al cliente'], seeRoles:['direccion']},
   {id:'mensajes',ic:'💬',t:'Mensajes y plantillas', depts:['Atención al cliente'], seeRoles:['direccion']},
@@ -1238,6 +1239,7 @@ const ICONS={
   bitacora:'<rect x="5" y="4" width="14" height="17" rx="1"/><path d="M9 4V3h6v1M8 10h8M8 14h8M8 18h5"/>',
   transfer:'<path d="M3 13l2-5a2 2 0 0 1 1.9-1.4h6.2A2 2 0 0 1 17 8l2 5"/><path d="M3 13h18v4a1 1 0 0 1-1 1h-1a2 2 0 0 1-4 0H9a2 2 0 0 1-4 0H4a1 1 0 0 1-1-1z"/><circle cx="7" cy="17" r="1.3"/><circle cx="17" cy="17" r="1.3"/>',
   backup:'<path d="M5 4h11l3 3v13H5z"/><path d="M8 4v5h7"/><circle cx="12" cy="14" r="3"/>',
+  cotiprov:'<path d="M6 3h9l3 3v15H6z"/><path d="M9 8h6M9 12h6M9 16h4"/>',
   marca:'<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8" cy="9" r="1.6"/><path d="M3 17l5-4 4 3 3-2 6 5"/>',
   carteles:'<rect x="4" y="4" width="16" height="11" rx="1"/><path d="M12 15v5M8 20h8"/>',
   tutoriales:'<path d="M2 9l10-5 10 5-10 5z"/><path d="M6 11v4c0 1.5 3 3 6 3s6-1.5 6-3v-4"/>',
@@ -1436,6 +1438,7 @@ function show(id){
   else if(id==='catalogos'){ ld('<div class="page-title">Catálogos</div><div class="page-sub">Cargando…</div>'); pageCatalogos(); }
   else if(id==='mensajes'){ ld('<div class="page-title">Mensajes y plantillas</div><div class="page-sub">Cargando…</div>'); pageMensajes(); }
   else if(id==='transfer'){ ld('<div class="page-title">Transfer</div><div class="page-sub">Cargando…</div>'); pageTransfer(); }
+  else if(id==='cotiprov'){ ld('<div class="page-title">Cotizaciones proveedores</div><div class="page-sub">Cargando…</div>'); pageCotiProv(); }
   else if(id==='backup'){ ld('<div class="page-title">Copia de seguridad</div><div class="page-sub">Cargando…</div>'); pageBackup(); }
   else if(id==='bitacora'){ ld('<div class="page-title">Bitácora</div><div class="page-sub">Cargando…</div>'); pageBitacora(); }
   else if(id==='cierres'){ m.innerHTML='<div class="page-title">Cierres de caja</div><div class="panel" style="color:var(--suave)">🧾 Sección en construcción. Estará disponible próximamente.</div>'; }
@@ -3585,8 +3588,150 @@ async function saveCodes(){
   toast(n?`✓ ${n} cambio(s) guardados`:'Sin cambios');show('mensajes');
 }
 
+/* ---------------- COTIZACIONES DE PROVEEDORES ---------------- */
+let cpTab='lista', cpFormOpen=false, cpEditId=null, cpFilt={prop:'',cat:'',prov:'',q:''}, cpCmpProp='', cpCmpConcepto='', cpDraftFiles=[];
+let CP=[], CP_PROVS=[], CP_PROPS=[], CP_INC=[];
+const CP_CATS=['Pintura','Fontanería','Climatización','Electricidad','Jardinería','Obra/albañilería','Mobiliario','Limpieza','Otros'];
+const CP_SEL='padding:9px 11px;border:1px solid var(--gris2);border-radius:8px;font-family:inherit;font-size:13.5px';
+function cpMoney(n){ return '$'+((parseFloat(n)||0).toLocaleString('es-ES',{minimumFractionDigits:2,maximumFractionDigits:2})); }
+function cpFecha(d){ if(!d) return '—'; const x=new Date(/T/.test(d)?d:d+'T00:00:00'); return isNaN(x)?esc(d):x.toLocaleDateString('es-ES',{day:'2-digit',month:'short',year:'numeric'}); }
+function cpProvName(id){ const p=CP_PROVS.find(x=>String(x.id)===String(id)); return p?p.nombre:''; }
+async function pageCotiProv(){
+  asgEnsureStyle();
+  const [cp,pv,ed,inc]=await Promise.all([
+    sb.from('coti_prov').select('*').order('fecha',{ascending:false}),
+    sb.from('proveedores').select('id,nombre').order('nombre'),
+    sb.from('mant_edificios').select('nombre').order('nombre'),
+    sb.from('mant_incidencias').select('id,descripcion,edificio,unidad').order('created_at',{ascending:false})
+  ]);
+  CP=cp.data||[]; CP_PROVS=pv.data||[]; CP_INC=inc.data||[];
+  CP_PROPS=[...new Set([...(ed.data||[]).map(e=>e.nombre),...CP.map(c=>c.propiedad)].filter(Boolean))].sort((a,b)=>a.localeCompare(b));
+  const tabs=`<div class="tabs"><button class="${cpTab==='lista'?'on':''}" onclick="cpSetTab('lista')">📑 Cotizaciones</button><button class="${cpTab==='comparador'?'on':''}" onclick="cpSetTab('comparador')">📊 Comparador en el tiempo</button></div>`;
+  let body;
+  if(cpFormOpen) body=cpForm();
+  else if(cpTab==='comparador') body=cpComparador();
+  else body=cpLista();
+  document.getElementById('main').innerHTML=`<div class="page-title">Cotizaciones proveedores</div><div class="page-sub">Sube y archiva las cotizaciones que te pasan los proveedores; consúltalas y compáralas en el tiempo.</div>${cpFormOpen?'':tabs}${body}`;
+}
+function cpSetTab(t){ cpTab=t; cpFormOpen=false; show('cotiprov'); }
+function cpFiltered(){
+  let list=CP.slice();
+  if(cpFilt.prop) list=list.filter(c=>c.propiedad===cpFilt.prop);
+  if(cpFilt.cat) list=list.filter(c=>c.categoria===cpFilt.cat);
+  if(cpFilt.prov) list=list.filter(c=>String(c.proveedor_id)===String(cpFilt.prov)||c.proveedor_nombre===cpFilt.prov);
+  if(cpFilt.q){const q=cpFilt.q.toLowerCase(); list=list.filter(c=>((c.concepto||'')+' '+(c.propiedad||'')+' '+(c.proveedor_nombre||'')+' '+(c.notas||'')+' '+(c.categoria||'')).toLowerCase().includes(q));}
+  return list;
+}
+function cpRerender(){ const el=document.getElementById('cpList'); if(!el) return; const list=cpFiltered(); el.innerHTML=list.map(cpCard).join('')||`<div class="panel" style="color:var(--suave)">No hay cotizaciones con estos filtros.</div>`; }
+function cpLista(){
+  const list=cpFiltered();
+  const optsProp=['<option value="">Todas las propiedades</option>'].concat(CP_PROPS.map(p=>`<option ${cpFilt.prop===p?'selected':''}>${esc(p)}</option>`)).join('');
+  const optsCat=['<option value="">Todas las categorías</option>'].concat(CP_CATS.map(c=>`<option ${cpFilt.cat===c?'selected':''}>${esc(c)}</option>`)).join('');
+  const optsProv=['<option value="">Todos los proveedores</option>'].concat(CP_PROVS.map(p=>`<option value="${p.id}" ${String(cpFilt.prov)===String(p.id)?'selected':''}>${esc(p.nombre)}</option>`)).join('');
+  const cards=list.map(cpCard).join('')||`<div class="panel" style="color:var(--suave)">No hay cotizaciones todavía. Sube la primera con «Subir cotización».</div>`;
+  return `<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:12px">
+      <button class="btn" onclick="cpNueva()">+ Subir cotización</button>
+      <input value="${esc(cpFilt.q)}" oninput="cpFilt.q=this.value;cpRerender()" placeholder="🔍 Buscar concepto, proveedor, nota…" style="flex:1;min-width:200px;padding:9px 14px;border:1px solid var(--gris2);border-radius:22px;font-family:inherit;font-size:13.5px">
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px">
+      <select onchange="cpFilt.prop=this.value;show('cotiprov')" style="${CP_SEL}">${optsProp}</select>
+      <select onchange="cpFilt.cat=this.value;show('cotiprov')" style="${CP_SEL}">${optsCat}</select>
+      <select onchange="cpFilt.prov=this.value;show('cotiprov')" style="${CP_SEL}">${optsProv}</select>
+      ${(cpFilt.prop||cpFilt.cat||cpFilt.prov)?`<button class="btn ghost" onclick="cpFilt={prop:'',cat:'',prov:'',q:cpFilt.q};show('cotiprov')">Limpiar filtros</button>`:''}
+    </div>
+    <div id="cpList" class="inc-cards">${cards}</div>`;
+}
+function cpCard(c){
+  const prov=c.proveedor_nombre||cpProvName(c.proveedor_id)||'—';
+  const files=(c.archivos||[]);
+  const fhtml=files.length?files.map(f=>`<a href="${esc(f.url||'#')}" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:5px;font-size:12px;background:var(--gris);border:1px solid var(--gris2);border-radius:7px;padding:4px 9px;text-decoration:none;color:var(--texto)">📎 ${esc(f.nombre||'archivo')}</a>`).join(''):'<span style="color:var(--suave);font-size:12px">sin archivos adjuntos</span>';
+  const refTxt=c.ref_label?`<div style="font-size:12px;margin-top:5px;color:var(--azul)">🔗 ${esc(c.ref_label)}</div>`:'';
+  return `<div class="panel" style="margin-bottom:12px">
+    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><b style="font-size:15px">${esc(c.concepto||'(sin concepto)')}</b>${c.categoria?`<span class="badge b-grey">${esc(c.categoria)}</span>`:''}<span style="margin-left:auto;font-size:18px;font-weight:800;color:var(--azul)">${(c.importe!=null&&c.importe!=='')?cpMoney(c.importe):'—'}</span></div>
+    <div style="font-size:12.5px;color:var(--suave);margin-top:6px">🏠 ${esc(c.propiedad||'—')} · 🚚 ${esc(prov)} · 📅 ${cpFecha(c.fecha)}</div>
+    ${c.notas?`<div style="font-size:12.5px;margin-top:6px;color:#3a4654">${esc(c.notas)}</div>`:''}
+    ${refTxt}
+    <div style="margin-top:9px;display:flex;gap:6px;flex-wrap:wrap;align-items:center">${fhtml}</div>
+    <div style="margin-top:10px;display:flex;gap:6px;flex-wrap:wrap"><button class="btn ghost" style="padding:6px 12px" onclick="cpEditar(${c.id})">✏️ Editar</button><button class="btn ghost" style="padding:6px 12px;color:#c0392b" onclick="cpBorrar(${c.id})">🗑 Eliminar</button></div>
+  </div>`;
+}
+function cpNueva(){ cpEditId=null; cpDraftFiles=[]; cpFormOpen=true; show('cotiprov'); }
+function cpEditar(id){ cpEditId=id; const c=CP.find(x=>String(x.id)===String(id)); cpDraftFiles=(c&&c.archivos)?c.archivos.slice():[]; cpFormOpen=true; show('cotiprov'); }
+function cpAddFiles(input){ const fs=input.files||[]; for(const f of fs){ cpDraftFiles.push({nombre:f.name, file:f, tipo:f.type}); } show('cotiprov'); }
+function cpDelFile(i){ cpDraftFiles.splice(i,1); show('cotiprov'); }
+function cpForm(){
+  const c=cpEditId?(CP.find(x=>String(x.id)===String(cpEditId))||{}):{};
+  const ss='width:100%;padding:10px 12px;border:1px solid var(--gris2);border-radius:8px;font-family:inherit;font-size:14px';
+  const provName=c.proveedor_nombre||cpProvName(c.proveedor_id)||'';
+  const chips=cpDraftFiles.map((f,i)=>`<span style="display:inline-flex;align-items:center;gap:6px;font-size:12.5px;background:var(--gris);border:1px solid var(--gris2);border-radius:20px;padding:5px 11px">📎 ${esc(f.nombre)} <span style="cursor:pointer;color:var(--rojo);font-weight:700" onclick="cpDelFile(${i})">✕</span></span>`).join(' ');
+  const incOpts=['<option value="">— Ninguna —</option>'].concat(CP_INC.slice(0,80).map(i=>`<option value="${i.id}" ${String(c.ref_id)===String(i.id)?'selected':''}>${esc((i.edificio||'')+' '+(i.unidad||'')+' · '+(i.descripcion||'').slice(0,40))}</option>`)).join('');
+  return `<div style="margin-bottom:12px"><button class="btn ghost" onclick="cpFormOpen=false;show('cotiprov')">← Volver</button></div>
+    <div class="panel" style="max-width:720px"><h2 style="margin-top:0">${cpEditId?'Editar cotización':'Subir cotización de proveedor'}</h2>
+    <form class="box" onsubmit="return cpSave(event)" style="max-width:none">
+      <label>Concepto / trabajo *</label><input id="cpConcepto" required value="${esc(c.concepto||'')}" placeholder="Ej. Pintura fachada" style="${ss}">
+      <div class="row"><div><label>Categoría</label><select id="cpCat" style="${ss}"><option value="">—</option>${CP_CATS.map(x=>`<option ${c.categoria===x?'selected':''}>${x}</option>`).join('')}</select></div><div><label>Propiedad / edificio</label><input id="cpPropiedad" list="cpPropDL" value="${esc(c.propiedad||'')}" placeholder="Elige o escribe…" style="${ss}"><datalist id="cpPropDL">${CP_PROPS.map(p=>`<option value="${esc(p)}"></option>`).join('')}</datalist></div></div>
+      <div class="row"><div><label>Proveedor</label><input id="cpProvName" list="cpProvDL" value="${esc(provName)}" placeholder="Elige del directorio o escribe…" style="${ss}"><datalist id="cpProvDL">${CP_PROVS.map(p=>`<option value="${esc(p.nombre)}"></option>`).join('')}</datalist></div><div><label>Fecha de la cotización</label><input id="cpFecha" type="date" value="${esc(c.fecha||'')}" style="${ss}"></div></div>
+      <div class="row"><div><label>Importe ($)</label><input id="cpImporte" type="number" min="0" step="0.01" value="${esc(c.importe!=null?c.importe:'')}" style="${ss}"></div><div><label>Vincular a incidencia (opcional)</label><select id="cpRef" style="${ss}">${incOpts}</select></div></div>
+      <label>Notas</label><textarea id="cpNotas" rows="2" style="${ss}">${esc(c.notas||'')}</textarea>
+      <label>Archivos (PDF, fotos…)</label><input type="file" multiple onchange="cpAddFiles(this)" style="${ss}">
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">${chips}</div>
+      <div style="margin-top:14px"><button class="btn" type="submit">${cpEditId?'Guardar cambios':'Guardar cotización'}</button> <button class="btn ghost" type="button" onclick="cpFormOpen=false;show('cotiprov')">Cancelar</button></div>
+    </form></div>`;
+}
+async function cpSave(e){ e.preventDefault();
+  const g=id=>{const el=document.getElementById(id);return el?el.value:'';};
+  const btn=e.target.querySelector('button[type=submit]'); if(btn){btn.disabled=true;btn.textContent='⏳ Guardando…';}
+  try{
+    const provName=(g('cpProvName')||'').trim(); const prov=CP_PROVS.find(p=>(p.nombre||'').toLowerCase()===provName.toLowerCase());
+    let ref_tipo='',ref_id=null,ref_label='';
+    const rv=g('cpRef'); if(rv){ const inc=CP_INC.find(i=>String(i.id)===String(rv)); if(inc){ ref_tipo='incidencia'; ref_id=inc.id; ref_label='Incidencia: '+((inc.edificio||'')+' '+(inc.unidad||'')).trim()+' · '+(inc.descripcion||'').slice(0,50); } }
+    if(!g('cpConcepto').trim()){ alert('Pon al menos el concepto/trabajo.'); return false; }
+    // subir archivos nuevos a Storage
+    const archivos=[];
+    for(const f of cpDraftFiles){
+      if(f.url){ archivos.push({nombre:f.nombre,url:f.url,tipo:f.tipo,path:f.path}); continue; }
+      if(f.file){
+        if(f.file.size>25*1024*1024){ alert('"'+f.nombre+'" supera 25 MB y no se subió.'); continue; }
+        const path='coti/'+Date.now()+'_'+f.nombre.replace(/[^\w.\-]/g,'_');
+        const up=await sb.storage.from('cotizaciones').upload(path,f.file,{upsert:false});
+        if(up.error){ alert('No se pudo subir "'+f.nombre+'": '+up.error.message); continue; }
+        const {data:pub}=sb.storage.from('cotizaciones').getPublicUrl(path);
+        archivos.push({nombre:f.nombre,url:pub.publicUrl,path,tipo:f.tipo});
+      }
+    }
+    const row={concepto:g('cpConcepto').trim(),categoria:g('cpCat'),propiedad:g('cpPropiedad').trim(),proveedor_id:(prov?prov.id:null),proveedor_nombre:provName,fecha:g('cpFecha')||null,importe:(g('cpImporte')===''?null:parseFloat(g('cpImporte'))),notas:g('cpNotas'),archivos,ref_tipo,ref_id,ref_label};
+    let res;
+    if(cpEditId){ res=await sb.from('coti_prov').update(row).eq('id',cpEditId).select(); }
+    else { row.created_by=ME.id; row.created_by_nombre=PROFILE.nombre; row.created_at=new Date().toISOString(); res=await sb.from('coti_prov').insert(row).select(); }
+    if(res.error){ alert('No se pudo guardar: '+res.error.message); return false; }
+    toast('✓ Cotización guardada'); cpFormOpen=false; cpTab='lista'; show('cotiprov');
+  }catch(err){ alert('Error: '+((err&&err.message)||err)); }
+  finally{ if(btn){btn.disabled=false;btn.textContent=cpEditId?'Guardar cambios':'Guardar cotización';} }
+  return false;
+}
+async function cpBorrar(id){ if(!confirm('¿Eliminar esta cotización del historial?'))return; const {error}=await sb.from('coti_prov').delete().eq('id',id); if(error){alert(error.message);return;} show('cotiprov'); }
+function cpComparador(){
+  const props=[...new Set(CP.map(c=>c.propiedad).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
+  if(cpCmpProp && !props.includes(cpCmpProp)) cpCmpProp='';
+  const conceptos=[...new Set(CP.filter(c=>!cpCmpProp||c.propiedad===cpCmpProp).map(c=>c.concepto).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
+  if(cpCmpConcepto && !conceptos.includes(cpCmpConcepto)) cpCmpConcepto='';
+  const selProp=`<select onchange="cpCmpProp=this.value;cpCmpConcepto='';show('cotiprov')" style="${CP_SEL}"><option value="">Todas las propiedades</option>${props.map(p=>`<option ${cpCmpProp===p?'selected':''}>${esc(p)}</option>`).join('')}</select>`;
+  const selCon=`<select onchange="cpCmpConcepto=this.value;show('cotiprov')" style="${CP_SEL}"><option value="">Todos los conceptos</option>${conceptos.map(p=>`<option ${cpCmpConcepto===p?'selected':''}>${esc(p)}</option>`).join('')}</select>`;
+  let sel=CP.filter(c=> (!cpCmpProp||c.propiedad===cpCmpProp) && (!cpCmpConcepto||c.concepto===cpCmpConcepto));
+  sel=sel.slice().sort((a,b)=>String(a.fecha||'').localeCompare(String(b.fecha||'')));
+  const imps=sel.map(c=>parseFloat(c.importe)).filter(n=>!isNaN(n));
+  const min=imps.length?Math.min(...imps):null, max=imps.length?Math.max(...imps):null;
+  const head=`<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px">${selProp}${selCon}</div>
+    <p style="font-size:12.5px;color:var(--suave);margin:-4px 0 12px">Elige una propiedad y un concepto (ej. «Hotel Magnolia» + «Pintura fachada») para ver todas las cotizaciones a lo largo del tiempo y comparar precios.</p>`;
+  if(!sel.length) return head+`<div class="panel" style="color:var(--suave)">No hay cotizaciones para esta selección.</div>`;
+  const resumen = imps.length?`<div class="panel" style="display:flex;gap:18px;flex-wrap:wrap"><div><div style="font-size:12px;color:var(--suave)">Más barata</div><div style="font-size:20px;font-weight:800;color:#1e8a5a">${cpMoney(min)}</div></div><div><div style="font-size:12px;color:var(--suave)">Más cara</div><div style="font-size:20px;font-weight:800;color:#c0392b">${cpMoney(max)}</div></div><div><div style="font-size:12px;color:var(--suave)">Diferencia</div><div style="font-size:20px;font-weight:800;color:var(--azul)">${cpMoney(max-min)}</div></div><div><div style="font-size:12px;color:var(--suave)">Cotizaciones</div><div style="font-size:20px;font-weight:800">${sel.length}</div></div></div>`:'';
+  const rows=sel.map(c=>{ const v=parseFloat(c.importe); const esMin=(!isNaN(v)&&v===min&&imps.length>1); const w=(!isNaN(v)&&max)?Math.round(v/max*100):0;
+    return `<div class="kp-row" style="align-items:center"><span class="kp-k" style="flex:0 0 46%">${cpFecha(c.fecha)} · <b>${esc(c.proveedor_nombre||cpProvName(c.proveedor_id)||'—')}</b>${esMin?' <span style="color:#1e8a5a;font-weight:700">· más barata</span>':''}</span><span class="kp-bar"><i style="width:${w}%;background:${esMin?'#1e8a5a':'var(--azul)'}"></i></span><b class="kp-v">${(c.importe!=null&&c.importe!=='')?cpMoney(c.importe):'—'}</b></div>`; }).join('');
+  return head+resumen+`<div class="panel"><h2 style="margin-top:0">Evolución de precios</h2>${rows}</div>`;
+}
+
 /* ---------------- COPIA DE SEGURIDAD (solo propietario) ---------------- */
-const TABLES_BACKUP=['profiles','areas','departamentos','posiciones','equipos','ubicaciones','mant_edificios','mant_unidades','mant_incidencias','mant_fotos','mant_preventivo','limpieza_pub','limpieza_pub_unidades','limpieza_pub_comunes','limpieza_trabajadores','limpieza_unidades_cat','limpieza_areas_cat','transfers','bitacoras','bitacora_pendientes','horarios_pub','turnos','turnos_tipo','solicitudes','fichajes','comunicados','comunicado_lecturas','comunicado_adjuntos','mensajes','plantillas','accesos','notificaciones','notif_leidas','proveedores','propietarios','suministros','sugerencias','kudos','formaciones','videos','eventos','cotizaciones','auditoria'];
+const TABLES_BACKUP=['profiles','areas','departamentos','posiciones','equipos','ubicaciones','mant_edificios','mant_unidades','mant_incidencias','mant_fotos','mant_preventivo','limpieza_pub','limpieza_pub_unidades','limpieza_pub_comunes','limpieza_trabajadores','limpieza_unidades_cat','limpieza_areas_cat','transfers','bitacoras','bitacora_pendientes','horarios_pub','turnos','turnos_tipo','solicitudes','fichajes','comunicados','comunicado_lecturas','comunicado_adjuntos','mensajes','plantillas','accesos','notificaciones','notif_leidas','proveedores','propietarios','suministros','sugerencias','kudos','formaciones','videos','eventos','cotizaciones','coti_prov','auditoria'];
 async function pageBackup(){
   if(!isOwner()){ document.getElementById('main').innerHTML='<div class="page-title">Copia de seguridad</div><div class="panel" style="color:var(--suave)">Acceso restringido al propietario.</div>'; return; }
   let log=[]; try{ const {data}=await sb.from('app_backups').select('*').order('at',{ascending:false}).limit(12); log=data||[]; }catch(e){}
