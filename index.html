@@ -1129,8 +1129,7 @@ const NAV=[
   {id:'mensajeria',ic:'💌',t:'Mensajería'},
   {id:'calendario',ic:'🗓️',t:'Calendario'},
   {grp:'RRHH'},
-  {id:'vacaciones',ic:'🌴',t:'Vacaciones'},
-  {id:'bajas',ic:'🩺',t:'Notificar baja'},
+  {id:'solicitudes',ic:'📋',t:'Solicitudes'},
   {id:'docs',ic:'📁',t:'Documentación'},
   {id:'onboarding',ic:'🚀',t:'Onboarding', lockRoles:['empleado','responsable']},
   {id:'sugerencias',ic:'💡',t:'Sugerencias'},
@@ -1426,8 +1425,7 @@ function show(id){
   else if(id==='suministros'){ ld('<div class="page-title">Suministros</div><div class="page-sub">Cargando…</div>'); pageSuministros(); }
   else if(id==='sugerencias'){ ld('<div class="page-title">Sugerencias</div><div class="page-sub">Cargando…</div>'); pageSugerencias(); }
   else if(id==='fichaje'){ ld('<div class="page-title">Fichaje</div><div class="page-sub">Cargando…</div>'); pageFichaje(); }
-  else if(id==='vacaciones'){ ld('<div class="page-title">Vacaciones</div><div class="page-sub">Cargando…</div>'); pageSolicitud('vacaciones'); }
-  else if(id==='bajas'){ ld('<div class="page-title">Notificar baja</div><div class="page-sub">Cargando…</div>'); pageSolicitud('baja'); }
+  else if(id==='solicitudes'){ ld('<div class="page-title">Solicitudes</div><div class="page-sub">Cargando…</div>'); pageSolicitudes(); }
   else if(id==='aprobaciones'){ ld('<div class="page-title">Aprobaciones</div><div class="page-sub">Cargando…</div>'); pageAprobaciones(); }
   else if(id==='calendario'){ ld('<div class="page-title">Calendario</div><div class="page-sub">Cargando…</div>'); pageCalendario(); }
   else if(id==='cumple'){ ld('<div class="page-title">Cumpleaños</div><div class="page-sub">Cargando…</div>'); pageCumple(); }
@@ -1514,7 +1512,7 @@ async function pageInicio(){
     <div style="font-weight:700;color:var(--azul);margin:${deptBlock?'22px':'4px'} 0 8px${deptBlock?';padding-top:18px;border-top:1px solid var(--gris)':''}">📋 Tu día a día</div>
     <div class="cards">
       <div class="card clic" onclick="show('horarios')"><h3>📅 Próximo turno</h3><div class="big" style="font-size:22px">${prox}</div><small style="color:var(--suave)">${esc(proxSub)}</small></div>
-      <div class="card clic" onclick="show('vacaciones')"><h3>🌴 Vacaciones disponibles</h3><div class="big green">${p.vac||0} días</div><small style="color:var(--suave)">disponibles</small></div>
+      <div class="card clic" onclick="show('solicitudes')"><h3>🌴 Vacaciones disponibles</h3><div class="big green">${p.vac||0} días</div><small style="color:var(--suave)">disponibles</small></div>
       <div class="card clic" onclick="show('comunicados')"><h3>📢 Comunicados sin leer</h3><div class="big">${sinLeer}</div><small style="color:var(--suave)">pendientes de confirmar</small></div>
       <div class="card clic" onclick="show('formacion')"><h3>🎓 Formaciones pendientes</h3><div class="big">${formObl}</div><small style="color:var(--suave)">obligatorias</small></div>
     </div>
@@ -1528,8 +1526,8 @@ async function pageInicio(){
         ${bdNext.map(b=>`<div class="li"><span>${esc(b.nombre)}</span><b style="color:var(--azul)">${String(b.da).padStart(2,'0')} ${MS[b.mo-1]}</b></div>`).join('')||'<div style="color:var(--suave);font-size:13px">Sin fechas registradas.</div>'}
       </div>
       <div class="card"><h3>⚡ Accesos rápidos</h3>
-        <div class="li"><a href="#" onclick="show('vacaciones');return false">Solicitar vacaciones</a></div>
-        <div class="li"><a href="#" onclick="show('bajas');return false">Notificar una baja</a></div>
+        <div class="li"><a href="#" onclick="show('solicitudes');return false">Hacer una solicitud</a></div>
+        <div class="li"><a href="#" onclick="show('solicitudes');return false">Mis comprobantes de pago</a></div>
         <div class="li"><a href="#" onclick="show('docs');return false">Subir documentación</a></div>
         <div class="li"><a href="#" onclick="show('fichaje');return false">Fichar entrada / salida</a></div>
       </div>
@@ -1914,10 +1912,10 @@ async function horGrid(){
   const startISO=isoD(days[0]), endISO=isoD(days[days.length-1]);
   const[exR,solR]=await Promise.all([
     sb.from('turnos').select('empleado_id,fecha,tipo_id,lugar').in('empleado_id',ids).gte('fecha',startISO).lte('fecha',endISO),
-    sb.from('solicitudes').select('user_id,tipo,desde,hasta,estado').in('user_id',ids).in('tipo',['vacaciones','baja']).eq('estado','Aprobada')
+    sb.from('solicitudes').select('user_id,tipo,desde,hasta,estado').in('user_id',ids).in('tipo',['Vacaciones','Baja / ausencia'])
   ]);
   const map={}, locMap={};(exR.data||[]).forEach(t=>{map[t.empleado_id+'|'+t.fecha]=t.tipo_id; if(t.lugar&&!locMap[t.empleado_id]) locMap[t.empleado_id]=t.lugar;});
-  const abs={};(solR.data||[]).forEach(s=>{ let d=new Date(s.desde+'T00:00:00'); const hh=new Date((s.hasta||s.desde)+'T00:00:00'); let g=0; while(d<=hh&&g<400){ abs[s.user_id+'|'+isoD(d)]=s.tipo; d.setDate(d.getDate()+1); g++; } });
+  const abs={};(solR.data||[]).forEach(s=>{ if(!s.desde)return; const esVac=s.tipo==='Vacaciones'; if(esVac&&s.estado!=='Aprobada')return; if(!esVac&&s.estado==='Rechazada')return; const tg=esVac?'vac':'baja'; let d=new Date(s.desde+'T00:00:00'); const hh=new Date((s.hasta||s.desde)+'T00:00:00'); let g=0; while(d<=hh&&g<400){ abs[s.user_id+'|'+isoD(d)]=tg; d.setDate(d.getDate()+1); g++; } });
   const chosen=TURNOS_TIPO.filter(t=>horW.turnos.includes(t.id));
   const turnoOpts=chosen.map(t=>`<option value="${t.id}">${esc(t.nombre)}</option>`).join('');
   const ubicOpts=cur=>`<option value="">— Ubicación —</option>${CAT.ubicaciones.map(u=>`<option ${cur===u?'selected':''}>${esc(u)}</option>`).join('')}`;
@@ -1931,7 +1929,7 @@ async function horGrid(){
   const rows=days.map(d=>{ const iso=isoD(d); const wk=isWk(d);
     return `<tr><td class="hday${wk?' wknd':''}"><b>${d.getDate()} ${HOR_MES[d.getMonth()]}</b><small>${HOR_DOW[d.getDay()]}</small>
       <select onchange="horFillCol('${iso}',this.value)" class="hctrl"><option value="__">▾ todos</option>${turnoOpts}<option value="">vaciar</option></select></td>
-      ${people.map(p=>{ const ab=abs[p.id+'|'+iso]; if(ab) return `<td class="hedit${wk?' wknd':''}" style="text-align:center"><span class="badge ${ab==='vacaciones'?'b-grey':'b-amber'}" title="${ab==='vacaciones'?'Vacaciones aprobadas':'Baja aprobada'}">${ab==='vacaciones'?'🌴':'🤕'}</span></td>`; const cur=map[p.id+'|'+iso]||'';
+      ${people.map(p=>{ const ab=abs[p.id+'|'+iso]; if(ab) return `<td class="hedit${wk?' wknd':''}" style="text-align:center"><span class="badge ${ab==='vac'?'b-grey':'b-amber'}" title="${ab==='vac'?'Vacaciones aprobadas':'Baja/ausencia'}">${ab==='vac'?'🌴':'🤕'}</span></td>`; const cur=map[p.id+'|'+iso]||'';
         return `<td class="hedit${wk?' wknd':''}"><select class="tcell2" data-emp="${p.id}" data-name="${esc(p.nombre)}" data-dept="${esc(p.dept||'')}" data-fecha="${iso}"><option value="">—</option>${chosen.map(t=>`<option value="${t.id}" ${String(cur)===String(t.id)?'selected':''}>${esc(t.nombre)}</option>`).join('')}</select></td>`;
       }).join('')}</tr>`; }).join('');
   return `<div class="panel"><div style="margin-bottom:12px;display:flex;gap:8px;flex-wrap:wrap">
@@ -2769,43 +2767,100 @@ async function doFichar(lugar){const today=hoyISO();const{data}=await sb.from('f
 
 /* ---------------- VACACIONES / BAJAS ---------------- */
 const SOL_EST={Pendiente:'b-amber',Aprobada:'b-green',Rechazada:'b-red',Registrada:'b-blue'};
-async function pageSolicitud(tipo){
-  const{data}=await sb.from('solicitudes').select('*').eq('user_id',ME.id).eq('tipo',tipo).order('created_at',{ascending:false});
-  const mine=data||[];
-  const esVac=tipo==='vacaciones';
-  const form=esVac?`
-    <div class="row"><div><label>Fecha inicio</label><input id="solD" type="date" required></div><div><label>Fecha fin</label><input id="solH" type="date" required></div></div>
-    <label>Comentario (opcional)</label><textarea id="solM" rows="2"></textarea>`
-    :`<label>Tipo</label><select id="solSub"><option>Baja médica</option><option>Cita médica</option><option>Asuntos familiares</option><option>Otro</option></select>
-    <div class="row"><div><label>Desde</label><input id="solD" type="date" required></div><div><label>Hasta (estimado)</label><input id="solH" type="date"></div></div>
-    <label>Observaciones</label><textarea id="solM" rows="2"></textarea>`;
-  document.getElementById('main').innerHTML=`<div class="page-title">${esVac?'Solicitar vacaciones':'Notificar baja o ausencia'}</div>
-    <div class="page-sub">${esVac?`Tienes ${PROFILE.vac||0} días disponibles este año`:'Comunica una baja médica, permiso o ausencia'}</div>
-    <div class="panel" style="max-width:620px"><form class="box" onsubmit="return createSol(event,'${tipo}')" style="max-width:none">${form}
-      <div><button class="btn" type="submit">${esVac?'Enviar solicitud':'Notificar'}</button></div></form></div>
-    <div class="panel"><h2>Mis ${esVac?'solicitudes':'avisos'}</h2>${mine.length?`<table><thead><tr><th>Fechas</th>${esVac?'':'<th>Tipo</th>'}<th>Estado</th></tr></thead><tbody>
-      ${mine.map(s=>`<tr><td>${s.desde||''}${s.hasta?' → '+s.hasta:''}</td>${esVac?'':`<td>${esc(s.motivo||'')}</td>`}<td><span class="badge ${SOL_EST[s.estado]||'b-grey'}">${esc(s.estado)}</span></td></tr>`).join('')}</tbody></table>`:'<div style="color:var(--suave);font-size:13.5px">Sin registros.</div>'}</div>`;
+const SOL_TIPOS=['Carta de trabajo','Certificación de servicio profesional','Carta de recomendación laboral','Constancia laboral','Vacaciones','Solicitud de préstamo','Reunión con RRHH','Comprobante de pago','Baja / ausencia'];
+const SOL_SUBT=['Baja médica','Cita médica','Asuntos familiares','Permiso','Otro'];
+let solTipo='Carta de trabajo', aprTab='solicitudes';
+async function solUpload(file,folder){
+  try{ if(sb.storage&&sb.storage.from){ const path=(folder||'rrhh')+'/'+Date.now()+'_'+file.name.replace(/[^\w.\-]/g,'_'); const up=await sb.storage.from('rrhh').upload(path,file,{upsert:false}); if(up.error) throw up.error; const {data:pub}=sb.storage.from('rrhh').getPublicUrl(path); return {nombre:file.name,url:pub.publicUrl,path,tipo:file.type}; } }catch(e){}
+  return {nombre:file.name,url:(window.URL&&URL.createObjectURL)?URL.createObjectURL(file):'#',tipo:file.type};
 }
-async function createSol(e,tipo){e.preventDefault();
-  const sub=document.getElementById('solSub');
-  const row={user_id:ME.id,user_nombre:PROFILE.nombre,dept:PROFILE.dept,tipo,desde:val('solD')||null,hasta:val('solH')||null,
-    motivo: tipo==='vacaciones'?val('solM'):(sub?sub.value:'')+(val('solM')?' · '+val('solM'):''),
-    estado: tipo==='vacaciones'?'Pendiente':'Registrada'};
-  if(!row.desde){alert('Indica la fecha de inicio.');return false;}
+function solFieldsHTML(){
+  const t=solTipo;
+  if(t==='Vacaciones') return `<div class="row"><div><label>Desde</label><input id="solD" type="date" required></div><div><label>Hasta</label><input id="solH" type="date" required></div></div><label>Comentario (opcional)</label><textarea id="solM" rows="2"></textarea><div style="font-size:12px;color:var(--suave)">Tienes ${PROFILE.vac||0} días disponibles este año.</div>`;
+  if(t==='Baja / ausencia') return `<label>Motivo</label><select id="solSub">${SOL_SUBT.map(x=>`<option>${x}</option>`).join('')}</select><div class="row"><div><label>Desde</label><input id="solD" type="date" required></div><div><label>Hasta (estimado)</label><input id="solH" type="date"></div></div><label>Observaciones</label><textarea id="solM" rows="2"></textarea>`;
+  if(t==='Solicitud de préstamo') return `<label>Importe solicitado ($)</label><input id="solImp" type="number" min="0" step="0.01"><label>Motivo</label><textarea id="solM" rows="2"></textarea>`;
+  if(t==='Reunión con RRHH') return `<label>Fecha preferida (opcional)</label><input id="solD" type="date"><label>Tema a tratar</label><textarea id="solM" rows="2" required></textarea>`;
+  if(t==='Comprobante de pago') return `<label>Periodo / mes</label><input id="solPer" type="month"><label>Comentario (opcional)</label><textarea id="solM" rows="2"></textarea><div style="font-size:12px;color:var(--suave)">También puedes descargar tus comprobantes ya disponibles abajo ⬇️</div>`;
+  return `<label>¿Para qué lo necesitas? (opcional)</label><textarea id="solM" rows="2" placeholder="Ej. trámite bancario, visa, alquiler…"></textarea>`;
+}
+function solRenderFields(){ const el=document.getElementById('solFields'); if(el) el.innerHTML=solFieldsHTML(); }
+function solDetalle(s){ const p=[]; if(s.desde)p.push(s.desde+(s.hasta?' → '+s.hasta:'')); if(s.periodo)p.push('Periodo '+s.periodo); if(s.importe!=null&&s.importe!=='')p.push('$'+s.importe); if(s.motivo)p.push(s.motivo); return esc(p.join(' · ')||'—'); }
+async function pageSolicitudes(){
+  const [sr,nr]=await Promise.all([
+    sb.from('solicitudes').select('*').eq('user_id',ME.id).order('created_at',{ascending:false}),
+    sb.from('nominas').select('*').eq('user_id',ME.id).order('periodo',{ascending:false})
+  ]);
+  const mine=sr.data||[], myNom=nr.data||[];
+  const tipoOpts=SOL_TIPOS.map(t=>`<option ${solTipo===t?'selected':''}>${t}</option>`).join('');
+  const filas=mine.map(s=>`<tr><td><b>${esc(s.tipo)}</b></td><td style="color:var(--suave)">${solDetalle(s)}</td><td><span class="badge ${SOL_EST[s.estado]||'b-grey'}">${esc(s.estado)}</span></td><td>${s.archivo_url?`<a class="btn ghost" style="padding:4px 10px" href="${esc(s.archivo_url)}" target="_blank" rel="noopener">⬇️ ${esc(s.archivo_nombre||'documento')}</a>`:(s.respuesta?`<small style="color:var(--suave)">${esc(s.respuesta)}</small>`:'')}</td></tr>`).join('')||'<tr><td colspan="4" style="color:var(--suave)">Sin solicitudes todavía.</td></tr>';
+  const nomRows=myNom.map(n=>`<tr><td><b>${esc(n.periodo||'')}</b></td><td>${n.created_at?new Date(n.created_at).toLocaleDateString('es-ES'):''}</td><td>${n.archivo_url?`<a class="btn" style="padding:5px 12px" href="${esc(n.archivo_url)}" target="_blank" rel="noopener">⬇️ Descargar</a>`:'—'}</td></tr>`).join('')||'<tr><td colspan="3" style="color:var(--suave)">Aún no hay comprobantes disponibles. RRHH los publicará aquí.</td></tr>';
+  document.getElementById('main').innerHTML=`<div class="page-title">Solicitudes</div><div class="page-sub">Haz solicitudes a Recursos Humanos y descarga tus comprobantes de pago.</div>
+    <div class="panel" style="max-width:680px"><h2 style="margin-top:0">Nueva solicitud</h2>
+      <form class="box" onsubmit="return createSol(event)" style="max-width:none">
+        <label>Tipo de solicitud</label><select id="solTipoSel" onchange="solTipo=this.value;solRenderFields()">${tipoOpts}</select>
+        <div id="solFields">${solFieldsHTML()}</div>
+        <div style="margin-top:12px"><button class="btn" type="submit">Enviar solicitud</button></div>
+      </form></div>
+    <div class="panel"><h2>Mis solicitudes</h2><div style="overflow-x:auto"><table><thead><tr><th>Tipo</th><th>Detalle</th><th>Estado</th><th>Respuesta / documento</th></tr></thead><tbody>${filas}</tbody></table></div></div>
+    <div class="panel"><h2>💵 Mis comprobantes de pago</h2><div style="overflow-x:auto"><table><thead><tr><th>Periodo</th><th>Publicado</th><th></th></tr></thead><tbody>${nomRows}</tbody></table></div></div>`;
+}
+async function createSol(e){e.preventDefault();
+  const g=id=>{const el=document.getElementById(id);return el?el.value:'';};
+  const t=solTipo; const sub=document.getElementById('solSub');
+  const estado=(t==='Baja / ausencia')?'Registrada':'Pendiente';
+  const motivo=(t==='Baja / ausencia'&&sub)?(sub.value+(g('solM')?' · '+g('solM'):'')):g('solM');
+  const row={user_id:ME.id,user_nombre:PROFILE.nombre,dept:PROFILE.dept,tipo:t,desde:g('solD')||null,hasta:g('solH')||null,periodo:g('solPer')||null,importe:(g('solImp')===''?null:parseFloat(g('solImp'))),motivo,estado};
+  if(t==='Vacaciones'&&!row.desde){alert('Indica la fecha de inicio.');return false;}
+  if(t==='Reunión con RRHH'&&!motivo){alert('Indica el tema a tratar.');return false;}
   const{error}=await sb.from('solicitudes').insert(row);
   if(error){alert('Error: '+error.message);return false;}
-  show(tipo==='vacaciones'?'vacaciones':'bajas');return false;
+  toast('✓ Solicitud enviada'); show('solicitudes');return false;
 }
+function aprSetTab(t){ aprTab=t; show('aprobaciones'); }
+function aprTabsHTML(){ return `<div class="tabs"><button class="${aprTab==='solicitudes'?'on':''}" onclick="aprSetTab('solicitudes')">📋 Solicitudes</button><button class="${aprTab==='nominas'?'on':''}" onclick="aprSetTab('nominas')">💵 Comprobantes de pago</button></div>`; }
 async function pageAprobaciones(){
+  if(aprTab==='nominas') return pageNominasAdmin();
   const{data}=await sb.from('solicitudes').select('*').order('created_at',{ascending:false});
   const all=data||[];
-  document.getElementById('main').innerHTML=`<div class="page-title">Aprobaciones</div><div class="page-sub">Solicitudes del equipo</div>
-    <div class="panel"><table><thead><tr><th>Empleado</th><th>Tipo</th><th>Fechas</th><th>Detalle</th><th>Estado / acción</th></tr></thead><tbody>
-    ${all.map(s=>`<tr><td>${esc(s.user_nombre||'')}</td><td>${esc(s.tipo)}</td><td>${s.desde||''}${s.hasta?' → '+s.hasta:''}</td><td style="color:var(--suave)">${esc(s.motivo||'')}</td>
-      <td>${s.estado==='Pendiente'?`<button class="btn" style="padding:5px 11px" onclick="setSol(${s.id},'Aprobada')">Aprobar</button> <button class="btn ghost" style="padding:5px 11px" onclick="setSol(${s.id},'Rechazada')">Rechazar</button>`:`<span class="badge ${SOL_EST[s.estado]||'b-grey'}">${esc(s.estado)}</span>`}</td></tr>`).join('')||'<tr><td colspan="5" style="color:var(--suave)">No hay solicitudes.</td></tr>'}
-    </tbody></table></div>`;
+  const rowH=s=>{ const acc = s.estado==='Pendiente'
+      ? `<button class="btn" style="padding:5px 11px" onclick="setSol(${s.id},'Aprobada')">Aprobar</button> <button class="btn ghost" style="padding:5px 11px" onclick="setSol(${s.id},'Rechazada')">Rechazar</button> <button class="btn ghost" style="padding:5px 11px" onclick="setSol(${s.id},'Gestionada')">Gestionada</button>`
+      : `<span class="badge ${SOL_EST[s.estado]||'b-grey'}">${esc(s.estado)}</span>`;
+    const adj = `<label class="btn ghost" style="padding:5px 10px;cursor:pointer">📎 Adjuntar<input type="file" style="display:none" onchange="solAttach(${s.id},this)"></label>${s.archivo_url?` <a href="${esc(s.archivo_url)}" target="_blank" rel="noopener">${esc(s.archivo_nombre||'doc')}</a>`:''}`;
+    return `<tr><td>${esc(s.user_nombre||'')}<br><small style="color:var(--suave)">${esc(s.dept||'')}</small></td><td><b>${esc(s.tipo)}</b></td><td style="color:var(--suave)">${solDetalle(s)}</td><td>${acc}</td><td>${adj}</td></tr>`; };
+  document.getElementById('main').innerHTML=`<div class="page-title">Aprobaciones</div><div class="page-sub">Solicitudes del equipo y comprobantes de pago</div>${aprTabsHTML()}
+    <div class="panel"><div style="overflow-x:auto"><table><thead><tr><th>Empleado</th><th>Tipo</th><th>Detalle</th><th>Estado / acción</th><th>Documento</th></tr></thead><tbody>
+    ${all.map(rowH).join('')||'<tr><td colspan="5" style="color:var(--suave)">No hay solicitudes.</td></tr>'}
+    </tbody></table></div></div>`;
 }
-async function setSol(id,estado){await sb.from('solicitudes').update({estado}).eq('id',id);loadAprobPend();show('aprobaciones');}
+async function setSol(id,estado){ const resp=(estado==='Rechazada')?(prompt('Motivo del rechazo (opcional):')||''):''; const patch={estado}; if(resp) patch.respuesta=resp; await sb.from('solicitudes').update(patch).eq('id',id);loadAprobPend();show('aprobaciones');}
+async function solAttach(id,input){ const f=input.files&&input.files[0]; if(!f)return; if(f.size>25*1024*1024){alert('El archivo supera 25 MB.');return;} const up=await solUpload(f,'cartas'); const {error}=await sb.from('solicitudes').update({archivo_url:up.url,archivo_nombre:up.nombre,archivo_path:up.path||null,estado:'Gestionada'}).eq('id',id); if(error){alert(error.message);return;} toast('✓ Documento adjuntado'); show('aprobaciones'); }
+async function pageNominasAdmin(){
+  const [er,nr]=await Promise.all([
+    sb.from('profiles').select('id,nombre,dept').eq('estado','aprobado').order('nombre'),
+    sb.from('nominas').select('*').order('created_at',{ascending:false})
+  ]);
+  const emps=er.data||[], noms=nr.data||[];
+  const empOpts=emps.map(e=>`<option value="${e.id}">${esc(e.nombre)}${e.dept?' · '+esc(e.dept):''}</option>`).join('');
+  const rows=noms.map(n=>`<tr><td><b>${esc(n.user_nombre||'')}</b></td><td>${esc(n.periodo||'')}</td><td>${n.archivo_url?`<a href="${esc(n.archivo_url)}" target="_blank" rel="noopener">${esc(n.archivo_nombre||'archivo')}</a>`:'—'}</td><td>${n.created_at?new Date(n.created_at).toLocaleDateString('es-ES'):''}</td><td><button class="btn ghost" style="padding:4px 9px;color:#c0392b" onclick="nomDel(${n.id})">🗑</button></td></tr>`).join('')||'<tr><td colspan="5" style="color:var(--suave)">Aún no hay comprobantes subidos.</td></tr>';
+  document.getElementById('main').innerHTML=`<div class="page-title">Aprobaciones</div><div class="page-sub">Solicitudes del equipo y comprobantes de pago</div>${aprTabsHTML()}
+    <div class="panel" style="max-width:680px"><h2 style="margin-top:0">Subir comprobante de pago</h2>
+      <p style="font-size:12.5px;color:var(--suave);margin:-4px 0 10px">El trabajador podrá descargar el suyo desde su sección de Solicitudes.</p>
+      <div class="row"><div><label>Empleado</label><select id="nomEmp">${empOpts}</select></div><div><label>Periodo / mes</label><input id="nomPer" type="month"></div></div>
+      <label>Archivo (PDF)</label><input id="nomFile" type="file" accept="application/pdf,image/*">
+      <div style="margin-top:12px"><button class="btn" onclick="nomUpload()">Subir comprobante</button></div></div>
+    <div class="panel"><h2>Comprobantes subidos (${noms.length})</h2><div style="overflow-x:auto"><table><thead><tr><th>Empleado</th><th>Periodo</th><th>Archivo</th><th>Subido</th><th></th></tr></thead><tbody>${rows}</tbody></table></div></div>`;
+}
+async function nomUpload(){
+  const emp=document.getElementById('nomEmp'), per=document.getElementById('nomPer'), file=document.getElementById('nomFile');
+  if(!emp||!emp.value){alert('Elige un empleado.');return;}
+  if(!file||!file.files||!file.files[0]){alert('Selecciona el archivo del comprobante.');return;}
+  const f=file.files[0]; if(f.size>25*1024*1024){alert('El archivo supera 25 MB.');return;}
+  const empName=(emp.options[emp.selectedIndex]||{}).text||''; const up=await solUpload(f,'nominas');
+  const {error}=await sb.from('nominas').insert({user_id:emp.value,user_nombre:empName.split(' · ')[0],periodo:per?per.value:'',archivo_url:up.url,archivo_nombre:up.nombre,archivo_path:up.path||null,subido_por:PROFILE.nombre});
+  if(error){alert('Error: '+error.message);return;}
+  toast('✓ Comprobante subido'); show('aprobaciones');
+}
+async function nomDel(id){ if(!confirm('¿Eliminar este comprobante?'))return; const {error}=await sb.from('nominas').delete().eq('id',id); if(error){alert(error.message);return;} show('aprobaciones'); }
 
 /* ---------------- CALENDARIO ---------------- */
 let evFormOpen=false, evEditId=null;
@@ -3731,7 +3786,7 @@ function cpComparador(){
 }
 
 /* ---------------- COPIA DE SEGURIDAD (solo propietario) ---------------- */
-const TABLES_BACKUP=['profiles','areas','departamentos','posiciones','equipos','ubicaciones','mant_edificios','mant_unidades','mant_incidencias','mant_fotos','mant_preventivo','limpieza_pub','limpieza_pub_unidades','limpieza_pub_comunes','limpieza_trabajadores','limpieza_unidades_cat','limpieza_areas_cat','transfers','bitacoras','bitacora_pendientes','horarios_pub','turnos','turnos_tipo','solicitudes','fichajes','comunicados','comunicado_lecturas','comunicado_adjuntos','mensajes','plantillas','accesos','notificaciones','notif_leidas','proveedores','propietarios','suministros','sugerencias','kudos','formaciones','videos','eventos','cotizaciones','coti_prov','auditoria'];
+const TABLES_BACKUP=['profiles','areas','departamentos','posiciones','equipos','ubicaciones','mant_edificios','mant_unidades','mant_incidencias','mant_fotos','mant_preventivo','limpieza_pub','limpieza_pub_unidades','limpieza_pub_comunes','limpieza_trabajadores','limpieza_unidades_cat','limpieza_areas_cat','transfers','bitacoras','bitacora_pendientes','horarios_pub','turnos','turnos_tipo','solicitudes','nominas','fichajes','comunicados','comunicado_lecturas','comunicado_adjuntos','mensajes','plantillas','accesos','notificaciones','notif_leidas','proveedores','propietarios','suministros','sugerencias','kudos','formaciones','videos','eventos','cotizaciones','coti_prov','auditoria'];
 async function pageBackup(){
   if(!isOwner()){ document.getElementById('main').innerHTML='<div class="page-title">Copia de seguridad</div><div class="panel" style="color:var(--suave)">Acceso restringido al propietario.</div>'; return; }
   let log=[]; try{ const {data}=await sb.from('app_backups').select('*').order('at',{ascending:false}).limit(12); log=data||[]; }catch(e){}
@@ -4300,8 +4355,8 @@ async function sendWally(){const i=document.getElementById('chatIn');const q=(i.
 async function wallyAnswer(q){const s=q.toLowerCase();const has=(...w)=>w.some(x=>s.includes(x));
   if(has('hola','ayuda','qué puedes','que puedes')) return{msg:'Soy Wally 🤖. Puedo ayudarte con horarios, comunicados, proveedores, suministros, cumpleaños, vacaciones, plantillas y más. Prueba una sugerencia.',nav:[]};
   if(has('horario','turno')) return{msg:'Tu horario está en la sección Horarios, pestaña «Mi horario».',nav:[{l:'Horarios',s:'horarios'}]};
-  if(has('vacacion')) return{msg:`Pide tus vacaciones desde la sección Vacaciones. Tienes ${PROFILE.vac||0} días.`,nav:[{l:'Vacaciones',s:'vacaciones'}]};
-  if(has('baja','enferm')) return{msg:'Notifica una baja desde la sección correspondiente.',nav:[{l:'Notificar baja',s:'bajas'}]};
+  if(has('vacacion')) return{msg:`Pide tus vacaciones desde la sección Solicitudes. Tienes ${PROFILE.vac||0} días.`,nav:[{l:'Solicitudes',s:'solicitudes'}]};
+  if(has('baja','enferm','comprobante','nómina','nomina','préstamo','prestamo','carta')) return{msg:'Desde la sección Solicitudes puedes pedir cartas, comprobantes de pago, préstamos, notificar bajas y más.',nav:[{l:'Solicitudes',s:'solicitudes'}]};
   if(has('fichaje','fichar','entrada','salida')) return{msg:'Ficha entrada/salida escaneando el QR de tu lugar de trabajo.',nav:[{l:'Fichaje',s:'fichaje'}]};
   if(has('comunicado','aviso','novedad')){const{data}=await sb.from('comunicados').select('titulo').order('created_at',{ascending:false}).limit(3);return{msg:'Últimos comunicados:<br>'+((data||[]).map(c=>'• '+esc(c.titulo)).join('<br>')||'ninguno'),nav:[{l:'Comunicados',s:'comunicados'}]};}
   if(has('proveedor','teléfono','telefono','contacto')){const{data}=await sb.from('proveedores').select('nombre,tel,cat').limit(4);return{msg:(data&&data.length?data.map(p=>`<b>${esc(p.nombre)}</b> (${esc(p.cat||'')}) · ${esc(p.tel||'')}`).join('<br>'):'No hay proveedores cargados.'),nav:[{l:'Proveedores',s:'proveedores'}]};}
