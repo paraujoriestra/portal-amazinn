@@ -976,7 +976,7 @@ function isProvider(){ return !!(PROFILE&&PROFILE.proveedor); }     // técnico/
 function provEsp(){ return (PROFILE&&PROFILE.especialidad)||''; }   // su categoría (ej. climatizacion)
 const PROV_NAV_OK=['inicio','incidencias','preventivo','perfil'];
 function isConductor(){ return !!(PROFILE&&PROFILE.conductor); }    // conductor de transfers (acceso limitado)
-const CONDUCTOR_NAV_OK=['inicio','transfer','perfil'];
+const CONDUCTOR_NAV_OK=['transfer'];
 
 let sb=null, ME=null, PROFILE=null, curPage='';
 
@@ -1054,7 +1054,7 @@ async function enterApp(user){
   if(PROFILE.foto){ avEl.textContent=''; avEl.style.background=`#eee url('${PROFILE.foto}') center/cover no-repeat`; }
   else { avEl.textContent = inis(PROFILE.nombre||user.email); avEl.style.background = PROFILE.color || '#1F4E79'; }
   buildNav();
-  document.getElementById('chatFab').style.display='flex';
+  document.getElementById('chatFab').style.display = isConductor()?'none':'flex';
   loadNotifs();
   refreshBadges(); ping();
   if(window._msgPoll) clearInterval(window._msgPoll);
@@ -1129,6 +1129,7 @@ const NAV=[
   {id:'mensajeria',ic:'💌',t:'Mensajería'},
   {id:'calendario',ic:'🗓️',t:'Calendario'},
   {grp:'RRHH'},
+  {id:'asistencia',ic:'📊',t:'Asistencia diaria', roles:['responsable','direccion','admin']},
   {id:'solicitudes',ic:'📋',t:'Solicitudes'},
   {id:'onboarding',ic:'🚀',t:'Onboarding', lockRoles:['empleado','responsable']},
   {id:'sugerencias',ic:'💡',t:'Sugerencias'},
@@ -1238,6 +1239,7 @@ const ICONS={
   transfer:'<path d="M3 13l2-5a2 2 0 0 1 1.9-1.4h6.2A2 2 0 0 1 17 8l2 5"/><path d="M3 13h18v4a1 1 0 0 1-1 1h-1a2 2 0 0 1-4 0H9a2 2 0 0 1-4 0H4a1 1 0 0 1-1-1z"/><circle cx="7" cy="17" r="1.3"/><circle cx="17" cy="17" r="1.3"/>',
   backup:'<path d="M5 4h11l3 3v13H5z"/><path d="M8 4v5h7"/><circle cx="12" cy="14" r="3"/>',
   cotiprov:'<path d="M6 3h9l3 3v15H6z"/><path d="M9 8h6M9 12h6M9 16h4"/>',
+  asistencia:'<path d="M4 19V9M9 19V5M14 19v-7M19 19v-4"/><path d="M3 21h18"/>',
   marca:'<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8" cy="9" r="1.6"/><path d="M3 17l5-4 4 3 3-2 6 5"/>',
   carteles:'<rect x="4" y="4" width="16" height="11" rx="1"/><path d="M12 15v5M8 20h8"/>',
   tutoriales:'<path d="M2 9l10-5 10 5-10 5z"/><path d="M6 11v4c0 1.5 3 3 6 3s6-1.5 6-3v-4"/>',
@@ -1404,6 +1406,7 @@ function buildNav(){
 function highlightNav(){document.querySelectorAll('#nav a').forEach(a=>a.classList.toggle('active',a.dataset.id===curPage));}
 function ensureGroupOpen(id){const g=groupOf(id);if(g&&navOpen&&!(navOpen.size===1&&navOpen.has(g))){navOpen.clear();navOpen.add(g);buildNav();}}
 function show(id){
+  if(typeof isConductor==='function' && isConductor() && id!=='transfer') id='transfer';   // conductor: solo Transfer
   const samePage=(curPage===id);   // recargar la MISMA página → sin "Cargando…" ni salto (fluido)
   curPage=id;
   try{ if(('#'+id)!==location.hash) history.replaceState(null,'','#'+id); }catch(e){}
@@ -1425,6 +1428,7 @@ function show(id){
   else if(id==='sugerencias'){ ld('<div class="page-title">Sugerencias</div><div class="page-sub">Cargando…</div>'); pageSugerencias(); }
   else if(id==='fichaje'){ ld('<div class="page-title">Fichaje</div><div class="page-sub">Cargando…</div>'); pageFichaje(); }
   else if(id==='solicitudes'){ ld('<div class="page-title">Solicitudes</div><div class="page-sub">Cargando…</div>'); pageSolicitudes(); }
+  else if(id==='asistencia'){ ld('<div class="page-title">Asistencia diaria</div><div class="page-sub">Cargando…</div>'); pageAsistencia(); }
   else if(id==='aprobaciones'){ ld('<div class="page-title">Aprobaciones</div><div class="page-sub">Cargando…</div>'); pageAprobaciones(); }
   else if(id==='calendario'){ ld('<div class="page-title">Calendario</div><div class="page-sub">Cargando…</div>'); pageCalendario(); }
   else if(id==='cumple'){ ld('<div class="page-title">Cumpleaños</div><div class="page-sub">Cargando…</div>'); pageCumple(); }
@@ -2860,6 +2864,78 @@ async function nomUpload(){
 }
 async function nomDel(id){ if(!confirm('¿Eliminar este comprobante?'))return; const {error}=await sb.from('nominas').delete().eq('id',id); if(error){alert(error.message);return;} show('aprobaciones'); }
 
+/* ---------------- ASISTENCIA DIARIA (RRHH) ---------------- */
+function asisMin(hhmm){ const m=/(\d{1,2}):(\d{2})/.exec(hhmm||''); return m?(+m[1])*60+(+m[2]):null; }
+let asisDate='';
+function asisShift(n){ const cur=asisDate||hoyISO(); const d=new Date(cur+'T00:00:00'); d.setDate(d.getDate()+n); const iso=isoD(d); const max=hoyISO(); const md=new Date(); md.setDate(md.getDate()-14); const min=isoD(md); if(iso<min||iso>max) return; asisDate=(iso===max?'':iso); show('asistencia'); }
+async function pageAsistencia(){
+  await loadTurnosTipo();
+  const maxD=hoyISO(); const _md=new Date(); _md.setDate(_md.getDate()-14); const minD=isoD(_md);
+  let today=asisDate||maxD; if(today<minD)today=minD; if(today>maxD)today=maxD;
+  const ref=new Date(today+'T00:00:00'); const dow=(ref.getDay()+6)%7; const ws=new Date(ref); ws.setDate(ref.getDate()-dow); const we=new Date(ws); we.setDate(ws.getDate()+6);
+  const wkS=isoD(ws), wkE=isoD(we);
+  const [pf,tn,fc,sol,fcw,tnw]=await Promise.all([
+    sb.from('profiles').select('id,nombre,dept').eq('estado','aprobado'),
+    sb.from('turnos').select('empleado_id,tipo_id,hora_ini,hora_fin').eq('fecha',today),
+    sb.from('fichajes').select('user_id,tipo,ts,hora,fecha').eq('fecha',today),
+    sb.from('solicitudes').select('user_id,tipo,desde,hasta,estado').in('tipo',['Vacaciones','Baja / ausencia']),
+    sb.from('fichajes').select('user_id,tipo,ts,hora,fecha').gte('fecha',wkS).lte('fecha',wkE),
+    sb.from('turnos').select('empleado_id,tipo_id,hora_ini,hora_fin,fecha').gte('fecha',wkS).lte('fecha',wkE)
+  ]);
+  const profs=pf.data||[], N=profs.length; const nameOf={},deptOf={}; profs.forEach(p=>{nameOf[p.id]=p.nombre;deptOf[p.id]=p.dept||'—';});
+  const schedWork=new Set(), libres=new Set(), turnoIni={};
+  (tn.data||[]).forEach(t=>{ const tp=t.tipo_id?turnoTipo(t.tipo_id):null; if(!tp)return; if(isLibreTurno(tp)){libres.add(t.empleado_id);} else { schedWork.add(t.empleado_id); turnoIni[t.empleado_id]=t.hora_ini||tp.hora_ini||''; } });
+  const present=new Set(), firstEnt={};
+  (fc.data||[]).forEach(f=>{ if(f.tipo!=='entrada')return; present.add(f.user_id); const ts=f.ts?new Date(f.ts).getTime():(f.fecha&&f.hora?new Date(f.fecha+'T'+f.hora).getTime():0); if(!firstEnt[f.user_id]||ts<firstEnt[f.user_id])firstEnt[f.user_id]=ts; });
+  const justif=new Set(), justifTipo={};
+  (sol.data||[]).forEach(s=>{ if(!s.desde)return; const esVac=s.tipo==='Vacaciones'; if(esVac&&s.estado!=='Aprobada')return; if(!esVac&&s.estado==='Rechazada')return; const a=s.desde,b=s.hasta||s.desde; if(today>=a&&today<=b){ justif.add(s.user_id); justifTipo[s.user_id]=esVac?'Vacaciones':'Baja/ausencia'; } });
+  const tard=[]; present.forEach(uid=>{ const ini=turnoIni[uid]; if(ini&&firstEnt[uid]!=null){ const pm=asisMin(ini); const d=new Date(firstEnt[uid]); const rm=d.getHours()*60+d.getMinutes(); if(pm!=null&&rm-pm>10) tard.push({uid,diff:rm-pm}); } });
+  const ausentes=[...schedWork].filter(uid=>!present.has(uid)&&!justif.has(uid));
+  const programados=schedWork.size, presentes=present.size;
+  // horas extra semana
+  const byUD={}; (fcw.data||[]).forEach(f=>{const k=f.user_id+'|'+f.fecha;(byUD[k]=byUD[k]||[]).push(f);});
+  const planUD={}; (tnw.data||[]).forEach(t=>{ const tp=t.tipo_id?turnoTipo(t.tipo_id):null; if(!tp||isLibreTurno(tp))return; const i=asisMin(t.hora_ini||tp.hora_ini), f=asisMin(t.hora_fin||tp.hora_fin); if(i!=null&&f!=null){ let m=f-i; if(m<0)m+=1440; planUD[t.empleado_id+'|'+t.fecha]=m; } });
+  let extra=0; Object.keys(byUD).forEach(k=>{ const w=fichMins(byUD[k]); const p=planUD[k]||0; if(p&&w>p) extra+=(w-p); });
+  const horasExtra=Math.round(extra/60);
+  // presentes por depto
+  const depPres={}, depProg={}; schedWork.forEach(uid=>{const d=deptOf[uid]||'—';depProg[d]=(depProg[d]||0)+1;}); present.forEach(uid=>{const d=deptOf[uid]||'—';depPres[d]=(depPres[d]||0)+1;});
+  const deps=[...new Set([...Object.keys(depProg),...Object.keys(depPres)])].sort();
+  const depBars=deps.length?deps.map(d=>{const pr=depPres[d]||0,pg=depProg[d]||0,w=pg?Math.round(pr/pg*100):0;return `<div class="kp-row"><span class="kp-k">${esc(d)}</span><span class="kp-bar"><i style="width:${w}%"></i></span><b class="kp-v">${pr}/${pg}</b></div>`;}).join(''):'<div style="color:var(--suave);font-size:13px">Sin turnos programados hoy.</div>';
+  const listAus=ausentes.length?ausentes.map(uid=>`<div class="kp-row"><span class="kp-k" style="flex:1">${esc(nameOf[uid]||uid)}</span><span style="color:var(--suave);font-size:12px">${esc(deptOf[uid]||'')}${turnoIni[uid]?' · turno '+esc(turnoIni[uid]):''}</span></div>`).join(''):'<div style="color:#1e8a5a;font-size:13px">🎉 Nadie ausente sin justificar.</div>';
+  const listTard=tard.length?tard.sort((a,b)=>b.diff-a.diff).map(x=>`<div class="kp-row"><span class="kp-k" style="flex:1">${esc(nameOf[x.uid]||x.uid)}</span><span style="color:#c0392b;font-weight:600;font-size:12.5px">+${x.diff} min</span></div>`).join(''):'<div style="color:#1e8a5a;font-size:13px">Sin tardanzas hoy 👍</div>';
+  const listJust=[...justif].filter(uid=>schedWork.has(uid)||true).length?[...justif].map(uid=>`<div class="kp-row"><span class="kp-k" style="flex:1">${esc(nameOf[uid]||uid)}</span><span style="color:var(--suave);font-size:12.5px">${esc(justifTipo[uid]||'')}</span></div>`).join(''):'<div style="color:var(--suave);font-size:13px">Ninguna.</div>';
+  const card=(lbl,val,sub,col)=>`<div style="background:#fff;border:1px solid var(--gris2);border-radius:16px;padding:20px 22px;box-shadow:var(--sombra)"><div style="font-size:14px;color:var(--suave)">${lbl}</div><div style="font-size:42px;font-weight:800;line-height:1.05;margin:8px 0;color:${col||'var(--texto)'}">${val}</div><div style="font-size:13.5px;color:var(--suave)">${sub||''}</div></div>`;
+  const gs='display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px;margin-bottom:14px';
+  const esHoy=(today===maxD);
+  document.getElementById('main').innerHTML=`<div class="page-title">Asistencia diaria</div><div class="page-sub">${esHoy?'Resumen de hoy':'Resumen del'} · ${ref.toLocaleDateString('es-ES',{weekday:'long',day:'numeric',month:'long'})} · ${N} empleados</div>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:16px">
+      <button class="btn ghost" style="padding:7px 12px" onclick="asisShift(-1)">‹ Día anterior</button>
+      <input type="date" value="${today}" min="${minD}" max="${maxD}" onchange="asisDate=this.value;show('asistencia')" style="padding:8px 11px;border:1px solid var(--gris2);border-radius:8px;font-family:inherit">
+      <button class="btn ghost" style="padding:7px 12px" onclick="asisShift(1)">Día siguiente ›</button>
+      ${esHoy?'':`<button class="btn" style="padding:7px 14px" onclick="asisDate='';show('asistencia')">Volver a hoy</button>`}
+      <span style="margin-left:auto;font-size:12px;color:var(--suave)">Histórico de los últimos 15 días</span>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:14px;margin-bottom:18px">
+      ${card('Presentes hoy',presentes,'de '+programados+' programados','#1e8a5a')}
+      ${card('Tardanzas',tard.length,'hoy','#b9770e')}
+      ${card('Libres hoy',libres.size,'día libre')}
+      ${card('Ausencias sin justificar',ausentes.length,'requieren seguimiento',ausentes.length?'#c0392b':'#1e8a5a')}
+      ${card('Ausencias justificadas',justif.size,'vacaciones / baja')}
+      ${card('Horas extra',horasExtra+' h','esta semana')}
+      ${card('Asistencia',(programados?Math.round(presentes/programados*100):0)+'%','presentes / programados')}
+      ${card('Empleados totales',N,'en plantilla')}
+    </div>
+    <div style="${gs}">
+      <div class="panel"><h2 style="margin-top:0">🚫 Ausencias sin justificar (${ausentes.length})</h2>${listAus}</div>
+      <div class="panel"><h2 style="margin-top:0">⏰ Tardanzas (${tard.length})</h2>${listTard}</div>
+    </div>
+    <div style="${gs}">
+      <div class="panel"><h2 style="margin-top:0">🌴 Ausencias justificadas (${justif.size})</h2>${listJust}</div>
+      <div class="panel"><h2 style="margin-top:0">🏢 Presentes por departamento</h2>${depBars}</div>
+    </div>
+    <div style="font-size:11.5px;color:var(--suave);margin-top:6px">Presentes = quien ha fichado entrada hoy. Tardanza = entrada más de 10 min tras el inicio de su turno. Ausencia sin justificar = tenía turno hoy, no ha fichado y no tiene vacaciones/baja.</div>`;
+}
+
 /* ---------------- CALENDARIO ---------------- */
 let evFormOpen=false, evEditId=null;
 const TIPO_EV={aviso:['Aviso','#d9534f'],evento:['Evento','#e0a800'],formacion:['Formación','#16a085'],comunicado:['Comunicado','#1F4E79']};
@@ -3885,14 +3961,18 @@ async function pageTransfer(){
   TRF_PROPS=[...new Set((ed.data||[]).map(e=>e.nombre).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
   const cond=isConductor();
   let body, tabs='';
-  if(!cond){
+  if(cond){
+    tabs=`<div class="tabs"><button class="${trfTab!=='calendario'?'on':''}" onclick="trfSetTab('solicitudes')">🚐 Mis viajes</button><button class="${trfTab==='calendario'?'on':''}" onclick="trfSetTab('calendario')">🗓️ Calendario</button></div>`;
+  } else {
     tabs=`<div class="tabs">
       <button class="${trfTab==='solicitudes'?'on':''}" onclick="trfSetTab('solicitudes')">🚐 Solicitudes</button>
+      <button class="${trfTab==='calendario'?'on':''}" onclick="trfSetTab('calendario')">🗓️ Calendario</button>
       <button class="${trfTab==='liquidaciones'?'on':''}" onclick="trfSetTab('liquidaciones')">🧾 Liquidaciones viajes</button>
       ${(isAdmin()||PROFILE.role==='direccion')?`<button class="${trfTab==='conductores'?'on':''}" onclick="trfSetTab('conductores')">👤 Conductores</button>`:''}
       <button class="${trfTab==='panel'?'on':''}" onclick="trfSetTab('panel')">📊 Panel</button></div>`;
   }
   if(trfFormOpen) body=trfForm();
+  else if(trfTab==='calendario') body=trfCalendar(cond);
   else if(cond) body=trfBoard(true);
   else if(trfTab==='panel') body=trfPanel();
   else if(trfTab==='liquidaciones') body=trfLiquidaciones();
@@ -4009,6 +4089,30 @@ function trfReabrir(id){ trfUpd(id,{estado:'asignado',realizado_at:null}); }
 function trfCancelar(id){ if(!confirm('¿Cancelar este transfer?'))return; trfUpd(id,{estado:'cancelado'}); }
 function trfReactivar(id){ trfUpd(id,{estado:'pendiente',conductor_id:null,conductor_nombre:'',comision:null}); }
 async function trfBorrar(id){ if(!confirm('¿Eliminar este transfer del historial?'))return; const {error}=await sb.from('transfers').delete().eq('id',id); if(error){alert(error.message);return;} show('transfer'); }
+let trfCalMonth=null;
+function trfCalShift(d){ const b=trfCalMonth?new Date(trfCalMonth):new Date(); b.setDate(1); b.setMonth(b.getMonth()+d); trfCalMonth=b; show('transfer'); }
+function trfCalendar(cond){
+  const MS=['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+  const base=trfCalMonth?new Date(trfCalMonth):new Date(); base.setDate(1); if(!trfCalMonth) trfCalMonth=new Date(base);
+  const y=base.getFullYear(), m=base.getMonth(); const pad=n=>(''+n).padStart(2,'0');
+  let list=TRF.filter(t=>t.llegada && t.estado!=='cancelado');
+  if(cond) list=list.filter(t=>String(t.conductor_id)===String(ME.id));
+  const byDay={}; list.forEach(t=>{ const k=(t.llegada||'').slice(0,10); (byDay[k]=byDay[k]||[]).push(t); });
+  const monthN=list.filter(t=>(t.llegada||'').slice(0,7)===y+'-'+pad(m+1)).length;
+  const firstDow=(new Date(y,m,1).getDay()+6)%7, daysIn=new Date(y,m+1,0).getDate();
+  const todayK=(function(){const x=new Date();return x.getFullYear()+'-'+pad(x.getMonth()+1)+'-'+pad(x.getDate());})();
+  let cells='';
+  for(let i=0;i<firstDow;i++) cells+=`<div style="background:#fafafa;border:1px solid var(--gris);border-radius:8px;min-height:80px"></div>`;
+  for(let dn=1;dn<=daysIn;dn++){ const k=y+'-'+pad(m+1)+'-'+pad(dn); const items=(byDay[k]||[]).slice().sort((a,b)=>(a.llegada||'').localeCompare(b.llegada||'')); const isToday=k===todayK;
+    const chips=items.slice(0,3).map(t=>{const o=TRF_EST[t.estado]||TRF_EST.pendiente; const hora=(t.llegada||'').slice(11,16); return `<div title="${esc((hora?hora+' · ':'')+(t.cliente||'')+(t.destino?' · '+t.destino:''))}" style="font-size:10.5px;background:${o.b};color:${o.c};border-radius:5px;padding:2px 5px;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:600">${hora?hora+' ':''}${esc(t.cliente||'')}</div>`;}).join('');
+    const more=items.length>3?`<div style="font-size:10px;color:var(--suave);margin-top:2px">+${items.length-3} más</div>`:'';
+    cells+=`<div style="background:#fff;border:1px solid ${isToday?'var(--azul)':'var(--gris2)'};border-radius:8px;min-height:80px;padding:4px 5px"><div style="font-size:11px;font-weight:700;color:${isToday?'var(--azul)':'var(--suave)'}">${dn}</div>${chips}${more}</div>`;
+  }
+  const dowH=['L','M','X','J','V','S','D'].map(d=>`<div style="text-align:center;font-size:11px;font-weight:700;color:var(--suave);padding:4px 0">${d}</div>`).join('');
+  const head=`<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap"><button class="btn ghost" style="padding:6px 13px" onclick="trfCalShift(-1)">‹</button><b style="font-size:16px;min-width:150px;text-align:center;text-transform:capitalize">${MS[m]} ${y}</b><button class="btn ghost" style="padding:6px 13px" onclick="trfCalShift(1)">›</button><span style="margin-left:auto;font-size:12.5px;color:var(--suave)">${monthN} traslado(s) este mes</span></div>`;
+  const legend=`<div style="display:flex;gap:14px;flex-wrap:wrap;margin-top:10px;font-size:11.5px;color:var(--suave)"><span>🟠 Pendiente</span><span>🔵 Asignado</span><span>🟢 Realizado</span></div>`;
+  return `<div class="panel">${head}<div style="overflow-x:auto"><div style="display:grid;grid-template-columns:repeat(7,minmax(74px,1fr));gap:5px;min-width:560px">${dowH}${cells}</div></div>${legend}${cond?'<div style="font-size:12px;color:var(--suave);margin-top:8px">Aquí ves los traslados que tienes asignados, ordenados por la fecha de llegada del vuelo.</div>':''}</div>`;
+}
 function trfPanel(){
   const pad=n=>(''+n).padStart(2,'0');
   const dkey=d=>d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());
