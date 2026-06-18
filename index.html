@@ -911,6 +911,8 @@
     <div class="gsearch"><span class="gs-ic">🔎</span><input id="gSearch" placeholder="Buscar…" oninput="globalSearch()" onblur="setTimeout(()=>{const r=document.getElementById('gResults');if(r)r.style.display='none'},180)"><div id="gResults" class="gresults"></div></div>
     <div class="spacer"></div>
     <button class="hdr-ctrl" id="darkBtn" onclick="toggleDark()" title="Modo claro / oscuro">🌙</button>
+    <div class="bell" id="incBell" title="Incidencias terminadas" style="display:none" onclick="toggleIncBell(event)">🛠️<span class="dot" id="incBellDot" style="background:#1e8a5a">0</span></div>
+    <div class="notif-panel" id="incNotifPanel"></div>
     <div class="bell" id="bell" title="Notificaciones" onclick="toggleBell(event)">🔔<span class="dot" id="bellDot">0</span></div>
     <div class="notif-panel" id="notifPanel"></div>
     <div class="user-chip" onclick="show('perfil')" style="cursor:pointer" title="Mi perfil">
@@ -1056,9 +1058,9 @@ async function enterApp(user){
   buildNav();
   document.getElementById('chatFab').style.display = isConductor()?'none':'flex';
   loadNotifs();
-  refreshBadges(); ping();
+  refreshBadges(); ping(); refreshIncBell();
   if(window._msgPoll) clearInterval(window._msgPoll);
-  window._msgPoll = setInterval(()=>{refreshBadges();ping();}, 20000);
+  window._msgPoll = setInterval(()=>{refreshBadges();ping();refreshIncBell();}, 20000);
   chatMsgs=[{from:'bot',msg:`¡Hola, ${(PROFILE.nombre||'').split(' ')[0]||''}! 🤖 Soy <b>Wally</b>, el asistente de Amazinn Places. Pregúntame cómo encontrar algo.`}];
   const h=(location.hash||'').replace(/^#/,'');
   const start=(h==='inicio'||h==='perfil'||NAV.some(n=>n.id===h))?h:'inicio';
@@ -1295,6 +1297,31 @@ function toggleBell(e){
 }
 function goNotif(sec,e){if(e)e.stopPropagation();const p=document.getElementById('notifPanel');if(p)p.style.display='none';if(sec)show(sec);}
 document.addEventListener('click',(e)=>{const p=document.getElementById('notifPanel');if(!p||p.style.display!=='block')return;if(e.target.closest('#notifPanel')||e.target.closest('#bell'))return;p.style.display='none';});
+/* --- Indicador aparte: Incidencias terminadas (responsables hacia arriba) --- */
+function incNotifCan(){ return CAN_MANAGE.includes(PROFILE.role); }
+function incNotifSeen(){ try{ return localStorage.getItem('incSeen_'+((ME&&ME.id)||'')); }catch(e){ return null; } }
+async function refreshIncBell(){
+  const el=document.getElementById('incBell'); if(!el) return;
+  if(!incNotifCan()){ el.style.display='none'; return; }
+  el.style.display='flex';
+  try{ const {data}=await sb.from('mant_incidencias').select('id,resuelta_at,estado').eq('estado','terminada').order('resuelta_at',{ascending:false}).limit(50);
+    const seen=incNotifSeen(); const n=(data||[]).filter(x=>x.resuelta_at && (!seen || x.resuelta_at>seen)).length;
+    const d=document.getElementById('incBellDot'); if(d){ d.textContent=n; d.style.display=n?'block':'none'; }
+  }catch(e){}
+}
+async function toggleIncBell(e){
+  if(e)e.stopPropagation();
+  const p=document.getElementById('incNotifPanel'); if(!p)return;
+  if(p.style.display==='block'){ p.style.display='none'; return; }
+  let items=[];
+  try{ const {data}=await sb.from('mant_incidencias').select('id,descripcion,edificio,unidad,resuelta_at,resuelto_por_nombre').eq('estado','terminada').order('resuelta_at',{ascending:false}).limit(20); items=data||[]; }catch(e2){}
+  p.innerHTML=`<div class="nh">🛠️ Incidencias terminadas</div>`+(items.length?items.map(i=>`<div class="ni" onclick="incNotifGo(${i.id})"><span class="ic">✅</span><div><b>${esc((i.edificio||'')+(i.unidad?' · '+i.unidad:''))||'Incidencia'}</b><br>${esc((i.descripcion||'').slice(0,70))}<small>Resuelta por ${esc(i.resuelto_por_nombre||'—')}${i.resuelta_at?' · '+new Date(i.resuelta_at).toLocaleString('es-ES'):''}</small></div><span class="go">→</span></div>`).join(''):`<div class="empty">No hay incidencias terminadas recientes.</div>`);
+  p.style.display='block';
+  try{ localStorage.setItem('incSeen_'+((ME&&ME.id)||''), new Date().toISOString()); }catch(e3){}
+  refreshIncBell();
+}
+function incNotifGo(id){ const p=document.getElementById('incNotifPanel'); if(p)p.style.display='none'; incOpen(id); }
+document.addEventListener('click',(e)=>{const p=document.getElementById('incNotifPanel');if(!p||p.style.display!=='block')return;if(e.target.closest('#incNotifPanel')||e.target.closest('#incBell'))return;p.style.display='none';});
 async function notifyTeam(dept,icon,texto,sec){ try{ await sb.from('notificaciones').insert({dept,icon,texto,sec}); }catch(e){} }
 /* ---------------- INSIGNIAS DEL MENÚ (por sección y por grupo) ---------------- */
 let NAV_BADGES={};
@@ -3911,7 +3938,8 @@ async function doBackup(){
 
 /* ---------------- TRANSFER (transporte aeropuerto) ---------------- */
 let trfTab='solicitudes', trfFormOpen=false, trfEditId=null, trfFiltroEstado='pendiente', trfSearch='', trfFrom='', trfTo='', trfCondFormOpen=false, trfCondEditId=null;
-let TRF=[], TRF_COND=[], TRF_PROPS=[];
+let TRF=[], TRF_COND=[], TRF_PROPS=[], TRF_PLACES=[];
+const TRF_AIRPORTS=['Tocumen Aeropuerto','Albrook Aeropuerto','Pacífico Aeropuerto'];
 function trfEnsureStyle(){ if(document.getElementById('trfStyle'))return; const s=document.createElement('style'); s.id='trfStyle'; s.textContent=`
 #trfBoard{display:grid!important;grid-template-columns:repeat(auto-fill,minmax(230px,1fr))!important;gap:10px!important;align-items:start}
 .trf-card{background:#fff;border:1px solid var(--gris2);border-left:4px solid var(--gris2);border-radius:11px;padding:10px 13px;box-shadow:var(--sombra)}
@@ -3951,14 +3979,18 @@ function trfCondName(id){ const c=TRF_COND.find(x=>String(x.id)===String(id)); r
 function trfCondComision(id){ const c=TRF_COND.find(x=>String(x.id)===String(id)); return c?(parseFloat(c.comision)||0):0; }
 async function pageTransfer(){
   asgEnsureStyle(); trfEnsureStyle();
-  const [tr,pf,ed]=await Promise.all([
+  const [tr,pf,ed,un]=await Promise.all([
     sb.from('transfers').select('*').order('created_at',{ascending:false}),
     sb.from('profiles').select('*'),
-    sb.from('mant_edificios').select('nombre').order('nombre')
+    sb.from('mant_edificios').select('nombre').order('nombre'),
+    sb.from('mant_unidades').select('edificio,nombre,tipo').order('edificio').order('orden').order('nombre')
   ]);
   TRF=tr.data||[];
   TRF_COND=(pf.data||[]).filter(p=>p.conductor);
-  TRF_PROPS=[...new Set((ed.data||[]).map(e=>e.nombre).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
+  const eds=[...new Set((ed.data||[]).map(e=>e.nombre).filter(Boolean))];
+  const unidades=(un.data||[]).filter(u=>u.tipo!=='comun').map(u=>`${u.edificio} ${u.nombre}`);
+  TRF_PROPS=eds.slice().sort((a,b)=>a.localeCompare(b));
+  TRF_PLACES=[...new Set([...TRF_AIRPORTS, ...eds, ...unidades])];
   const cond=isConductor();
   let body, tabs='';
   if(cond){
@@ -4061,8 +4093,9 @@ function trfForm(){
     ${(trfEditId&&t.created_by_nombre)?`<div style="font-size:12px;color:var(--suave);margin:0 0 14px;padding:7px 11px;background:var(--gris);border-radius:8px">📝 Solicitado por <b>${esc(t.created_by_nombre)}</b>${t.created_at?' · '+new Date(t.created_at).toLocaleString('es-ES',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}):''}</div>`:''}
     <form class="box" onsubmit="return trfSave(event)" style="max-width:none">
       <label>Nombre y apellido del cliente *</label><input id="trfCliente" required value="${esc(t.cliente||'')}" style="${ss}">
-      <label>Destino (propiedad)</label><input id="trfDestino" list="trfPropDL" value="${esc(t.destino||'')}" placeholder="Elige o escribe la propiedad…" style="${ss}"><datalist id="trfPropDL">${TRF_PROPS.map(p=>`<option value="${esc(p)}"></option>`).join('')}</datalist>
-      <label>Lugar de recogida</label><input id="trfAeropuerto" list="trfLugarDL" value="${esc(t.aeropuerto||'')}" placeholder="Escribe el lugar (ej. Aeropuerto de Tocumen)" style="${ss}"><datalist id="trfLugarDL"><option value="Tocumen Aeropuerto"></option><option value="Albrook Aeropuerto"></option></datalist>
+      <datalist id="trfPlacesDL">${TRF_PLACES.map(p=>`<option value="${esc(p)}"></option>`).join('')}</datalist>
+      <label>Destino (propiedad / lugar)</label><input id="trfDestino" list="trfPlacesDL" value="${esc(t.destino||'')}" placeholder="Elige del catálogo o escribe…" style="${ss}">
+      <label>Lugar de recogida</label><input id="trfAeropuerto" list="trfPlacesDL" value="${esc(t.aeropuerto||'')}" placeholder="Elige del catálogo o escribe…" style="${ss}">
       <label>Aerolínea, Nº de vuelo, ciudad de origen</label><input id="trfVuelo" value="${esc(t.aerolinea_vuelo||'')}" placeholder="Ej. Copa CM802, Miami" style="${ss}">
       <div class="row"><div><label>Fecha y hora de llegada</label><input id="trfLlegada" type="datetime-local" value="${esc(t.llegada||'')}" style="${ss}"></div><div><label>Hora de recogida (exterior)</label><input id="trfRecogida" value="${esc(t.recogida||'')}" placeholder="Ej. 16:00" style="${ss}"></div></div>
       <div class="row"><div><label>Nº de personas</label><select id="trfPax" style="${ss}"><option value="">—</option>${Array.from({length:12},(_,i)=>i+1).map(n=>`<option ${String(t.pax)===String(n)?'selected':''}>${n}</option>`).join('')}</select></div><div><label>Piezas de equipaje</label><input id="trfEquipaje" type="number" min="0" value="${esc(t.equipaje||'')}" style="${ss}"></div></div>
@@ -5018,7 +5051,7 @@ async function incFinalizar(id,estadoFinal){
     try{ await sb.from('mensajes').insert({de_id:ME.id,para_id:i.creado_por,de_nombre:PROFILE.nombre,para_nombre:i.creado_por_nombre||'',texto:`✅ Tu incidencia en ${i.edificio||''}${i.unidad?' · '+i.unidad:''} ha sido resuelta por ${PROFILE.nombre}.`,leido:false}); }catch(e){}
   }
   toast(estadoFinal==='terminada'?'✅ Incidencia terminada':'⏸️ Guardada a medias');
-  if(estadoFinal==='terminada'){ incSel=null; if(incTimerInt){clearInterval(incTimerInt);incTimerInt=null;} }
+  if(estadoFinal==='terminada'){ incSel=null; if(incTimerInt){clearInterval(incTimerInt);incTimerInt=null;} try{refreshIncBell();}catch(e){} }
   show('incidencias');
 }
 async function incReabrir(id){
