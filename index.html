@@ -1281,7 +1281,12 @@ async function loadNotifs(){
   NOTIF_READ=new Set((r||[]).map(x=>x.notif_id));
   refreshBell();
 }
-function visNotifs(){return NOTIFS.filter(n=> isAdmin()||!n.dept||n.dept==='*'||String(n.dept).split('|').map(s=>s.trim()).includes(PROFILE.dept));}
+function visNotifs(){return NOTIFS.filter(n=>{
+  if(n.user_id) return String(n.user_id)===String(ME.id);   // dirigida a una persona concreta
+  if(isAdmin()) return true;
+  if(!n.dept||n.dept==='*') return true;
+  return String(n.dept).split('|').map(s=>s.trim()).includes(PROFILE.dept);
+});}
 function refreshBell(){const d=document.getElementById('bellDot');if(!d)return;const n=visNotifs().filter(x=>!NOTIF_READ.has(x.id)).length;d.textContent=n;d.style.display=n?'block':'none';}
 function toggleBell(e){
   if(e)e.stopPropagation();
@@ -1323,6 +1328,7 @@ async function toggleIncBell(e){
 function incNotifGo(id){ const p=document.getElementById('incNotifPanel'); if(p)p.style.display='none'; incOpen(id); }
 document.addEventListener('click',(e)=>{const p=document.getElementById('incNotifPanel');if(!p||p.style.display!=='block')return;if(e.target.closest('#incNotifPanel')||e.target.closest('#incBell'))return;p.style.display='none';});
 async function notifyTeam(dept,icon,texto,sec){ try{ await sb.from('notificaciones').insert({dept,icon,texto,sec}); }catch(e){} }
+async function notifyUser(userId,icon,texto,sec){ if(!userId)return; try{ await sb.from('notificaciones').insert({user_id:userId,dept:null,icon,texto,sec}); }catch(e){} }
 /* ---------------- INSIGNIAS DEL MENÚ (por sección y por grupo) ---------------- */
 let NAV_BADGES={};
 function setBadge(id,n){ NAV_BADGES[id]=n||0; renderNavBadges(); }
@@ -3714,7 +3720,7 @@ let msgTab='ver', msgUnit=null, twoFAok=false, tplEditId=null, tplFormOpen=false
 function tplCancel(){ tplFormOpen=false; tplEditId=null; tplDraft={}; show('mensajes'); }
 function tplFormProp(){ const p=(document.getElementById('tProp')||{}).value||''; const dl=document.getElementById('tUniDL'); const inp=document.getElementById('tUni'); if(!dl||!inp)return; const entries=TPL_UNI.filter(u=>u.prop===p); const whole=p&&entries.length===1&&entries[0].kind==='e'; inp.value=''; if(!p||whole){ dl.innerHTML=''; inp.disabled=true; inp.placeholder=whole?'Propiedad completa':'Todas las unidades'; } else { inp.disabled=false; inp.placeholder='Todas / escribe nº…'; dl.innerHTML=entries.filter(u=>u.kind==='u').map(u=>`<option value="${esc(u.nombre)}"></option>`).join(''); } }
 function canMsg(){return PROFILE.dept==='Atención al cliente'||isAdmin();}
-function canMsgEdit(){return isAdmin()||(PROFILE.role==='responsable'&&PROFILE.dept==='Atención al cliente');}
+function canMsgEdit(){ if(isAdmin())return true; const ac=(PROFILE.dept==='Atención al cliente')||(PROFILE.area==='Atención al cliente'); return ac&&(PROFILE.role==='responsable'||PROFILE.role==='direccion'); }
 function fillTpl(c,u){return (c||'')
   .split('{propiedad}').join(u.prop||'')
   .split('{NºUnidad}').join(u.nombre||'').split('{NoUnidad}').join(u.nombre||'')
@@ -4182,7 +4188,7 @@ function trfCard(t,cond){
     else if(t.estado==='realizado'&&mine) acts=`<span style="color:#1e8a5a;font-weight:700;font-size:12px">✓ Realizado</span>`;
   } else {
     const selCond=`<select onchange="if(this.value)trfAsignar(${t.id},this.value)"><option value="">Asignar a…</option>${TRF_COND.map(c=>`<option value="${c.id}" ${String(t.conductor_id)===String(c.id)?'selected':''}>${esc(c.nombre)}</option>`).join('')}</select>`;
-    const kebab=`<details class="asg-kebab"><summary>⋮</summary><div class="asg-kebab-menu"><button onclick="trfEditar(${t.id})">✏️ Editar</button>${(t.estado==='pendiente'||t.estado==='asignado')?`<button onclick="trfCancelar(${t.id})">✕ Cancelar</button>`:''}<button onclick="trfBorrar(${t.id})" style="color:#c0392b">🗑 Eliminar</button></div></details>`;
+    const kebab=`<details class="asg-kebab"><summary>⋮</summary><div class="asg-kebab-menu"><button onclick="trfEditar(${t.id})">✏️ Editar</button>${t.estado!=='cancelado'?`<button onclick="trfCancelar(${t.id})" style="color:#c0392b">✕ Cancelar</button>`:''}</div></details>`;
     if(t.estado==='pendiente') acts=`${selCond}${kebab}`;
     else if(t.estado==='asignado') acts=`<button class="btn" onclick="trfDone(${t.id})">✓ Realizado</button>${selCond}<button class="btn ghost" onclick="trfDevolver(${t.id})">↩ A pendiente</button>${kebab}`;
     else if(t.estado==='realizado') acts=`<button class="btn ghost" onclick="trfReabrir(${t.id})">↩ Reabrir</button>${kebab}`;
@@ -4235,7 +4241,12 @@ function trfTomar(id){ trfUpd(id,{conductor_id:ME.id,conductor_nombre:PROFILE.no
 function trfDevolver(id){ trfUpd(id,{conductor_id:null,conductor_nombre:'',comision:null,estado:'pendiente'}); }
 function trfDone(id){ trfUpd(id,{estado:'realizado',realizado_at:new Date().toISOString()}); }
 function trfReabrir(id){ trfUpd(id,{estado:'asignado',realizado_at:null}); }
-function trfCancelar(id){ if(!confirm('¿Cancelar este transfer?'))return; trfUpd(id,{estado:'cancelado'}); }
+async function trfCancelar(id){ if(!confirm('¿Cancelar este transfer?'))return;
+  const t=TRF.find(x=>String(x.id)===String(id))||{};
+  const {error}=await sb.from('transfers').update({estado:'cancelado'}).eq('id',id); if(error){alert(error.message);return;}
+  if(t.conductor_id){ const cli=t.cliente||'el cliente'; const info=t.llegada?trfFechaHora(t.llegada):(t.recogida||''); await notifyUser(t.conductor_id,'❌',`Transfer CANCELADO: ${cli}${info?' · '+info:''}. La oficina canceló un viaje que tenías asignado.`,'transfer'); }
+  show('transfer');
+}
 function trfReactivar(id){ trfUpd(id,{estado:'pendiente',conductor_id:null,conductor_nombre:'',comision:null}); }
 async function trfBorrar(id){ if(!confirm('¿Eliminar este transfer del historial?'))return; const {error}=await sb.from('transfers').delete().eq('id',id); if(error){alert(error.message);return;} show('transfer'); }
 let trfCalMonth=null;
