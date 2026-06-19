@@ -4058,7 +4058,7 @@ async function doBackup(){
 }
 
 /* ---------------- TRANSFER (transporte aeropuerto) ---------------- */
-let trfTab='solicitudes', trfFormOpen=false, trfEditId=null, trfFiltroEstado='pendiente', trfSearch='', trfFrom='', trfTo='', trfCondFormOpen=false, trfCondEditId=null;
+let trfTab='solicitudes', trfFormOpen=false, trfEditId=null, trfSentido=null, trfFiltroEstado='pendiente', trfSearch='', trfFrom='', trfTo='', trfCondFormOpen=false, trfCondEditId=null;
 let TRF=[], TRF_COND=[], TRF_PROPS=[], TRF_PLACES=[];
 const TRF_AIRPORTS=['Tocumen Aeropuerto','Albrook Aeropuerto','Pacífico Aeropuerto'];
 function trfEnsureStyle(){ if(document.getElementById('trfStyle'))return; const s=document.createElement('style'); s.id='trfStyle'; s.textContent=`
@@ -4124,7 +4124,7 @@ async function pageTransfer(){
       ${(isAdmin()||PROFILE.role==='direccion')?`<button class="${trfTab==='conductores'?'on':''}" onclick="trfSetTab('conductores')">👤 Conductores</button>`:''}
       <button class="${trfTab==='panel'?'on':''}" onclick="trfSetTab('panel')">📊 Panel</button></div>`;
   }
-  if(trfFormOpen) body=trfForm();
+  if(trfFormOpen) body = trfSentido ? trfForm() : trfChooser();
   else if(trfTab==='calendario') body=trfCalendar(cond);
   else if(cond) body=trfBoard(true);
   else if(trfTab==='panel') body=trfPanel();
@@ -4167,16 +4167,21 @@ function trfRerenderBoard(){ const el=document.getElementById('trfBoard'); if(!e
 function trfCard(t,cond){
   const mine=String(t.conductor_id)===String(ME.id);
   const g=(ic,lbl,v)=> (v==null||v==='')?'':`<div><span style="color:var(--suave)">${ic} ${lbl}:</span> <b>${esc(''+v)}</b></div>`;
+  const esLlegada=(t.sentido||'llegada')==='llegada';
+  const fechaTxt=t.fecha?new Date(t.fecha+'T00:00:00').toLocaleDateString('es-ES',{weekday:'short',day:'2-digit',month:'short'}):(t.llegada?trfFechaHora(t.llegada):'');
+  const horaVuelo=(t.llegada||'').slice(11,16);
+  const tipoTxt=esLlegada?'🛬 Aeropuerto → propiedad':'🛫 Propiedad → aeropuerto';
   const grid=`<div class="trf-grid">
-    ${g('🏠','Destino',t.destino)}
+    <div style="grid-column:1/-1"><span style="color:var(--suave)">${tipoTxt}</span></div>
     ${g('📍','Recogida',t.aeropuerto)}
-    ${g('✈️','Vuelo',t.aerolinea_vuelo)}
-    ${g('🛬','Llegada',t.llegada?trfFechaHora(t.llegada):'')}
+    ${g('🏠','Destino',t.destino)}
+    ${esLlegada?g('✈️','Vuelo',t.aerolinea_vuelo):''}
+    ${g('📅','Fecha',fechaTxt)}
+    ${esLlegada?g('🛬','Llegada vuelo',horaVuelo):''}
     ${g('🕐','Hora recogida',t.recogida)}
     ${g('👤','Pax',t.pax)}
     ${g('🧳','Equipaje',t.equipaje)}
     ${g('📱','WhatsApp',t.whatsapp)}
-    ${g('💵','Costo',t.costo!=null&&t.costo!==''?trfMoney(t.costo):'')}
   </div>`;
   const comLine = (!cond && t.conductor_id && t.comision!=null)
     ? `<div style="font-size:11px;margin-top:5px;color:var(--suave)">Comisión ${trfMoney(t.comision)}</div>` : '';
@@ -4203,38 +4208,84 @@ function trfCard(t,cond){
     <div class="trf-acts">${acts}</div>
   </div>`;
 }
-function trfNuevo(){ trfEditId=null; trfFormOpen=true; show('transfer'); }
-function trfEditar(id){ trfEditId=id; trfFormOpen=true; show('transfer'); }
+function trfNuevo(){ trfEditId=null; trfSentido=null; trfFormOpen=true; show('transfer'); }
+function trfEditar(id){ const t=TRF.find(x=>String(x.id)===String(id))||{}; trfEditId=id; trfSentido=t.sentido||'llegada'; trfFormOpen=true; show('transfer'); }
+function trfPick(s){ trfSentido=s; show('transfer'); }
+function trfChooser(){
+  return `<div style="margin-bottom:12px"><button class="btn ghost" onclick="trfFormOpen=false;show('transfer')">← Volver</button></div>
+    <div class="panel" style="max-width:640px"><h2 style="margin-top:0">Nuevo transfer</h2>
+    <p style="font-size:13px;color:var(--suave);margin:-2px 0 16px">¿Qué tipo de traslado es?</p>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+      <button class="btn ghost" style="padding:22px 16px;font-size:15px;text-align:center;line-height:1.5;height:auto" onclick="trfPick('llegada')"><div style="font-size:30px">🛬</div><b>Aeropuerto → propiedad</b><br><span style="font-size:12px;color:var(--suave)">Llegada del huésped</span></button>
+      <button class="btn ghost" style="padding:22px 16px;font-size:15px;text-align:center;line-height:1.5;height:auto" onclick="trfPick('salida')"><div style="font-size:30px">🛫</div><b>Propiedad → aeropuerto</b><br><span style="font-size:12px;color:var(--suave)">Salida del huésped</span></button>
+    </div></div>`;
+}
 function trfForm(){
   const t=trfEditId?(TRF.find(x=>String(x.id)===String(trfEditId))||{}):{};
+  const sentido=trfSentido||'llegada';
   const ss='width:100%;padding:10px 12px;border:1px solid var(--gris2);border-radius:8px;font-family:inherit;font-size:14px';
-  return `<div style="margin-bottom:12px"><button class="btn ghost" onclick="trfFormOpen=false;show('transfer')">← Volver</button></div>
-    <div class="panel" style="max-width:720px"><h2 style="margin-top:0">${trfEditId?'Editar transfer':'Nuevo transfer'}</h2>
+  const props=TRF_PLACES.filter(p=>!TRF_AIRPORTS.includes(p));
+  const propsDL=`<datalist id="trfPropsDL">${props.map(p=>`<option value="${esc(p)}"></option>`).join('')}</datalist>`;
+  const airDL=`<datalist id="trfAirDL">${TRF_AIRPORTS.map(p=>`<option value="${esc(p)}"></option>`).join('')}</datalist>`;
+  const airSel=sel=>`<select id="trfAeropuerto" style="${ss}"><option value="">— Elige —</option>${TRF_AIRPORTS.map(a=>`<option ${sel===a?'selected':''}>${esc(a)}</option>`).join('')}</select>`;
+  const fecha0=t.fecha||(t.llegada||'').slice(0,10);
+  const hora0=(t.llegada||'').slice(11,16);
+  const paxSel=`<select id="trfPax" style="${ss}"><option value="">—</option>${Array.from({length:12},(_,i)=>i+1).map(n=>`<option ${String(t.pax)===String(n)?'selected':''}>${n}</option>`).join('')}</select>`;
+  let campos;
+  if(sentido==='llegada'){
+    campos=`${airDL}${propsDL}
+      <label>Nombre y apellido del cliente *</label><input id="trfCliente" required value="${esc(t.cliente||'')}" style="${ss}">
+      <label>Lugar de recogida</label>${airSel(t.aeropuerto||'')}
+      <label>Nº de teléfono (con prefijo país)</label><input id="trfWhatsapp" value="${esc(t.whatsapp||'')}" placeholder="+507 …" style="${ss}">
+      <label>Nº de vuelo</label><input id="trfVuelo" value="${esc(t.aerolinea_vuelo||'')}" placeholder="Ej. Copa CM802, Miami" style="${ss}">
+      <div class="row"><div><label>Fecha de recogida</label><input id="trfFecha" type="date" value="${esc(fecha0)}" style="${ss}"></div><div><label>Hora de llegada del vuelo</label><input id="trfHoraVuelo" type="time" value="${esc(hora0)}" style="${ss}"></div></div>
+      <label>Hora de recogida (exterior)</label><input id="trfRecogida" type="time" value="${esc(t.recogida||'')}" style="${ss}">
+      <div class="row"><div><label>Cantidad de personas</label>${paxSel}</div><div><label>Cantidad de maletas y tamaño</label><input id="trfEquipaje" value="${esc(t.equipaje||'')}" placeholder="Ej. 2 grandes, 1 cabina" style="${ss}"></div></div>
+      <label>Lugar destino (propiedad)</label><input id="trfDestino" list="trfPropsDL" value="${esc(t.destino||'')}" placeholder="Elige una propiedad o escribe…" style="${ss}">
+      <label>Asignar a conductor (opcional)</label><select id="trfConductor" style="${ss}"><option value="">— Dejar pendiente —</option>${TRF_COND.map(c=>`<option value="${c.id}" ${String(t.conductor_id)===String(c.id)?'selected':''}>${esc(c.nombre)}</option>`).join('')}</select>
+      <label>Notas internas</label><textarea id="trfNotas" rows="2" style="${ss}">${esc(t.notas||'')}</textarea>`;
+  } else {
+    campos=`${airDL}${propsDL}
+      <label>Nombre y apellido del cliente *</label><input id="trfCliente" required value="${esc(t.cliente||'')}" style="${ss}">
+      <label>Lugar de recogida (propiedad)</label><input id="trfAeropuerto" list="trfPropsDL" value="${esc(t.aeropuerto||'')}" placeholder="Elige una propiedad o escribe…" style="${ss}">
+      <label>Nº de teléfono (con prefijo país)</label><input id="trfWhatsapp" value="${esc(t.whatsapp||'')}" placeholder="+507 …" style="${ss}">
+      <div class="row"><div><label>Fecha de recogida</label><input id="trfFecha" type="date" value="${esc(fecha0)}" style="${ss}"></div><div><label>Hora de recogida</label><input id="trfRecogida" type="time" value="${esc(t.recogida||hora0)}" style="${ss}"></div></div>
+      <div class="row"><div><label>Cantidad de personas</label>${paxSel}</div><div><label>Cantidad de maletas y tamaño</label><input id="trfEquipaje" value="${esc(t.equipaje||'')}" placeholder="Ej. 2 grandes, 1 cabina" style="${ss}"></div></div>
+      <label>Lugar de destino (aeropuerto)</label><input id="trfDestino" list="trfAirDL" value="${esc(t.destino||'')}" placeholder="Tocumen, Albrook, Pacífico o escribe…" style="${ss}">
+      <label>Asignar a conductor (opcional)</label><select id="trfConductor" style="${ss}"><option value="">— Dejar pendiente —</option>${TRF_COND.map(c=>`<option value="${c.id}" ${String(t.conductor_id)===String(c.id)?'selected':''}>${esc(c.nombre)}</option>`).join('')}</select>
+      <label>Notas internas</label><textarea id="trfNotas" rows="2" style="${ss}">${esc(t.notas||'')}</textarea>`;
+  }
+  const titulo=sentido==='llegada'?'🛬 Aeropuerto → propiedad':'🛫 Propiedad → aeropuerto';
+  const volver=trfEditId?`onclick="trfFormOpen=false;show('transfer')"`:`onclick="trfSentido=null;show('transfer')"`;
+  return `<div style="margin-bottom:12px"><button class="btn ghost" ${volver}>← Volver</button></div>
+    <div class="panel" style="max-width:720px"><h2 style="margin-top:0">${trfEditId?'Editar transfer':'Nuevo transfer'} · <span style="color:var(--azul)">${titulo}</span></h2>
     <p style="font-size:12.5px;color:var(--suave);margin:-4px 0 10px">Rellena los datos que envió el huésped.</p>
     ${(trfEditId&&t.created_by_nombre)?`<div style="font-size:12px;color:var(--suave);margin:0 0 14px;padding:7px 11px;background:var(--gris);border-radius:8px">📝 Solicitado por <b>${esc(t.created_by_nombre)}</b>${t.created_at?' · '+new Date(t.created_at).toLocaleString('es-ES',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}):''}</div>`:''}
-    <form class="box" onsubmit="return trfSave(event)" style="max-width:none">
-      <label>Nombre y apellido del cliente *</label><input id="trfCliente" required value="${esc(t.cliente||'')}" style="${ss}">
-      <datalist id="trfPlacesDL">${TRF_PLACES.map(p=>`<option value="${esc(p)}"></option>`).join('')}</datalist>
-      <label>Destino (propiedad / lugar)</label><input id="trfDestino" list="trfPlacesDL" value="${esc(t.destino||'')}" placeholder="Elige del catálogo o escribe…" style="${ss}">
-      <label>Lugar de recogida</label><input id="trfAeropuerto" list="trfPlacesDL" value="${esc(t.aeropuerto||'')}" placeholder="Elige del catálogo o escribe…" style="${ss}">
-      <label>Aerolínea, Nº de vuelo, ciudad de origen</label><input id="trfVuelo" value="${esc(t.aerolinea_vuelo||'')}" placeholder="Ej. Copa CM802, Miami" style="${ss}">
-      <div class="row"><div><label>Fecha y hora de llegada</label><input id="trfLlegada" type="datetime-local" value="${esc(t.llegada||'')}" style="${ss}"></div><div><label>Hora de recogida (exterior)</label><input id="trfRecogida" value="${esc(t.recogida||'')}" placeholder="Ej. 16:00" style="${ss}"></div></div>
-      <div class="row"><div><label>Nº de personas</label><select id="trfPax" style="${ss}"><option value="">—</option>${Array.from({length:12},(_,i)=>i+1).map(n=>`<option ${String(t.pax)===String(n)?'selected':''}>${n}</option>`).join('')}</select></div><div><label>Piezas de equipaje</label><input id="trfEquipaje" type="number" min="0" value="${esc(t.equipaje||'')}" style="${ss}"></div></div>
-      <div class="row"><div><label>WhatsApp</label><input id="trfWhatsapp" value="${esc(t.whatsapp||'')}" placeholder="+507 …" style="${ss}"></div><div><label>Costo del traslado ($)</label><input id="trfCosto" type="number" min="0" step="0.01" value="${esc(t.costo!=null?t.costo:'')}" placeholder="35" style="${ss}"></div></div>
-      <label>Asignar a conductor (opcional)</label><select id="trfConductor" style="${ss}"><option value="">— Dejar pendiente —</option>${TRF_COND.map(c=>`<option value="${c.id}" ${String(t.conductor_id)===String(c.id)?'selected':''}>${esc(c.nombre)}</option>`).join('')}</select>
-      <label>Notas internas</label><textarea id="trfNotas" rows="2" style="${ss}">${esc(t.notas||'')}</textarea>
-      <div style="margin-top:14px"><button class="btn" type="submit">${trfEditId?'Guardar cambios':'Guardar transfer'}</button> <button class="btn ghost" type="button" onclick="trfFormOpen=false;show('transfer')">Cancelar</button></div>
+    <form class="box" onsubmit="return trfSave(event)" style="max-width:none">${campos}
+      <div style="margin-top:14px"><button class="btn" type="submit">${trfEditId?'Guardar cambios':'Guardar transfer'}</button> <button class="btn ghost" type="button" ${volver}>Cancelar</button></div>
     </form></div>`;
 }
 async function trfSave(e){ e.preventDefault();
   const g=id=>{const el=document.getElementById(id);return el?el.value:'';};
+  const sentido=trfSentido||'llegada';
+  const fecha=g('trfFecha');
+  let llegada='', recogida='', vuelo='', aeropuerto='', destino='';
+  if(sentido==='llegada'){
+    aeropuerto=g('trfAeropuerto'); destino=g('trfDestino'); vuelo=g('trfVuelo');
+    const hv=g('trfHoraVuelo'); recogida=g('trfRecogida');
+    llegada = fecha ? (fecha+'T'+(hv||'00:00')) : '';
+  } else {
+    aeropuerto=g('trfAeropuerto'); destino=g('trfDestino'); vuelo='';
+    recogida=g('trfRecogida');
+    llegada = fecha ? (fecha+'T'+(recogida||'00:00')) : '';
+  }
   const cid=g('trfConductor');
-  const row={cliente:g('trfCliente'),destino:g('trfDestino'),aerolinea_vuelo:g('trfVuelo'),llegada:g('trfLlegada'),recogida:g('trfRecogida'),pax:g('trfPax'),equipaje:g('trfEquipaje'),whatsapp:g('trfWhatsapp'),aeropuerto:g('trfAeropuerto'),costo:g('trfCosto')===''?null:parseFloat(g('trfCosto')),notas:g('trfNotas')};
+  const row={sentido,cliente:g('trfCliente'),destino,aerolinea_vuelo:vuelo,fecha:fecha||null,llegada:llegada||null,recogida,pax:g('trfPax'),equipaje:g('trfEquipaje'),whatsapp:g('trfWhatsapp'),aeropuerto,notas:g('trfNotas')};
   if(cid){ row.conductor_id=cid; row.conductor_nombre=trfCondName(cid); row.comision=trfCondComision(cid); const cur=trfEditId?(TRF.find(x=>String(x.id)===String(trfEditId))||{}):{}; row.estado=(cur.estado==='realizado'||cur.estado==='cancelado')?cur.estado:'asignado'; }
   else { row.conductor_id=null; row.conductor_nombre=''; row.comision=null; const cur=trfEditId?(TRF.find(x=>String(x.id)===String(trfEditId))||{}):{}; row.estado=(cur.estado==='realizado'||cur.estado==='cancelado')?cur.estado:'pendiente'; }
   if(trfEditId){ const {error}=await sb.from('transfers').update(row).eq('id',trfEditId); if(error){alert(error.message);return false;} }
   else { row.created_by=ME.id; row.created_by_nombre=PROFILE.nombre; row.created_at=new Date().toISOString(); const {error}=await sb.from('transfers').insert(row); if(error){alert(error.message);return false;} }
-  trfFormOpen=false; trfTab='solicitudes'; show('transfer'); return false; }
+  trfFormOpen=false; trfSentido=null; trfTab='solicitudes'; show('transfer'); return false; }
 async function trfUpd(id,patch){ const {error}=await sb.from('transfers').update(patch).eq('id',id); if(error){alert(error.message);return;} show('transfer'); }
 function trfAsignar(id,cid){ trfUpd(id,{conductor_id:cid,conductor_nombre:trfCondName(cid),comision:trfCondComision(cid),estado:'asignado'}); }
 function trfTomar(id){ trfUpd(id,{conductor_id:ME.id,conductor_nombre:PROFILE.nombre,comision:(parseFloat(PROFILE.comision)||0),estado:'asignado'}); }
