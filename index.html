@@ -5636,7 +5636,7 @@ const ONB=[{t:"Firmar contrato y entregar documentación a RRHH",done:true},{t:"
 function pageOnboarding(){const h=ONB.filter(o=>o.done).length,pct=Math.round(h/ONB.length*100);return `<div class="page-title">Onboarding</div><div class="page-sub">Lista de incorporación de un nuevo empleado</div><div class="panel" style="max-width:680px"><div style="display:flex;align-items:center;gap:12px;margin-bottom:14px"><div style="flex:1;height:12px;background:var(--gris2);overflow:hidden"><i style="display:block;height:100%;width:${pct}%;background:var(--acento)"></i></div><b>${pct}%</b></div>${ONB.map((o,i)=>`<label style="display:flex;align-items:center;gap:11px;padding:11px 0;border-bottom:1px solid var(--gris);font-size:14px;cursor:pointer"><input type="checkbox" ${o.done?'checked':''} onchange="ONB[${i}].done=this.checked;show('onboarding')"> <span style="${o.done?'text-decoration:line-through;color:var(--suave)':''}">${o.t}</span></label>`).join('')}</div>`;}
 
 /* ===================== LIMPIEZA · ASIGNACIONES ===================== */
-const ASG_TIPO=[['salida','🔴 Salida'],['salida_entrada','🟠 Salida y entrada'],['entrada','🟢 Entrada']];
+const ASG_TIPO=[['salida','🔴 Salida'],['salida_entrada','🟠 Salida y entrada'],['entrada','🟢 Entrada'],['retoque','🔵 Retoque']];
 const EQUIPOS=['Oficina Central','El Valle','Playa Escondida'];
 let asgTab='asignaciones';
 let ASG={pubId:null,equipo:'',fecha:'',unidades:[],comunes:[]};
