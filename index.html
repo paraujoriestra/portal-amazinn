@@ -1058,9 +1058,9 @@ async function enterApp(user){
   buildNav();
   document.getElementById('chatFab').style.display = isConductor()?'none':'flex';
   loadNotifs();
-  refreshBadges(); ping(); refreshIncBell();
+  refreshBadges(); ping(); refreshIncBell(); loadCambBadge();
   if(window._msgPoll) clearInterval(window._msgPoll);
-  window._msgPoll = setInterval(()=>{refreshBadges();ping();refreshIncBell();}, 20000);
+  window._msgPoll = setInterval(()=>{refreshBadges();ping();refreshIncBell();loadCambBadge();}, 20000);
   chatMsgs=[{from:'bot',msg:`¡Hola, ${(PROFILE.nombre||'').split(' ')[0]||''}! 🤖 Soy <b>Wally</b>, el asistente de Amazinn Places. Pregúntame cómo encontrar algo.`}];
   const h=(location.hash||'').replace(/^#/,'');
   const start=(h==='inicio'||h==='perfil'||NAV.some(n=>n.id===h))?h:'inicio';
@@ -1818,13 +1818,14 @@ async function pageHorarios(){
   await loadTurnosTipo();
   const dept=PROFILE.dept||'';
   const canEdit=CAN_MANAGE.includes(PROFILE.role);
-  const tabs=canEdit?[['editor','🗓️ Crear horario'],['equipo','👥 Horario del equipo'],['otros','🏢 Otros equipos'],['historial','🗂️ Histórico']]
-                    :[['mi','📅 Mi horario'],['equipo','👥 Horario del equipo'],['otros','🏢 Otros equipos']];
+  const tabs=canEdit?[['editor','🗓️ Crear horario'],['equipo','👥 Horario del equipo'],['otros','🏢 Otros equipos'],['cambios','🔄 Cambios de turno'],['historial','🗂️ Histórico']]
+                    :[['mi','📅 Mi horario'],['equipo','👥 Horario del equipo'],['otros','🏢 Otros equipos'],['cambios','🔄 Cambios de turno']];
   if(!tabs.some(t=>t[0]===horTab)) horTab=tabs[0][0];
   const days=nextDays(15);
   let body='';
   if(horTab==='mi') body=await horMine(days);
   else if(horTab==='editor') body=await horCrear();
+  else if(horTab==='cambios') body=await horCambios();
   else if(horTab==='historial') body=await horHistorial();
   else if(horTab==='equipo') body=`<div style="display:flex;justify-content:flex-end;margin-bottom:10px"><button class="btn ghost" style="padding:9px 16px" onclick="horPDF()">📥 Descargar PDF</button></div>`+await horTeam(dept,days);
   else body=await horOthers(days);
@@ -2035,11 +2036,13 @@ async function horMine(days){
     const hrs=ini?`${ini} – ${fin}`:(esVac?'🌴 Descanso':(esLibre?'Día libre':'—'));
     const lugar=(t&&t.lugar)?t.lugar:'';
     const wknd=(d.getDay()===0||d.getDay()===6);
+    const puedeCambiar = t && tp && !esLibre && !esVac;
     return `<div class="dia-card${wknd?' wknd':''}" style="border-top:4px solid ${tp?col:'#dcd6ca'}">
       <div class="dc-top"><span class="dc-wd">${ds[d.getDay()]}</span><span class="dc-date">${d.getDate()} ${ms[d.getMonth()]}</span></div>
       <div class="dc-shift" style="background:${col};color:${colFg}">${esc(nombre)}</div>
       <div class="dc-hrs">${esc(hrs)}</div>
-      ${lugar?`<div class="dc-loc">📍 ${esc(lugar)}</div>`:'<div class="dc-loc" style="opacity:.35">—</div>'}</div>`;
+      ${lugar?`<div class="dc-loc">📍 ${esc(lugar)}</div>`:'<div class="dc-loc" style="opacity:.35">—</div>'}
+      ${puedeCambiar?`<button class="btn ghost" style="padding:5px 8px;font-size:11px;margin-top:7px;width:100%" onclick="cambModalOpen(${t.id})">🔄 Cambiar</button>`:''}</div>`;
   };
   let weeks='';
   for(let w=0;w<Math.ceil(days.length/7);w++){ const slice=[]; for(let i=w*7;i<Math.min((w+1)*7,days.length);i++) slice.push(card(days[i]));
@@ -2694,6 +2697,118 @@ async function setSugEstado(id,val2){await sb.from('sugerencias').update({estado
 let fichScanOpen=false;
 const FICHA_LUGARES=['Casa Diez','Apartamentos Sol','Apartamentos Mar','Oficina central'];
 function hoyISO(){return isoD(new Date());}
+
+/* ====================== CAMBIOS DE TURNO ====================== */
+let CAMB=[], CAMB_PROFS=[], CAMB_TURNOS=[];
+const CAMB_EST={pend_comp:{l:'Esperando al compañero',c:'#b9770e',b:'#fdf3e2'},pend_dir:{l:'Esperando a Dirección',c:'#2563aa',b:'#e7eff8'},aprobado:{l:'Aprobado ✓',c:'#1e8a5a',b:'#e4f5ec'},rechazado:{l:'Rechazado',c:'#c0392b',b:'#fdecea'}};
+const CMB_SS='width:100%;padding:10px 12px;border:1px solid var(--gris2);border-radius:8px;font-family:inherit;font-size:14px';
+function cambDirector(){ return isAdmin()||PROFILE.role==='direccion'; }
+function cambElegibles(){ const dep=PROFILE.dept||''; const eq=PROFILE.org_equipo||PROFILE.equipo||''; return CAMB_PROFS.filter(p=>String(p.id)!==String(ME.id) && (p.dept||'')===dep && (!eq || (p.org_equipo||p.equipo||'')===eq)); }
+function cambEstBadge(e){ const o=CAMB_EST[e]||CAMB_EST.pend_comp; return `<span style="background:${o.b};color:${o.c};padding:3px 11px;border-radius:20px;font-size:11px;font-weight:700;white-space:nowrap">${o.l}</span>`; }
+function cambTLabel(t){ const tp=turnoTipo(t.tipo_id); const nm=tp?tp.nombre:'Turno'; const i=t.hora_ini||(tp&&tp.hora_ini), f=t.hora_fin||(tp&&tp.hora_fin); const h=(i&&f)?` (${i}–${f})`:''; const fe=new Date(t.fecha+'T00:00:00').toLocaleDateString('es-ES',{weekday:'short',day:'2-digit',month:'short'}); return fe+' · '+nm+h; }
+function cambColShifts(colId){ return CAMB_TURNOS.filter(t=>String(t.empleado_id)===String(colId)).sort((a,b)=>String(a.fecha).localeCompare(String(b.fecha))); }
+function cambFillDest(){ const sel=document.getElementById('cambCol'); const box=document.getElementById('cambDestShift'); if(!box)return; const sh=sel?cambColShifts(sel.value):[]; box.innerHTML='<option value="">— Elige el turno del compañero —</option>'+sh.map(t=>`<option value="${t.id}">${esc(cambTLabel(t))}</option>`).join(''); }
+async function loadCambBadge(){ try{ const {data}=await sb.from('turno_cambios').select('estado,dest_id'); const arr=data||[]; let n=arr.filter(c=>c.estado==='pend_comp'&&String(c.dest_id)===String(ME.id)).length; if(cambDirector()) n+=arr.filter(c=>c.estado==='pend_dir').length; setBadge('horarios',n); }catch(e){} }
+async function horCambios(){
+  const today=hoyISO();
+  const [pf,tn,cb]=await Promise.all([
+    sb.from('profiles').select('id,nombre,dept,equipo,org_equipo').eq('estado','aprobado').order('nombre'),
+    sb.from('turnos').select('id,empleado_id,fecha,tipo_id,hora_ini,hora_fin').gte('fecha',today),
+    sb.from('turno_cambios').select('*').order('created_at',{ascending:false})
+  ]);
+  CAMB_PROFS=pf.data||[]; CAMB_TURNOS=(tn.data||[]).filter(t=>{const tp=turnoTipo(t.tipo_id);return tp&&!isLibreTurno(tp);}); CAMB=cb.data||[];
+  const mias=CAMB_TURNOS.filter(t=>String(t.empleado_id)===String(ME.id)).sort((a,b)=>String(a.fecha).localeCompare(String(b.fecha)));
+  const cols=cambElegibles();
+  const formMy=mias.length?`<select id="cambMyShift" style="${CMB_SS}"><option value="">— Elige tu turno —</option>${mias.map(t=>`<option value="${t.id}">${esc(cambTLabel(t))}</option>`).join('')}</select>`:'<div style="color:var(--suave);font-size:13px">No tienes turnos próximos publicados para intercambiar.</div>';
+  const form=mias.length?`<div class="panel" style="max-width:680px"><h2 style="margin-top:0">Proponer un cambio</h2>
+      <form class="box" onsubmit="return cambCrear(event)" style="max-width:none">
+        <label>Tu turno a intercambiar</label>${formMy}
+        <label>Compañero</label><select id="cambCol" onchange="cambFillDest()" style="${CMB_SS}"><option value="">— Elige compañero —</option>${cols.map(p=>`<option value="${p.id}">${esc(p.nombre)}${p.dept?' · '+esc(p.dept):''}</option>`).join('')}</select>
+        <label>Turno del compañero</label><select id="cambDestShift" style="${CMB_SS}"><option value="">— Elige primero el compañero —</option></select>
+        <label>Motivo (opcional)</label><textarea id="cambMotivo" rows="2" style="${CMB_SS}"></textarea>
+        <div style="margin-top:12px"><button class="btn" type="submit">Enviar propuesta</button></div>
+      </form></div>`:`<div class="panel" style="color:var(--suave)">No tienes turnos próximos publicados, así que no puedes proponer un intercambio todavía.</div>`;
+  const incoming=CAMB.filter(c=>c.estado==='pend_comp'&&String(c.dest_id)===String(ME.id));
+  const rowCamb=(c,acciones)=>`<div class="bit-row" style="align-items:flex-start"><div class="bit-row-main"><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><b>${esc(c.sol_nombre)}</b> ↔ <b>${esc(c.dest_nombre)}</b> ${cambEstBadge(c.estado)}</div><div class="bit-row-meta">${esc(c.sol_nombre)}: ${esc(c.sol_label)}<br>${esc(c.dest_nombre)}: ${esc(c.dest_label)}${c.motivo?'<br>📝 '+esc(c.motivo):''}</div></div><div style="display:flex;gap:6px;flex-wrap:wrap">${acciones}</div></div>`;
+  const incHTML=incoming.length?incoming.map(c=>rowCamb(c,`<button class="btn" style="padding:7px 13px" onclick="cambAceptar(${c.id})">✓ Acepto</button><button class="btn ghost" style="padding:7px 13px" onclick="cambRechazar(${c.id})">✕ Rechazar</button>`)).join(''):'<div style="color:var(--suave);font-size:13px">No tienes propuestas por aceptar.</div>';
+  const mine=CAMB.filter(c=>String(c.sol_id)===String(ME.id));
+  const mineHTML=mine.length?mine.map(c=>rowCamb(c,c.estado==='aprobado'||c.estado==='rechazado'?'':`<button class="btn ghost" style="padding:7px 13px" onclick="cambRechazar(${c.id})">Cancelar</button>`)).join(''):'<div style="color:var(--suave);font-size:13px">No has propuesto ningún cambio.</div>';
+  let dirBlock='';
+  if(cambDirector()){
+    const porAprob=CAMB.filter(c=>c.estado==='pend_dir');
+    const aHTML=porAprob.length?porAprob.map(c=>rowCamb(c,`<button class="btn" style="padding:7px 13px" onclick="cambAprobar(${c.id})">✓ Aprobar</button><button class="btn ghost" style="padding:7px 13px" onclick="cambRechazar(${c.id})">✕ Rechazar</button>`)).join(''):'<div style="color:var(--suave);font-size:13px">No hay cambios por aprobar.</div>';
+    dirBlock=`<div class="panel"><h2 style="margin-top:0">✅ Por aprobar (Dirección) ${porAprob.length?`<span class="badge b-amber">${porAprob.length}</span>`:''}</h2>${aHTML}</div>`;
+  }
+  return `<div class="page-sub" style="margin-bottom:14px">Propón intercambiar un turno con un compañero de tu equipo. Él lo acepta y un Director lo aprueba.</div>
+    ${form}
+    <div class="panel"><h2 style="margin-top:0">📥 Propuestas por aceptar ${incoming.length?`<span class="badge b-amber">${incoming.length}</span>`:''}</h2>${incHTML}</div>
+    ${dirBlock}
+    <div class="panel"><h2 style="margin-top:0">Mis solicitudes</h2>${mineHTML}</div>`;
+}
+async function cambCrear(e){ e.preventDefault();
+  const myT=(document.getElementById('cambMyShift')||{}).value||''; const col=(document.getElementById('cambCol')||{}).value||''; const destT=(document.getElementById('cambDestShift')||{}).value||''; const motivo=(document.getElementById('cambMotivo')||{}).value||'';
+  if(!myT||!col||!destT){ alert('Elige tu turno, el compañero y el turno de tu compañero.'); return false; }
+  const a=CAMB_TURNOS.find(t=>String(t.id)===String(myT)); const b=CAMB_TURNOS.find(t=>String(t.id)===String(destT)); const colP=CAMB_PROFS.find(p=>String(p.id)===String(col));
+  if(!a||!b){ alert('Turno no encontrado, recarga la página.'); return false; }
+  const row={ sol_id:ME.id, sol_nombre:PROFILE.nombre, sol_turno_id:a.id, sol_fecha:a.fecha, sol_tipo_id:a.tipo_id, sol_label:cambTLabel(a),
+    dest_id:col, dest_nombre:colP?colP.nombre:'', dest_turno_id:b.id, dest_fecha:b.fecha, dest_tipo_id:b.tipo_id, dest_label:cambTLabel(b),
+    motivo, estado:'pend_comp', created_at:new Date().toISOString() };
+  const {error}=await sb.from('turno_cambios').insert(row); if(error){ alert('Error: '+error.message); return false; }
+  toast('✓ Propuesta enviada a '+(colP?colP.nombre:'tu compañero')); horTab='cambios'; show('horarios'); return false;
+}
+async function cambAceptar(id){ const c=CAMB.find(x=>String(x.id)===String(id)); if(!c)return; if(String(c.dest_id)!==String(ME.id)){alert('No es tu propuesta.');return;} const {error}=await sb.from('turno_cambios').update({estado:'pend_dir'}).eq('id',id); if(error){alert(error.message);return;} toast('✓ Aceptado. Pendiente de aprobación de Dirección.'); horTab='cambios'; show('horarios'); }
+async function cambRechazar(id){ if(!confirm('¿Rechazar/cancelar este cambio?'))return; const {error}=await sb.from('turno_cambios').update({estado:'rechazado'}).eq('id',id); if(error){alert(error.message);return;} horTab='cambios'; show('horarios'); }
+async function cambAprobar(id){ const c=CAMB.find(x=>String(x.id)===String(id)); if(!c)return; if(!cambDirector()){alert('Solo Dirección puede aprobar.');return;}
+  const ra=await sb.from('turnos').select('*').eq('id',c.sol_turno_id); const rb=await sb.from('turnos').select('*').eq('id',c.dest_turno_id);
+  const a=(ra.data||[])[0], b=(rb.data||[])[0];
+  if(!a||!b){ alert('Uno de los turnos ya no existe (el horario cambió). Recházalo y que lo vuelvan a solicitar.'); return; }
+  const e1=await sb.from('turnos').update({tipo_id:b.tipo_id,hora_ini:b.hora_ini,hora_fin:b.hora_fin}).eq('id',a.id);
+  const e2=await sb.from('turnos').update({tipo_id:a.tipo_id,hora_ini:a.hora_ini,hora_fin:a.hora_fin}).eq('id',b.id);
+  if((e1&&e1.error)||(e2&&e2.error)){ alert('No se pudo aplicar el cambio en el horario.'); return; }
+  await sb.from('turno_cambios').update({estado:'aprobado'}).eq('id',id);
+  toast('✓ Cambio aprobado y aplicado al horario'); horTab='cambios'; show('horarios');
+}
+/* --- Proponer cambio directamente desde "Mis horarios" (modal) --- */
+async function cambModalOpen(turnoId){
+  await loadTurnosTipo();
+  const today=hoyISO();
+  const [pf,tn]=await Promise.all([
+    sb.from('profiles').select('id,nombre,dept,equipo,org_equipo').eq('estado','aprobado').order('nombre'),
+    sb.from('turnos').select('id,empleado_id,fecha,tipo_id,hora_ini,hora_fin').gte('fecha',today)
+  ]);
+  CAMB_PROFS=pf.data||[]; CAMB_TURNOS=(tn.data||[]).filter(t=>{const tp=turnoTipo(t.tipo_id);return tp&&!isLibreTurno(tp);});
+  const a=CAMB_TURNOS.find(t=>String(t.id)===String(turnoId)); if(!a){ alert('No se encontró el turno (recarga la página).'); return; }
+  window._cambA=String(turnoId);
+  const cols=cambElegibles();
+  let ov=document.getElementById('cambOv'); if(!ov){ ov=document.createElement('div'); ov.id='cambOv'; ov.className='oco-ov'; ov.onclick=e=>{ if(e.target===ov) cambModalClose(); }; document.body.appendChild(ov); }
+  ov.innerHTML=`<div class="oco-box" style="width:460px;max-width:94vw">
+    <h3 style="margin:0 0 6px">🔄 Proponer cambio de turno</h3>
+    <p style="font-size:13px;color:var(--suave);margin:0 0 12px">Tu compañero deberá aceptarlo y un Director aprobarlo.</p>
+    <div style="font-size:13.5px;margin-bottom:12px;background:var(--gris);border-radius:8px;padding:8px 11px">Tu turno: <b>${esc(cambTLabel(a))}</b></div>
+    <label style="display:block;font-size:13px;color:var(--suave);margin-bottom:4px">Compañero</label>
+    <select id="cambCol" onchange="cambFillDest()" style="${CMB_SS};margin-bottom:10px"><option value="">— Elige compañero —</option>${cols.map(p=>`<option value="${p.id}">${esc(p.nombre)}${p.dept?' · '+esc(p.dept):''}</option>`).join('')}</select>
+    <label style="display:block;font-size:13px;color:var(--suave);margin-bottom:4px">Su turno a intercambiar</label>
+    <select id="cambDestShift" style="${CMB_SS};margin-bottom:10px"><option value="">— Elige primero el compañero —</option></select>
+    <label style="display:block;font-size:13px;color:var(--suave);margin-bottom:4px">Motivo (opcional)</label>
+    <textarea id="cambMotivo" rows="2" style="${CMB_SS}"></textarea>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px"><button class="btn ghost" onclick="cambModalClose()">Cancelar</button><button class="btn" onclick="cambModalSend()">Enviar propuesta</button></div>
+  </div>`;
+  ov.style.display='flex';
+}
+function cambModalClose(){ const ov=document.getElementById('cambOv'); if(ov) ov.style.display='none'; }
+async function cambModalSend(){
+  const a=CAMB_TURNOS.find(t=>String(t.id)===String(window._cambA));
+  const col=(document.getElementById('cambCol')||{}).value||''; const destT=(document.getElementById('cambDestShift')||{}).value||''; const motivo=(document.getElementById('cambMotivo')||{}).value||'';
+  if(!a){ alert('Turno no encontrado.'); return; }
+  if(!col||!destT){ alert('Elige el compañero y su turno.'); return; }
+  const b=CAMB_TURNOS.find(t=>String(t.id)===String(destT)); const colP=CAMB_PROFS.find(p=>String(p.id)===String(col));
+  const row={ sol_id:ME.id, sol_nombre:PROFILE.nombre, sol_turno_id:a.id, sol_fecha:a.fecha, sol_tipo_id:a.tipo_id, sol_label:cambTLabel(a),
+    dest_id:col, dest_nombre:colP?colP.nombre:'', dest_turno_id:b.id, dest_fecha:b.fecha, dest_tipo_id:b.tipo_id, dest_label:cambTLabel(b),
+    motivo, estado:'pend_comp', created_at:new Date().toISOString() };
+  const {error}=await sb.from('turno_cambios').insert(row); if(error){ alert('Error: '+error.message); return; }
+  cambModalClose(); toast('✓ Propuesta enviada a '+(colP?colP.nombre:'tu compañero')); try{loadCambBadge();}catch(e){}
+}
+/* ==================== FIN CAMBIOS DE TURNO ==================== */
 function horaAhora(){const d=new Date();return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');}
 function qrSVG(seed){const n=23,cell=6,pad=2,dim=(n+pad*2)*cell;let h=0;for(const c of seed)h=(h*31+c.charCodeAt(0))>>>0;const rnd=()=>{h=(h*1103515245+12345)>>>0;return (h>>>16)/65536;};
   const fin=(r,c,R,C)=>{const rr=r-R,cc=c-C;if(rr<0||rr>6||cc<0||cc>6)return null;return (rr===0||rr===6||cc===0||cc===6)||(rr>=2&&rr<=4&&cc>=2&&cc<=4);};
@@ -4808,7 +4923,8 @@ async function pageIncidencias(){
   else if(incTab==='panel'&&canManage){ body=renderIncPanel(INC); }
   else if(incTab==='historial'){ body=`<div style="margin-bottom:10px"><button class="btn-sm ghost" onclick="incExportCSV()">⬇️ Exportar CSV (todas)</button></div>`+renderIncList(true); }
   else { body=renderIncBandeja(); }
-  document.getElementById('main').innerHTML=`<div class="page-title">Incidencias y mantenimiento</div><div class="page-sub">Reporta y haz seguimiento de averías por edificio y apartamento</div>${fullScreen?'':tabs}${body}`;
+  const tools=(canManage&&!fullScreen)?`<div style="margin:0 0 12px;display:flex;gap:10px;flex-wrap:wrap;align-items:center"><label class="btn ghost" style="cursor:pointer;padding:6px 12px">📥 Importar incidencias (Excel)<input type="file" accept=".xlsx,.xls,.csv" style="display:none" onchange="incImportExcel(this)"></label><a href="#" style="font-size:12px;color:var(--acento)" onclick="incPlantilla();return false">descargar plantilla</a></div>`:'';
+  document.getElementById('main').innerHTML=`<div class="page-title">Incidencias y mantenimiento</div><div class="page-sub">Reporta y haz seguimiento de averías por edificio y apartamento</div>${fullScreen?'':tabs}${fullScreen?'':tools}${body}`;
   if(incTimerInt){clearInterval(incTimerInt);incTimerInt=null;}
   if(incSel!=null){ const i=INC.find(x=>String(x.id)===String(incSel)); if(i&&i.timer_ini){ incTimerInt=setInterval(()=>{const el=document.getElementById('incTimerDisp'); if(el)el.textContent=incFmtT(incElapsed(i)); else {clearInterval(incTimerInt);incTimerInt=null;} },1000); } }
 }
@@ -4828,6 +4944,63 @@ function incExportCSV(){
   const blob=new Blob(['﻿'+lines.join('\n')],{type:'text/csv;charset=utf-8'});
   const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='incidencias_'+new Date().toISOString().slice(0,10)+'.csv'; document.body.appendChild(a); a.click(); a.remove();
   toast('✓ CSV exportado');
+}
+/* ---- Importar incidencias desde Excel ---- */
+function incPlantilla(){
+  if(typeof XLSX==='undefined'){ alert('No se pudo cargar el lector de Excel. Revisa tu conexión.'); return; }
+  const cols=['Edificio','Unidad','Descripción','Urgencia','Categoría','Estado','Fecha','Coste','Afecta huésped','Nota'];
+  const ej1=['Casa Diez','Nº 1','El aire acondicionado no enfría','alta','climatizacion','pendiente','2026-05-12','','sí','Reportado por el huésped'];
+  const ej2=['Hotel Mío','Nº 24','Repintar marca en pared','baja','pintura','terminada','2026-04-30','45','no','Repintado y secado'];
+  const ws=XLSX.utils.aoa_to_sheet([cols,ej1,ej2]); const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'Incidencias'); XLSX.writeFile(wb,'plantilla_incidencias.xlsx');
+}
+function incMapEstado(s){ s=(s||'').toLowerCase().trim();
+  if(/termin|resuel|hecho|cerrad|complet|finaliz/.test(s)) return 'terminada';
+  if(/curso|proceso|progreso|trabaj|march/.test(s)) return 'en_curso';
+  if(/pausa|espera|medias|stand/.test(s)) return 'pausada';
+  if(/cancel|anul|descart/.test(s)) return 'cancelada';
+  return 'pendiente';
+}
+function incMapUrg(s){ s=(s||'').toLowerCase().trim(); if(/alta|urgent|high/.test(s))return 'alta'; if(/baja|low/.test(s))return 'baja'; return 'media'; }
+function incParseFecha(v){ if(v instanceof Date && !isNaN(v)) return v.toISOString(); const s=(''+(v||'')).trim(); if(!s) return new Date().toISOString();
+  if(/^\d{4}-\d{2}-\d{2}/.test(s)) return new Date(s.slice(0,10)+'T12:00:00').toISOString();
+  const m=s.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})/); if(m){ let y=m[3]; if(y.length===2)y='20'+y; return new Date(+y,(+m[2])-1,+m[1],12,0,0).toISOString(); }
+  const d=new Date(s); return isNaN(d)?new Date().toISOString():d.toISOString();
+}
+async function incImportExcel(input){
+  const f=input.files[0]; input.value=''; if(!f) return;
+  if(!incCan()){ alert('Solo Mantenimiento/Dirección pueden importar.'); return; }
+  if(typeof XLSX==='undefined'){ alert('No se pudo cargar el lector de Excel. Revisa tu conexión.'); return; }
+  try{
+    const buf=await f.arrayBuffer(); const wb=XLSX.read(buf,{type:'array',cellDates:true}); const ws=wb.Sheets[wb.SheetNames[0]];
+    const rows=XLSX.utils.sheet_to_json(ws,{defval:''});
+    if(!rows.length){ alert('El archivo no tiene filas de datos.'); return; }
+    const mapped=rows.map(r=>{ const map={}; Object.keys(r).forEach(k=>map[normKey(k)]=r[k]);
+      const desc=rowGet(map,'descripcion','descripción','incidencia','detalle','problema','asunto','averia','avería');
+      const edif=rowGet(map,'edificio','propiedad','casa','inmueble','hotel');
+      const uni=rowGet(map,'unidad','apartamento','nº unidad','no unidad','habitacion','habitación','zona','nº');
+      if(!desc && !edif && !uni) return null;
+      const est=incMapEstado(rowGet(map,'estado','status','situacion','situación'));
+      const fecha=incParseFecha(map[normKey('fecha')]!==undefined?map[normKey('fecha')]:rowGet(map,'fecha creacion','creada','fecha de creación','date'));
+      const afecta=/^(s|y|1|true|sí|si)/i.test(rowGet(map,'afecta huesped','afecta huésped','afecta','huesped','huésped'));
+      const costeRaw=rowGet(map,'coste','costo','importe','precio','gasto');
+      const row={ via:'importado', urgencia:incMapUrg(rowGet(map,'urgencia','prioridad','urgency')),
+        categoria:(rowGet(map,'categoria','categoría','tipo','tipo de averia')||'').toLowerCase()||null,
+        edificio:edif||'', unidad:uni||'', descripcion:desc||'(sin descripción)', estado:est,
+        asignado_a:null, asignado_a_nombre:null, asignado_equipo:'*', tomada_por:null, tomada_por_nombre:null,
+        afecta_huesped:afecta, coste:(costeRaw===''?null:(parseFloat((''+costeRaw).replace(',','.'))||null)),
+        nota_solucion:(est==='terminada')?(rowGet(map,'nota','notas','observaciones','solucion','solución')||null):null,
+        creado_por:ME.id, creado_por_nombre:PROFILE.nombre, historial:'Importado desde Excel el '+new Date().toLocaleDateString('es-ES'),
+        created_at:fecha, updated_at:new Date().toISOString() };
+      if(est==='terminada'){ row.resuelta_at=fecha; row.resuelto_por_nombre=rowGet(map,'resuelto por','tecnico','técnico','realizado por')||PROFILE.nombre; }
+      return row;
+    }).filter(Boolean);
+    if(!mapped.length){ alert('No se reconocieron las columnas. Descarga la plantilla y usa esos encabezados (Edificio, Unidad, Descripción, Urgencia, Categoría, Estado, Fecha…).'); return; }
+    const nPend=mapped.filter(x=>x.estado==='pendiente').length;
+    if(!confirm('Se importarán '+mapped.length+' incidencia(s) ('+nPend+' quedarán como PENDIENTES sin asignar). ¿Continuar?')) return;
+    const {error}=await sb.from('mant_incidencias').insert(mapped);
+    if(error){ alert('Error al importar: '+error.message); return; }
+    toast('✓ '+mapped.length+' incidencia(s) importadas'); incTab='bandeja'; show('incidencias');
+  }catch(e){ alert('No se pudo leer el Excel: '+((e&&e.message)||e)); }
 }
 function renderIncBandeja(){
   const f=incFilters;
