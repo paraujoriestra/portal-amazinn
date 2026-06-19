@@ -3720,7 +3720,7 @@ let msgTab='ver', msgUnit=null, twoFAok=false, tplEditId=null, tplFormOpen=false
 function tplCancel(){ tplFormOpen=false; tplEditId=null; tplDraft={}; show('mensajes'); }
 function tplFormProp(){ const p=(document.getElementById('tProp')||{}).value||''; const dl=document.getElementById('tUniDL'); const inp=document.getElementById('tUni'); if(!dl||!inp)return; const entries=TPL_UNI.filter(u=>u.prop===p); const whole=p&&entries.length===1&&entries[0].kind==='e'; inp.value=''; if(!p||whole){ dl.innerHTML=''; inp.disabled=true; inp.placeholder=whole?'Propiedad completa':'Todas las unidades'; } else { inp.disabled=false; inp.placeholder='Todas / escribe nº…'; dl.innerHTML=entries.filter(u=>u.kind==='u').map(u=>`<option value="${esc(u.nombre)}"></option>`).join(''); } }
 function canMsg(){return PROFILE.dept==='Atención al cliente'||isAdmin();}
-function canMsgEdit(){ if(isAdmin())return true; const ac=(PROFILE.dept==='Atención al cliente')||(PROFILE.area==='Atención al cliente'); return ac&&(PROFILE.role==='responsable'||PROFILE.role==='direccion'); }
+function canMsgEdit(){ if(isAdmin())return true; if(PROFILE.role==='direccion')return true; const ac=(PROFILE.dept==='Atención al cliente')||(PROFILE.area==='Atención al cliente'); return ac&&PROFILE.role==='responsable'; }
 function fillTpl(c,u){return (c||'')
   .split('{propiedad}').join(u.prop||'')
   .split('{NºUnidad}').join(u.nombre||'').split('{NoUnidad}').join(u.nombre||'')
