@@ -4883,6 +4883,9 @@ function incVencida(i){ if(['terminada','cancelada'].includes(i.estado))return f
 function incMoney(n){ const v=Number(n); return isNaN(v)?'—':('$'+v.toLocaleString('es-ES',{minimumFractionDigits:0,maximumFractionDigits:2})); }
 function incCan(){ return CAN_MANAGE.includes(PROFILE.role); }
 function incEsMant(){ return PROFILE.dept==='Mantenimiento' || incCan(); }
+// Quién puede CREAR/EDITAR/BORRAR mantenimientos preventivos:
+// admin/propietario, Director del área Operaciones, o Responsable del depto. Mantenimiento.
+function prevCanManage(){ if(isAdmin())return true; const role=PROFILE.role, area=(PROFILE.area||''), dept=(PROFILE.dept||''); if(role==='direccion'&&area==='Operaciones')return true; if(role==='responsable'&&dept==='Mantenimiento')return true; return false; }
 function incMyTeam(){ return PROFILE.org_equipo||PROFILE.equipo||''; }
 function setIncTab(t){ incTab=t; incSel=null; if(incTimerInt){clearInterval(incTimerInt);incTimerInt=null;} show('incidencias'); }
 function incOpen(id){ incSel=id; show('incidencias'); }
@@ -5529,7 +5532,7 @@ function renderPrevCal(){
 function renderPrevDetail(id){
   const t=MANT_PREV.find(x=>String(x.id)===String(id));
   if(!t) return `<button class="btn-sm ghost" onclick="prevBack()">← Volver</button><div class="panel" style="margin-top:12px">Tarea no encontrada.</div>`;
-  const canManage=incCan()||isProvider();
+  const canManage=prevCanManage();
   const today=new Date(); today.setHours(0,0,0,0);
   const prox=t.proximo?new Date(t.proximo+'T00:00:00'):null;
   const overdue=prox&&prox<today&&t.activo!==false;
@@ -5558,7 +5561,7 @@ function renderPrevDetail(id){
 }
 function prevSetCat(v){ prevFilterCat=v; show('preventivo'); }
 function renderPrev(){
-  const canManage=incCan()||isProvider();
+  const canManage=prevCanManage();
   let tasks=MANT_PREV.slice();
   if(isProvider()) tasks=tasks.filter(t=>(t.categoria||'')===provEsp());
   if(prevFilterCat) tasks=tasks.filter(t=>(t.categoria||'')===prevFilterCat);
@@ -5572,7 +5575,7 @@ function renderPrev(){
     ${form}${cards}`;
 }
 function prevCardHTML(t){
-  const canManage=incCan()||isProvider();
+  const canManage=prevCanManage();
   const today=new Date(); today.setHours(0,0,0,0);
   const prox=t.proximo?new Date(t.proximo+'T00:00:00'):null;
   const overdue = prox && prox<today && t.activo!==false;
