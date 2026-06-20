@@ -979,6 +979,15 @@ function provEsp(){ return (PROFILE&&PROFILE.especialidad)||''; }   // su catego
 const PROV_NAV_OK=['inicio','incidencias','preventivo','perfil'];
 function isConductor(){ return !!(PROFILE&&PROFILE.conductor); }    // conductor de transfers (acceso limitado)
 const CONDUCTOR_NAV_OK=['transfer'];
+// ---- Equipos de una persona (soporta supervisores de varios equipos) ----
+// p.equipos = ['*'] (todos) | ['Equipo A','Equipo B'] | []  (además de su equipo principal)
+function personTeams(p){ p=p||{}; const out=[]; const pri=p.org_equipo||p.equipo; if(pri) out.push(pri); (Array.isArray(p.equipos)?p.equipos:[]).forEach(e=>{ if(e&&e!=='*'&&!out.includes(e)) out.push(e); }); return out; }
+function personAllTeams(p){ return !!(p&&Array.isArray(p.equipos)&&p.equipos.includes('*')); }
+function personInTeam(p,t){ if(!t||t==='*')return true; if(personAllTeams(p))return true; return personTeams(p).includes(t); }
+function myTeamsList(){ return personTeams(PROFILE); }
+function myAllTeams(){ return personAllTeams(PROFILE); }
+function myInTeam(t){ return personInTeam(PROFILE,t); }
+function teamsOverlapMe(p){ if(myAllTeams()||personAllTeams(p))return true; const a=myTeamsList(), b=personTeams(p); if(!a.length||!b.length)return true; return a.some(x=>b.includes(x)); }
 
 let sb=null, ME=null, PROFILE=null, curPage='';
 
@@ -1574,9 +1583,8 @@ async function inicioDeptBlock(p){
   if((p.dept||'')==='Mantenimiento'){
     const {data}=await sb.from('mant_incidencias').select('id,estado,urgencia,created_at,asignado_a,tomada_por,asignado_equipo');
     const list=(data||[]).filter(x=>!['terminada','cancelada'].includes(x.estado));
-    const team=p.org_equipo||p.equipo||'';
     const mias=list.filter(x=>x.asignado_a===ME.id||x.tomada_por===ME.id);
-    const sinAsig=list.filter(x=>x.estado==='pendiente'&&!x.asignado_a&&(x.asignado_equipo==='*'||(team&&x.asignado_equipo===team)));
+    const sinAsig=list.filter(x=>x.estado==='pendiente'&&!x.asignado_a&&(x.asignado_equipo==='*'||personInTeam(p,x.asignado_equipo)));
     const venc=mias.filter(x=>{const lim={alta:24,media:72,baja:168}[x.urgencia]||72;return (Date.now()-new Date(x.created_at).getTime())/3600000>lim;}).length;
     return `<div style="font-weight:700;color:var(--azul);margin:4px 0 8px">🛠️ Tu mantenimiento hoy</div>
     <div class="cards">
@@ -2709,7 +2717,7 @@ let CAMB=[], CAMB_PROFS=[], CAMB_TURNOS=[];
 const CAMB_EST={pend_comp:{l:'Esperando al compañero',c:'#b9770e',b:'#fdf3e2'},pend_dir:{l:'Esperando a Dirección',c:'#2563aa',b:'#e7eff8'},aprobado:{l:'Aprobado ✓',c:'#1e8a5a',b:'#e4f5ec'},rechazado:{l:'Rechazado',c:'#c0392b',b:'#fdecea'}};
 const CMB_SS='width:100%;padding:10px 12px;border:1px solid var(--gris2);border-radius:8px;font-family:inherit;font-size:14px';
 function cambDirector(){ return isAdmin()||PROFILE.role==='direccion'; }
-function cambElegibles(){ const dep=PROFILE.dept||''; const eq=PROFILE.org_equipo||PROFILE.equipo||''; return CAMB_PROFS.filter(p=>String(p.id)!==String(ME.id) && (p.dept||'')===dep && (!eq || (p.org_equipo||p.equipo||'')===eq)); }
+function cambElegibles(){ const dep=PROFILE.dept||''; return CAMB_PROFS.filter(p=>String(p.id)!==String(ME.id) && (p.dept||'')===dep && teamsOverlapMe(p)); }
 function cambEstBadge(e){ const o=CAMB_EST[e]||CAMB_EST.pend_comp; return `<span style="background:${o.b};color:${o.c};padding:3px 11px;border-radius:20px;font-size:11px;font-weight:700;white-space:nowrap">${o.l}</span>`; }
 function cambTLabel(t){ const tp=turnoTipo(t.tipo_id); const nm=tp?tp.nombre:'Turno'; const i=t.hora_ini||(tp&&tp.hora_ini), f=t.hora_fin||(tp&&tp.hora_fin); const h=(i&&f)?` (${i}–${f})`:''; const fe=new Date(t.fecha+'T00:00:00').toLocaleDateString('es-ES',{weekday:'short',day:'2-digit',month:'short'}); return fe+' · '+nm+h; }
 function cambColShifts(colId){ return CAMB_TURNOS.filter(t=>String(t.empleado_id)===String(colId)).sort((a,b)=>String(a.fecha).localeCompare(String(b.fecha))); }
@@ -2718,7 +2726,7 @@ async function loadCambBadge(){ try{ const {data}=await sb.from('turno_cambios')
 async function horCambios(){
   const today=hoyISO();
   const [pf,tn,cb]=await Promise.all([
-    sb.from('profiles').select('id,nombre,dept,equipo,org_equipo').eq('estado','aprobado').order('nombre'),
+    sb.from('profiles').select('id,nombre,dept,equipo,org_equipo,equipos').eq('estado','aprobado').order('nombre'),
     sb.from('turnos').select('id,empleado_id,fecha,tipo_id,hora_ini,hora_fin').gte('fecha',today),
     sb.from('turno_cambios').select('*').order('created_at',{ascending:false})
   ]);
@@ -2779,7 +2787,7 @@ async function cambModalOpen(turnoId){
   await loadTurnosTipo();
   const today=hoyISO();
   const [pf,tn]=await Promise.all([
-    sb.from('profiles').select('id,nombre,dept,equipo,org_equipo').eq('estado','aprobado').order('nombre'),
+    sb.from('profiles').select('id,nombre,dept,equipo,org_equipo,equipos').eq('estado','aprobado').order('nombre'),
     sb.from('turnos').select('id,empleado_id,fecha,tipo_id,hora_ini,hora_fin').gte('fecha',today)
   ]);
   CAMB_PROFS=pf.data||[]; CAMB_TURNOS=(tn.data||[]).filter(t=>{const tp=turnoTipo(t.tipo_id);return tp&&!isLibreTurno(tp);});
@@ -3631,6 +3639,14 @@ function userForm(){const u=userDraft;const colores=['#1F4E79','#16a085','#8e44a
         <select id="uPos" onchange="if(this.value==='__new__')crearCatInline('posicion')"><option value="__none__" ${!u.posicion?'selected':''}>— Sin posición —</option>${CAT.posiciones.map(p=>`<option ${u.posicion===p?'selected':''}>${esc(p)}</option>`).join('')}<option value="__new__">+ Crear nueva…</option></select></div>
       <div><label>Equipo</label>
         <select id="uEquipo" onchange="if(this.value==='__new__')crearCatInline('equipo')"><option value="__none__" ${!u.equipo?'selected':''}>— Ninguno —</option>${CAT.equipos.map(eq=>`<option ${u.equipo===eq?'selected':''}>${esc(eq)}</option>`).join('')}<option value="__new__">+ Crear nuevo…</option></select></div></div>
+    <div style="margin:2px 0 8px">
+      <label>Supervisa varios equipos <small style="color:var(--suave);font-weight:400">— para un supervisor que cubre más de un equipo</small></label>
+      <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:4px">
+        <label class="thk" style="padding:5px 10px;font-size:12.5px;border:1px solid var(--gris2);border-radius:8px"><input type="checkbox" id="uEqAll" ${(u.equipos||[]).includes('*')?'checked':''} onchange="toggleEqAll(this)"> 🟦 Todos los equipos</label>
+        ${CAT.equipos.map((eq,i)=>`<label class="thk" style="padding:5px 10px;font-size:12.5px;border:1px solid var(--gris2);border-radius:8px"><input type="checkbox" id="uEq_${i}" ${((u.equipos||[]).includes(eq))?'checked':''} ${(u.equipos||[]).includes('*')?'disabled':''}> ${esc(eq)}</label>`).join('')||'<small style="color:var(--suave)">No hay equipos creados</small>'}
+      </div>
+      <small style="color:var(--suave)">Vacío = solo su equipo principal (o ninguno). Marca varios para que aparezca al asignar en cualquiera de esos equipos.</small>
+    </div>
     <div class="row"><div><label>Rol / permisos</label>${u.role==='propietario'
         ? `<input value="Propietario 👑" disabled style="background:var(--gris)"><small style="color:var(--suave)">El rol de Propietario no se puede cambiar.</small>`
         : `<select id="uR">${ROLES.filter(r=>r[0]!=='propietario').map(r=>`<option value="${r[0]}" ${u.role===r[0]?'selected':''}>${esc(r[1])}</option>`).join('')}</select>`}</div>
@@ -3659,6 +3675,7 @@ function captureUserForm(){
   const d=g('uD'); if(d!==null&&d!=='__new__') userDraft.dept = d==='__none__'?'':d;
   const ps=g('uPos'); if(ps!==null&&ps!=='__new__') userDraft.posicion=ps==='__none__'?'':ps;
   const eq=g('uEquipo'); if(eq!==null&&eq!=='__new__') userDraft.equipo=eq==='__none__'?null:eq;
+  if(document.getElementById('uEqAll')) userDraft.equipos=readUserEquipos();
   const rn=g('uR'); if(rn&&rn!=='__new__') userDraft.role=rn;
   if(g('uTel')!==null) userDraft.telefono=g('uTel');
   if(g('uIdent')!==null) userDraft.identificacion=g('uIdent');
@@ -3670,6 +3687,8 @@ function captureUserForm(){
   if(g('uC')!==null) userDraft.cumple=g('uC')||null;
   const col=document.querySelector('input[name="uCol"]:checked'); if(col) userDraft.color=col.value;
 }
+function readUserEquipos(){ const all=document.getElementById('uEqAll'); if(all&&all.checked) return ['*']; const out=[]; (CAT.equipos||[]).forEach((eq,i)=>{ const c=document.getElementById('uEq_'+i); if(c&&c.checked) out.push(eq); }); return out; }
+function toggleEqAll(cb){ (CAT.equipos||[]).forEach((eq,i)=>{ const c=document.getElementById('uEq_'+i); if(c){ c.disabled=cb.checked; if(cb.checked) c.checked=false; } }); }
 function onAreaChange(area){
   captureUserForm();
   area = area==='__none__' ? '' : area;
@@ -3705,7 +3724,8 @@ async function userSave(e){e.preventDefault();
   let role;
   if(userDraft.role==='propietario'){ role='propietario'; }
   else { const rn=g('uR'); role=(rn&&rn!=='__new__')?rn:userDraft.role; }
-  const row={nombre:val('uN'),dept,area,role,posicion,vac:+val('uV')||0,cumple:val('uC')||null,equipo,telefono:val('uTel'),identificacion:val('uIdent'),org_titulo:val('uOrgT'),color:col?col.value:'#1F4E79',proveedor:(g('uProv')==='1'),especialidad:(g('uEsp')||null),conductor:(g('uCond')==='1'),comision:(g('uComision')===''||g('uComision')==null?null:parseFloat(g('uComision')))};
+  const equipos=document.getElementById('uEqAll')?readUserEquipos():(userDraft.equipos||[]);
+  const row={nombre:val('uN'),dept,area,role,posicion,vac:+val('uV')||0,cumple:val('uC')||null,equipo,equipos,telefono:val('uTel'),identificacion:val('uIdent'),org_titulo:val('uOrgT'),color:col?col.value:'#1F4E79',proveedor:(g('uProv')==='1'),especialidad:(g('uEsp')||null),conductor:(g('uCond')==='1'),comision:(g('uComision')===''||g('uComision')==null?null:parseFloat(g('uComision')))};
   const f=document.getElementById('uFoto').files[0];
   if(f){ row.foto=await fileToAvatar(f); }            // respaldo si no se usó el recorte
   else { row.foto = (userDraft.foto!==undefined ? userDraft.foto : null); }  // recorte aplicado, foto existente, o "Quitar foto"
@@ -4423,11 +4443,11 @@ function bitGoPendientes(prio){ bitPrioFiltro=prio||''; bitHistOpen=false; setBi
 function bitGoRealizados(){ bitPrioFiltro=''; bitHistOpen=true; bitTab='pendientes'; bitView=null; bitFormOpen=false; show('bitacora'); setTimeout(()=>{const el=document.getElementById('bitHistBox');if(el)el.scrollIntoView({behavior:'smooth',block:'center'});},120); }
 function setBitTab(t){ bitTab=t; bitView=null; bitFormOpen=false; show('bitacora'); }
 function bitTeam(arr){
-  const myTeam=bitMyTeam();
   return (arr||[]).filter(x=>{
     if(!(bitCanAllTeams() || (x.dept||'')===(PROFILE.dept||''))) return false;
     if(bitCanAllTeams()){ return !bitEquipo || (x.equipo||'')===bitEquipo; }
-    const xe=x.equipo||''; return !(myTeam && xe && xe!==myTeam);
+    const xe=x.equipo||''; if(!xe) return true; if(myAllTeams()) return true;
+    const mt=myTeamsList(); if(!mt.length) return true; return mt.includes(xe);
   });
 }
 function bitMine(b){ return (b.autor_id&&String(b.autor_id)===String(ME.id))||(!b.autor_id&&b.autor_nombre===PROFILE.nombre); }
@@ -4446,7 +4466,7 @@ async function pageBitacora(){
   const nOpen=PENS.filter(p=>p.estado!=='realizado').length;
   const teamSel = bitCanAllTeams()
     ? `<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:14px"><label style="font-size:13px;font-weight:600;color:var(--suave)">👥 Equipo:</label><select onchange="bitEquipo=this.value;show('bitacora')" style="padding:8px 11px;border:1px solid var(--gris2);border-radius:8px;font-family:inherit;font-size:13.5px"><option value="">Todos los equipos</option>${equiposAll.map(e=>`<option ${bitEquipo===e?'selected':''}>${esc(e)}</option>`).join('')}</select></div>`
-    : (bitMyTeam()?`<div style="margin-bottom:12px"><span style="background:#eef2f7;color:#34557a;padding:4px 11px;border-radius:20px;font-size:12px;font-weight:700">👥 Equipo: ${esc(bitMyTeam())}</span></div>`:'');
+    : (myTeamsList().length?`<div style="margin-bottom:12px"><span style="background:#eef2f7;color:#34557a;padding:4px 11px;border-radius:20px;font-size:12px;font-weight:700">👥 Equipo${myTeamsList().length>1?'s':''}: ${esc(myTeamsList().join(', '))}</span></div>`:'');
   const tabs=`<div class="tabs">
     <button class="${bitTab==='pendientes'?'on':''}" onclick="setBitTab('pendientes')">🔁 Pendientes del equipo${nOpen?` (${nOpen})`:''}</button>
     <button class="${bitTab==='bitacoras'?'on':''}" onclick="setBitTab('bitacoras')">📓 Bitácoras</button></div>`;
@@ -4886,6 +4906,8 @@ function incEsMant(){ return PROFILE.dept==='Mantenimiento' || incCan(); }
 // Quién puede CREAR/EDITAR/BORRAR mantenimientos preventivos:
 // admin/propietario, Director del área Operaciones, o Responsable del depto. Mantenimiento.
 function prevCanManage(){ if(isAdmin())return true; const role=PROFILE.role, area=(PROFILE.area||''), dept=(PROFILE.dept||''); if(role==='direccion'&&area==='Operaciones')return true; if(role==='responsable'&&dept==='Mantenimiento')return true; return false; }
+// ¿La persona s pertenece al equipo t? (incluye supervisores con varios equipos: s.equipos = ['*'] o lista)
+function mantInTeam(s,t){ if(!t||t==='*')return true; const ex=Array.isArray(s.equipos)?s.equipos:[]; return s.team===t || ex.includes('*') || ex.includes(t); }
 function incMyTeam(){ return PROFILE.org_equipo||PROFILE.equipo||''; }
 function setIncTab(t){ incTab=t; incSel=null; if(incTimerInt){clearInterval(incTimerInt);incTimerInt=null;} show('incidencias'); }
 function incOpen(id){ incSel=id; show('incidencias'); }
@@ -4970,7 +4992,7 @@ async function pageIncidencias(){
     sb.from('mant_edificios').select('*').order('nombre'),
     sb.from('mant_unidades').select('*').order('orden').order('nombre'),
     sb.from('mant_fotos').select('*').order('id'),
-    sb.from('profiles').select('id,nombre,org_equipo,equipo,dept').eq('dept','Mantenimiento').eq('estado','aprobado'),
+    sb.from('profiles').select('id,nombre,org_equipo,equipo,equipos,dept').eq('dept','Mantenimiento').eq('estado','aprobado'),
   ]);
   MANT_EDIF=ed.data||[]; MANT_UNI=un.data||[]; MANT_STAFF=stf.data||[];
   MANT_STAFF.forEach(s=>{ s.team=s.org_equipo||s.equipo||''; });
@@ -5110,9 +5132,9 @@ function incFilteredList(hist){
     if(!prov && !hist){
       if(f.ambito==='reportadas'){ if(i.creado_por!==me) return false; }
       else if(f.ambito==='mias'){ if(i.tomada_por!==me && i.asignado_a!==me) return false; }
-      else if(f.ambito==='equipo'){ const t=incMyTeam(); if(!(i.asignado_equipo==='*'||(t&&i.asignado_equipo===t))) return false; }
+      else if(f.ambito==='equipo'){ if(!(i.asignado_equipo==='*'||myInTeam(i.asignado_equipo))) return false; }
       else if(f.ambito==='curso'){ if(!['en_curso','pausada','a_medias'].includes(i.estado)) return false; }
-      else if(f.ambito==='sinasignar'){ if(!(i.estado==='pendiente' && !i.asignado_a)) return false; const t=incMyTeam(); if(!(incCan()||i.asignado_equipo==='*'||(t&&i.asignado_equipo===t))) return false; }
+      else if(f.ambito==='sinasignar'){ if(!(i.estado==='pendiente' && !i.asignado_a)) return false; if(!(incCan()||i.asignado_equipo==='*'||myInTeam(i.asignado_equipo))) return false; }
     }
     if(f.edificio && i.edificio!==f.edificio) return false;
     if(f.unidad && i.unidad!==f.unidad) return false;
@@ -5205,7 +5227,7 @@ function incFormHTML(){
   </form></div>`;
 }
 function incFormEdif(){ const ed=(document.getElementById('iEdif')||{}).value||''; const uni=document.getElementById('iUni'); if(!uni)return; const list=MANT_UNI.filter(u=>u.edificio===ed); uni.innerHTML=`<option value="">— Selecciona —</option>`+list.map(u=>`<option>${esc(u.nombre)}${u.tipo==='comun'?' (zona común)':''}</option>`).join(''); }
-function incFormEquipo(){ const t=(document.getElementById('iEquipo')||{}).value||'*'; const per=document.getElementById('iPersona'); if(!per)return; const list=MANT_STAFF.filter(s=> t==='*'?true:s.team===t); per.innerHTML=`<option value="">Todo el equipo (que alguien la tome)</option>`+list.map(s=>`<option value="${s.id}">${esc(s.nombre)}</option>`).join(''); }
+function incFormEquipo(){ const t=(document.getElementById('iEquipo')||{}).value||'*'; const per=document.getElementById('iPersona'); if(!per)return; const list=MANT_STAFF.filter(s=> mantInTeam(s,t)); per.innerHTML=`<option value="">Todo el equipo (que alguien la tome)</option>`+list.map(s=>`<option value="${s.id}">${esc(s.nombre)}</option>`).join(''); }
 async function incCreate(e){
   e.preventDefault();
   const g=id=>{const el=document.getElementById(id);return el?el.value:'';};
@@ -5305,7 +5327,7 @@ async function incCancelar(id){
   toast('Incidencia devuelta a pendiente'); incSel=null; show('incidencias');
 }
 function incToggleEdit(){ incEditOpen=!incEditOpen; show('incidencias'); }
-function incEditEquipo(){ const t=(document.getElementById('eEquipo')||{}).value||'*'; const per=document.getElementById('ePersona'); if(!per)return; const list=MANT_STAFF.filter(s=> t==='*'?true:s.team===t); per.innerHTML=`<option value="">Todo el equipo (que alguien la tome)</option>`+list.map(s=>`<option value="${s.id}">${esc(s.nombre)}</option>`).join(''); }
+function incEditEquipo(){ const t=(document.getElementById('eEquipo')||{}).value||'*'; const per=document.getElementById('ePersona'); if(!per)return; const list=MANT_STAFF.filter(s=> mantInTeam(s,t)); per.innerHTML=`<option value="">Todo el equipo (que alguien la tome)</option>`+list.map(s=>`<option value="${s.id}">${esc(s.nombre)}</option>`).join(''); }
 async function incSaveEdit(id){
   const i=INC.find(x=>String(x.id)===String(id)); if(!i)return;
   const g=x=>{const el=document.getElementById(x);return el?el.value:'';};
@@ -5342,7 +5364,7 @@ function renderIncDetail(id){
     const teams=MANT_TEAMS;
     const teamOpts=`<option value="*" ${i.asignado_equipo==='*'?'selected':''}>Todos los equipos</option>`+teams.map(t=>`<option ${i.asignado_equipo===t?'selected':''}>${esc(t)}</option>`).join('');
     const curTeam=i.asignado_equipo||'*';
-    const perList=MANT_STAFF.filter(s=> curTeam==='*'?true:s.team===curTeam);
+    const perList=MANT_STAFF.filter(s=> mantInTeam(s,curTeam));
     const perOpts=`<option value="">Todo el equipo (que alguien la tome)</option>`+perList.map(s=>`<option value="${s.id}" ${String(i.asignado_a)===String(s.id)?'selected':''}>${esc(s.nombre)}</option>`).join('');
     return `<div class="panel"><h3 class="inc-h3">✏️ Editar / reasignar</h3>
       <div class="row"><div><label>Urgencia</label><select id="eUrg"><option value="alta" ${i.urgencia==='alta'?'selected':''}>🔴 Alta</option><option value="media" ${i.urgencia==='media'?'selected':''}>🟠 Media</option><option value="baja" ${i.urgencia==='baja'?'selected':''}>🟢 Baja</option></select></div>
@@ -5489,7 +5511,7 @@ async function pagePreventivo(){
   const [ed,un,stf,inc]=await Promise.all([
     sb.from('mant_edificios').select('*').order('nombre'),
     sb.from('mant_unidades').select('*').order('orden').order('nombre'),
-    sb.from('profiles').select('id,nombre,org_equipo,equipo,dept').eq('dept','Mantenimiento').eq('estado','aprobado'),
+    sb.from('profiles').select('id,nombre,org_equipo,equipo,equipos,dept').eq('dept','Mantenimiento').eq('estado','aprobado'),
     sb.from('mant_incidencias').select('id,urgencia,estado,created_at,edificio,unidad,descripcion'),
   ]);
   MANT_PREV=pv.data||[]; MANT_EDIF=ed.data||[]; MANT_UNI=un.data||[]; MANT_STAFF=stf.data||[];
