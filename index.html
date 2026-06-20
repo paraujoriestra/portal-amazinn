@@ -5548,6 +5548,7 @@ function renderPrevDetail(id){
     <div class="inc-kv"><b>Próximo:</b> ${prox?prox.toLocaleDateString('es-ES'):'—'}</div>
     <div class="inc-kv"><b>Asignada a:</b> ${asg}</div>
     ${t.ultima?`<div class="inc-kv"><b>Última vez:</b> ${new Date(t.ultima+'T00:00:00').toLocaleDateString('es-ES')}</div>`:''}
+    ${t.creado_por_nombre?`<div class="inc-kv"><b>Creada por:</b> ${esc(t.creado_por_nombre)}${t.created_at?' · '+new Date(t.created_at).toLocaleDateString('es-ES'):''}</div>`:''}
     ${t.notas?`<div class="inc-kv"><b>Notas:</b> ${esc(t.notas)}</div>`:''}
     ${(t.checklist&&t.checklist.length)?`<h3 class="inc-h3">✔️ Checklist</h3>${t.checklist.map((c,ix)=>`<label style="display:flex;gap:8px;align-items:center;font-size:14px;margin:5px 0;cursor:pointer"><input type="checkbox" ${c.done?'checked':''} onchange="prevToggleChk(${t.id},${ix})"> ${esc(c.txt)}</label>`).join('')}`:''}
     <div class="inc-final" style="margin-top:14px">
@@ -5639,7 +5640,7 @@ async function prevSave(e){
     asignado_equipo:g('pEquipo')||null, asignado_a:personaId||null, asignado_a_nombre:persona?persona.nombre:null, notas:(g('pNotas')||'').trim()||null, checklist };
   let err;
   if(prevEditId){ const r=await sb.from('mant_preventivo').update(row).eq('id',prevEditId); err=r.error; }
-  else { row.activo=true; const r=await sb.from('mant_preventivo').insert(row); err=r.error; }
+  else { row.activo=true; row.creado_por=ME.id; row.creado_por_nombre=PROFILE.nombre; row.created_at=new Date().toISOString(); const r=await sb.from('mant_preventivo').insert(row); err=r.error; }
   if(err){ alert('Error: '+err.message); return false; }
   prevFormOpen=false; prevEditId=null; toast('✓ Guardado'); show('preventivo'); return false;
 }
