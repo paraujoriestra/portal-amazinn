@@ -1183,7 +1183,7 @@ const NAV=[
   {id:'aprobaciones',ic:'✅',t:'Aprobaciones', roles:['direccion','admin']},
   {id:'registros',ic:'🆕',t:'Registros pendientes', roles:['admin']},
   {id:'admin',ic:'⚙️',t:'Usuarios', roles:['admin']},
-  {id:'catalogos',ic:'🗂️',t:'Catálogos', owner:true},
+  {id:'catalogos',ic:'🗂️',t:'Catálogos', roles:['direccion','admin']},
   {id:'backup',ic:'💾',t:'Copia de seguridad', owner:true},
 ];
 const CAN_MANAGE=['responsable','direccion','admin','propietario'];
@@ -3427,7 +3427,7 @@ function cotDescargar(id){
 
 /* ---------------- CATÁLOGOS (Propietario) ---------------- */
 function pageCatalogos(){
-  if(!isOwner()){ document.getElementById('main').innerHTML='<div class="panel">Solo el Propietario puede gestionar los catálogos.</div>'; return; }
+  if(!(isAdmin()||PROFILE.role==='direccion')){ document.getElementById('main').innerHTML='<div class="panel">Solo Dirección, Administración o el Propietario pueden gestionar los catálogos.</div>'; return; }
   const areaList=CAT.areas.map(a=>`<div class="cat-row"><span>${esc(a)}</span><button class="cat-x" onclick="delArea('${a.replace(/'/g,"\\'")}')">🗑</button></div>`).join('')||'<div class="cat-empty">—</div>';
   const deptList=CAT.deptos.map(d=>`<div class="cat-row"><span>${esc(d.nombre)} <small style="color:var(--suave)">· ${esc(d.area||'sin área')}</small></span><button class="cat-x" onclick="delDepto('${d.nombre.replace(/'/g,"\\'")}')">🗑</button></div>`).join('')||'<div class="cat-empty">—</div>';
   const posList=CAT.posiciones.map(p=>`<div class="cat-row"><span>${esc(p)}</span><button class="cat-x" onclick="delPos('${p.replace(/'/g,"\\'")}')">🗑</button></div>`).join('')||'<div class="cat-empty">—</div>';
