@@ -5035,10 +5035,12 @@ function incExportCSV(){
 /* ---- Importar incidencias desde Excel ---- */
 function incPlantilla(){
   if(typeof XLSX==='undefined'){ alert('No se pudo cargar el lector de Excel. Revisa tu conexión.'); return; }
-  const cols=['Edificio','Unidad','Descripción','Urgencia','Categoría','Estado','Fecha','Coste','Afecta huésped','Nota'];
-  const ej1=['Casa Diez','Nº 1','El aire acondicionado no enfría','alta','climatizacion','pendiente','2026-05-12','','sí','Reportado por el huésped'];
-  const ej2=['Hotel Mío','Nº 24','Repintar marca en pared','baja','pintura','terminada','2026-04-30','45','no','Repintado y secado'];
-  const ws=XLSX.utils.aoa_to_sheet([cols,ej1,ej2]); const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'Incidencias'); XLSX.writeFile(wb,'plantilla_incidencias.xlsx');
+  const cols=['Edificio','Unidad','Descripción','Urgencia','Categoría','Estado','Fecha creación','Fecha resolución','Resuelto por','Coste','Afecta huésped','Comentario resolución'];
+  const ej1=['Casa Diez','Nº 1','El aire acondicionado no enfría','alta','climatizacion','pendiente','2026-05-12','','','','sí',''];
+  const ej2=['Hotel Mío','Nº 24','Repintar marca en pared','baja','pintura','terminada','2026-04-30','2026-05-03','Jorge Mela','45','no','Repintado y secado; sin novedad'];
+  const ej3=['Altavida','Zona Común','Bomba de piscina con ruido','media','climatizacion','en curso','2026-05-20','','','','no',''];
+  const guia=['Descripción = el problema reportado · Comentario resolución = lo que dejó escrito mantenimiento al terminarla · ESTADOS: pendiente / en curso / terminada (=resuelta, va al histórico) / cancelada','','','','','','','','','','',''];
+  const ws=XLSX.utils.aoa_to_sheet([cols,ej1,ej2,ej3,[],guia]); const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'Incidencias'); XLSX.writeFile(wb,'plantilla_incidencias.xlsx');
 }
 function incMapEstado(s){ s=(s||'').toLowerCase().trim();
   if(/termin|resuel|hecho|cerrad|complet|finaliz/.test(s)) return 'terminada';
@@ -5067,7 +5069,9 @@ async function incImportExcel(input){
       const uni=rowGet(map,'unidad','apartamento','nº unidad','no unidad','habitacion','habitación','zona','nº');
       if(!desc && !edif && !uni) return null;
       const est=incMapEstado(rowGet(map,'estado','status','situacion','situación'));
-      const fecha=incParseFecha(map[normKey('fecha')]!==undefined?map[normKey('fecha')]:rowGet(map,'fecha creacion','creada','fecha de creación','date'));
+      const fecha=incParseFecha(rowGet(map,'fecha creacion','fecha creación','fecha','creada','fecha de creación','date'));
+      const fResRaw=rowGet(map,'fecha resolucion','fecha resolución','fecha de resolucion','fecha de resolución','resuelta','fecha resuelta','resolucion');
+      const fechaRes=(()=>{ const s=(''+(fResRaw||'')).trim(); if(!(fResRaw instanceof Date)&&!s) return null; return incParseFecha(fResRaw); })();
       const afecta=/^(s|y|1|true|sí|si)/i.test(rowGet(map,'afecta huesped','afecta huésped','afecta','huesped','huésped'));
       const costeRaw=rowGet(map,'coste','costo','importe','precio','gasto');
       const row={ via:'importado', urgencia:incMapUrg(rowGet(map,'urgencia','prioridad','urgency')),
@@ -5075,15 +5079,16 @@ async function incImportExcel(input){
         edificio:edif||'', unidad:uni||'', descripcion:desc||'(sin descripción)', estado:est,
         asignado_a:null, asignado_a_nombre:null, asignado_equipo:'*', tomada_por:null, tomada_por_nombre:null,
         afecta_huesped:afecta, coste:(costeRaw===''?null:(parseFloat((''+costeRaw).replace(',','.'))||null)),
-        nota_solucion:(est==='terminada')?(rowGet(map,'nota','notas','observaciones','solucion','solución')||null):null,
+        nota_solucion:(rowGet(map,'comentario resolucion','comentario resolución','comentario','nota solucion','nota solución','solucion','solución','observaciones','nota','notas')||null),
         creado_por:ME.id, creado_por_nombre:PROFILE.nombre, historial:'Importado desde Excel el '+new Date().toLocaleDateString('es-ES'),
         created_at:fecha, updated_at:new Date().toISOString() };
-      if(est==='terminada'){ row.resuelta_at=fecha; row.resuelto_por_nombre=rowGet(map,'resuelto por','tecnico','técnico','realizado por')||PROFILE.nombre; }
+      if(est==='terminada'){ const ra=fechaRes||fecha; row.resuelta_at=ra; row.updated_at=ra; row.resuelto_por_nombre=rowGet(map,'resuelto por','resuelto','tecnico','técnico','realizado por')||PROFILE.nombre; }
       return row;
     }).filter(Boolean);
     if(!mapped.length){ alert('No se reconocieron las columnas. Descarga la plantilla y usa esos encabezados (Edificio, Unidad, Descripción, Urgencia, Categoría, Estado, Fecha…).'); return; }
     const nPend=mapped.filter(x=>x.estado==='pendiente').length;
-    if(!confirm('Se importarán '+mapped.length+' incidencia(s) ('+nPend+' quedarán como PENDIENTES sin asignar). ¿Continuar?')) return;
+    const nRes=mapped.filter(x=>x.estado==='terminada').length;
+    if(!confirm('Se importarán '+mapped.length+' incidencia(s):\n· '+nPend+' pendientes sin asignar\n· '+nRes+' resueltas (van al histórico)\n¿Continuar?')) return;
     const {error}=await sb.from('mant_incidencias').insert(mapped);
     if(error){ alert('Error al importar: '+error.message); return; }
     toast('✓ '+mapped.length+' incidencia(s) importadas'); incTab='bandeja'; show('incidencias');
