@@ -3777,8 +3777,8 @@ async function loadUnidades(){
   const eds=ed.data||[], uns=un.data||[]; const out=[];
   eds.forEach(e=>{
     const apts=uns.filter(u=>u.edificio===e.nombre && u.tipo!=='comun');
-    if(apts.length){ apts.forEach(u=>out.push({id:u.id,raw:u.id,kind:'u',nombre:u.nombre,prop:e.nombre,tipo:'apartamento',numero:u.numero||'',planta:u.planta||'',codigo:u.codigo||'',wifi:u.wifi||''})); }
-    else { out.push({id:'E'+e.id,raw:e.id,kind:'e',nombre:e.nombre,prop:e.nombre,tipo:'apartamento',whole:true,numero:e.numero||'',planta:e.planta||'',codigo:e.codigo||'',wifi:e.wifi||''}); }
+    if(apts.length){ apts.forEach(u=>out.push({id:u.id,raw:u.id,kind:'u',nombre:u.nombre,prop:e.nombre,tipo:'apartamento',numero:u.numero||'',planta:u.planta||'',codigo:u.codigo||'',wifi:u.wifi||'',cod_acceso:!!u.cod_acceso})); }
+    else { out.push({id:'E'+e.id,raw:e.id,kind:'e',nombre:e.nombre,prop:e.nombre,tipo:'apartamento',whole:true,numero:e.numero||'',planta:e.planta||'',codigo:e.codigo||'',wifi:e.wifi||'',cod_acceso:!!e.cod_acceso}); }
   });
   return out;
 }
@@ -3877,15 +3877,29 @@ async function msgCodes(){
     <input id="twofa" maxlength="6" inputmode="numeric" placeholder="••••••" style="text-align:center;letter-spacing:10px;font-size:24px;padding:12px;border:1px solid var(--gris2);border-radius:10px;width:210px" onkeydown="if(event.key==='Enter')verify2FA()">
     <div style="margin-top:14px"><button class="btn" onclick="verify2FA()">Verificar</button></div><small style="color:var(--suave)">Demo: cualquier 6 dígitos.</small></div>`;
   const uni=await loadUnidades();
-  const rows=uni.map(u=>`<tr><td>${esc(u.prop)}</td><td><b>${esc(u.nombre)}</b></td><td><input id="p_${u.id}" value="${esc(u.planta||'')}" placeholder="—" style="padding:7px;border:1px solid var(--gris2);border-radius:7px;width:90px"></td>
-    <td><input id="c_${u.id}" value="${esc(u.codigo||'')}" style="padding:7px;border:1px solid var(--gris2);border-radius:7px;width:110px;font-weight:700;color:var(--rojo)"></td></tr>`).join('');
-  return `<div class="panel" style="background:var(--azul-claro);border:none;font-size:13.5px">🔑 Indica la <b>planta</b> (opcional) y el <b>código</b> de cada unidad. Cada cambio queda en <b>Auditoría</b> y se refleja en las plantillas.</div>
-    <div class="panel"><table><thead><tr><th>Propiedad</th><th>Nº unidad</th><th>Nº Planta</th><th>Código</th></tr></thead><tbody>${rows}</tbody></table>
-    <div style="margin-top:14px"><button class="btn" onclick="saveCodes()">💾 Guardar cambios</button></div></div>`;
+  const incl=uni.filter(u=>u.cod_acceso);
+  const rest=uni.filter(u=>!u.cod_acceso);
+  const rows=incl.map(u=>`<tr><td>${esc(u.prop)}</td><td><b>${esc(u.nombre)}</b></td><td><input id="p_${u.id}" value="${esc(u.planta||'')}" placeholder="—" style="padding:7px;border:1px solid var(--gris2);border-radius:7px;width:90px"></td>
+    <td><input id="c_${u.id}" value="${esc(u.codigo||'')}" style="padding:7px;border:1px solid var(--gris2);border-radius:7px;width:110px;font-weight:700;color:var(--rojo)"></td>
+    <td><button class="cat-x" title="Quitar de códigos" onclick="codRemove('${u.kind}',${u.raw})">🗑</button></td></tr>`).join('')||'<tr><td colspan="5" style="color:var(--suave);padding:10px">Aún no has añadido propiedades. Selecciónalas abajo y pulsa “Agregar”.</td></tr>';
+  const addOpts=rest.map(u=>`<option value="${u.kind}|${u.raw}">${esc(u.prop)} · ${esc(u.nombre)}</option>`).join('');
+  const addBox = rest.length?`<div class="panel"><div style="font-weight:600;margin-bottom:8px">➕ Añadir propiedades a códigos de acceso</div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-start">
+      <select id="codAdd" multiple size="6" style="min-width:300px;max-width:100%;padding:6px;border:1px solid var(--gris2);border-radius:8px;font-size:13px;font-family:inherit">${addOpts}</select>
+      <button class="btn" onclick="codAddSel()">+ Agregar seleccionadas</button>
+    </div>
+    <small style="color:var(--suave)">Mantén Ctrl (Windows) o Cmd (Mac) para elegir varias a la vez.</small></div>`:'<div class="panel" style="color:var(--suave);font-size:13px">Todas las propiedades del catálogo ya están añadidas.</div>';
+  return `<div class="panel" style="background:var(--azul-claro);border:none;font-size:13.5px">🔑 Solo aparecen aquí las propiedades que añadas. Indica la <b>planta</b> (opcional) y el <b>código</b>. Cada cambio queda en <b>Auditoría</b> y se refleja en las plantillas.</div>
+    <div class="panel"><table><thead><tr><th>Propiedad</th><th>Nº unidad</th><th>Nº Planta</th><th>Código</th><th></th></tr></thead><tbody>${rows}</tbody></table>
+    <div style="margin-top:14px"><button class="btn" onclick="saveCodes()">💾 Guardar cambios</button></div></div>
+    ${addBox}`;
 }
+async function codSetAcceso(kind,raw,v){ const tbl=kind==='e'?'mant_edificios':'mant_unidades'; const{error}=await sb.from(tbl).update({cod_acceso:v}).eq('id',raw); if(error){alert(error.message);return;} show('mensajes'); }
+function codRemove(kind,raw){ codSetAcceso(kind,raw,false); }
+async function codAddSel(){ const sel=document.getElementById('codAdd'); if(!sel)return; const vals=[...sel.selectedOptions].map(o=>o.value); if(!vals.length){alert('Elige al menos una propiedad.');return;} for(const v of vals){ const i=v.indexOf('|'); const k=v.slice(0,i), raw=v.slice(i+1); const tbl=k==='e'?'mant_edificios':'mant_unidades'; const{error}=await sb.from(tbl).update({cod_acceso:true}).eq('id',raw); if(error){alert(error.message);return;} } toast('✓ '+vals.length+' añadida(s)'); show('mensajes'); }
 function verify2FA(){const v=(document.getElementById('twofa').value||'').trim();if(/^\d{6}$/.test(v)){twoFAok=true;show('mensajes');}else toast('Introduce 6 dígitos');}
 async function saveCodes(){
-  const uni=await loadUnidades();let n=0;
+  const uni=(await loadUnidades()).filter(u=>u.cod_acceso);let n=0;
   for(const u of uni){const pl=val('p_'+u.id),cod=val('c_'+u.id);
     if(pl!==(u.planta||'')||cod!==(u.codigo||'')){const tbl=u.kind==='e'?'mant_edificios':'mant_unidades';await sb.from(tbl).update({planta:pl,codigo:cod}).eq('id',u.raw);
       if(cod!==(u.codigo||''))auditLog(`Cambió el código de acceso de ${u.nombre} (${u.codigo}→${cod})`,'codigo');n++;}}
