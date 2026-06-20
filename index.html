@@ -3858,7 +3858,7 @@ async function tplSave(e){e.preventDefault();
   else if(prop){ unidades=entries.filter(u=>u.kind==='u').map(u=>u.id); }
   else { unidades=TPL_UNI.map(u=>u.id); }
   if(!unidades.length){alert('No hay propiedades en el catálogo. Crea edificios/unidades en Catálogos.');return false;}
-  const row={titulo:val('tT'),cat:document.getElementById('tC').value,cuerpo:document.getElementById('tB').value,unidades};
+  const row={titulo:val('tT'),cat:document.getElementById('tC').value,cuerpo:document.getElementById('tB').value,unidades:unidades.map(String)};
   if(!row.titulo||!row.cuerpo){ alert('Pon al menos título y contenido.'); return false; }
   try{
     let res;
