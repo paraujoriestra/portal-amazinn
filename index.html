@@ -1158,7 +1158,7 @@ const NAV=[
   {id:'limpTutoriales',ic:'🎥',t:'Tutoriales', lockRoles:['empleado','responsable']},
   {grp:'Mantenimiento'},
   {id:'incidencias',ic:'🛠️',t:'Incidencias'},
-  {id:'preventivo',ic:'🗓️',t:'Mantenimiento preventivo', depts:['Mantenimiento']},
+  {id:'preventivo',ic:'🗓️',t:'Mantenimiento preventivo', depts:['Mantenimiento'], seeRoles:['direccion']},
   {id:'cotiprov',ic:'📑',t:'Cotizaciones proveedores', roles:['responsable','direccion','admin']},
   {id:'videos',ic:'🎥',t:'Videos explicativos', lockRoles:['empleado','responsable']},
   {grp:'Atención al cliente', depts:['Atención al cliente'], seeRoles:['direccion']},
@@ -4905,7 +4905,7 @@ function incCan(){ return CAN_MANAGE.includes(PROFILE.role); }
 function incEsMant(){ return PROFILE.dept==='Mantenimiento' || incCan(); }
 // Quién puede CREAR/EDITAR/BORRAR mantenimientos preventivos:
 // admin/propietario, Director del área Operaciones, o Responsable del depto. Mantenimiento.
-function prevCanManage(){ if(isAdmin())return true; const role=PROFILE.role, area=(PROFILE.area||''), dept=(PROFILE.dept||''); if(role==='direccion'&&area==='Operaciones')return true; if(role==='responsable'&&dept==='Mantenimiento')return true; return false; }
+function prevCanManage(){ if(isAdmin())return true; const role=PROFILE.role, dept=(PROFILE.dept||''); if(role==='direccion')return true; if(role==='responsable'&&dept==='Mantenimiento')return true; return false; }
 // ¿La persona s pertenece al equipo t? (incluye supervisores con varios equipos: s.equipos = ['*'] o lista)
 function mantInTeam(s,t){ if(!t||t==='*')return true; const ex=Array.isArray(s.equipos)?s.equipos:[]; return s.team===t || ex.includes('*') || ex.includes(t); }
 function incMyTeam(){ return PROFILE.org_equipo||PROFILE.equipo||''; }
