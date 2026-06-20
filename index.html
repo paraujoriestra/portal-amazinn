@@ -3433,12 +3433,18 @@ function pageCatalogos(){
   const posList=CAT.posiciones.map(p=>`<div class="cat-row"><span>${esc(p)}</span><button class="cat-x" onclick="delPos('${p.replace(/'/g,"\\'")}')">🗑</button></div>`).join('')||'<div class="cat-empty">—</div>';
   const equipoList=CAT.equipos.map(e=>`<div class="cat-row"><span>${esc(e)}</span><button class="cat-x" onclick="delEquipo('${e.replace(/'/g,"\\'")}')">🗑</button></div>`).join('')||'<div class="cat-empty">Sin equipos todavía</div>';
   const ubicList=CAT.ubicaciones.map(u=>`<div class="cat-row"><span>${esc(u)}</span><button class="cat-x" onclick="delUbic('${u.replace(/'/g,"\\'")}')">🗑</button></div>`).join('')||'<div class="cat-empty">Sin ubicaciones todavía</div>';
-  const edBlocks=CAT.edificios.map(ed=>{
+  const edBlocks=CAT.edificios.map((ed,i)=>{
     const us=(CAT.unidades||[]).filter(u=>u.edificio===ed);
-    const chips=us.map(u=>`<span style="display:inline-flex;align-items:center;gap:5px;background:${u.tipo==='comun'?'#eef4fb':'var(--gris)'};border:1px solid ${u.tipo==='comun'?'#cfe0f2':'var(--gris2)'};${u.tipo==='comun'?'color:var(--azul);':''}border-radius:16px;padding:4px 6px 4px 11px;font-size:12.5px;margin:0 6px 6px 0">${esc(u.nombre)}<button onclick="delUni('${ed.replace(/'/g,"\\'")}','${(u.nombre||'').replace(/'/g,"\\'")}')" style="border:none;background:none;cursor:pointer;color:var(--suave);font-size:12px">✕</button></span>`).join('')||'<span style="color:var(--suave);font-size:12.5px">Sin unidades</span>';
+    const edJ=ed.replace(/'/g,"\\'");
+    const chips=us.map(u=>`<span style="display:inline-flex;align-items:center;gap:5px;background:${u.tipo==='comun'?'#eef4fb':'var(--gris)'};border:1px solid ${u.tipo==='comun'?'#cfe0f2':'var(--gris2)'};${u.tipo==='comun'?'color:var(--azul);':''}border-radius:16px;padding:4px 6px 4px 11px;font-size:12.5px;margin:0 6px 6px 0">${esc(u.nombre)}<button onclick="delUni('${edJ}','${(u.nombre||'').replace(/'/g,"\\'")}')" style="border:none;background:none;cursor:pointer;color:var(--suave);font-size:12px">✕</button></span>`).join('')||'<span style="color:var(--suave);font-size:12.5px">Sin unidades</span>';
     return `<div style="border:1px solid var(--gris2);border-radius:10px;padding:11px 13px;margin-bottom:10px">
-      <div style="display:flex;align-items:center;margin-bottom:8px"><b>🏢 ${esc(ed)}</b><small style="color:var(--suave);margin-left:8px">· ${us.length} unidad${us.length===1?'':'es'}</small><button class="cat-x" style="margin-left:auto" onclick="delEdif('${ed.replace(/'/g,"\\'")}')">🗑</button></div>
-      <div>${chips}</div></div>`;
+      <div style="display:flex;align-items:center;margin-bottom:8px"><b>🏢 ${esc(ed)}</b><small style="color:var(--suave);margin-left:8px">· ${us.length} unidad${us.length===1?'':'es'}</small><button class="cat-x" style="margin-left:auto" onclick="delEdif('${edJ}')">🗑</button></div>
+      <div>${chips}</div>
+      <div style="display:flex;gap:6px;margin-top:9px;flex-wrap:wrap">
+        <input id="addUni_${i}" placeholder="Ej: Nº 12, Ático, Rooftop…" onkeydown="if(event.key==='Enter')addUniTo('${edJ}',${i})" style="flex:1;min-width:150px;padding:7px 10px;border:1px solid var(--gris2);border-radius:8px;font-family:inherit;font-size:13px">
+        <select id="addUniTipo_${i}" style="padding:7px 9px;border:1px solid var(--gris2);border-radius:8px;font-size:13px;font-family:inherit"><option value="apartamento">Apartamento</option><option value="comun">Zona común</option></select>
+        <button class="btn ghost" style="padding:6px 12px;font-size:13px" onclick="addUniTo('${edJ}',${i})">+ Añadir unidad</button>
+      </div></div>`;
   }).join('')||'<div class="cat-empty">Sin edificios todavía. Crea el primero arriba.</div>';
   const S='<span style="color:#1f9d55;font-weight:700">✓</span>', N='<span style="color:var(--gris2)">—</span>';
   const rolesTabla=[
@@ -3506,6 +3512,7 @@ async function delUbic(n){ if(!confirm('¿Eliminar la ubicación "'+n+'"?'))retu
 async function addEdif(){ const n=(val('nEdif')||'').trim(); if(!n)return; if((CAT.edificios||[]).includes(n)){alert('Ya existe un edificio con ese nombre.');return;} const cnt=Math.max(0,parseInt(val('nEdifNum'),10)||0); const{error}=await sb.from('mant_edificios').insert({nombre:n,orden:(CAT.edificios||[]).length+1}); if(error){alert(error.message);return;} const units=[{edificio:n,nombre:'Zona Común',tipo:'comun',orden:0}]; for(let k=1;k<=cnt;k++) units.push({edificio:n,nombre:'Nº '+k,tipo:'apartamento',orden:k}); const r=await sb.from('mant_unidades').insert(units); if(r.error){alert('Edificio creado, pero error al crear unidades: '+r.error.message);} toast('✓ Edificio creado'); catReload(); }
 async function delEdif(n){ if(!confirm('¿Eliminar el edificio "'+n+'" y sus unidades?'))return; await sb.from('mant_unidades').delete().eq('edificio',n); const{error}=await sb.from('mant_edificios').delete().eq('nombre',n); if(error){alert(error.message);return;} const{data:chk}=await sb.from('mant_edificios').select('id').eq('nombre',n); if(chk&&chk.length){alert('No se pudo borrar (permisos). Ejecuta el SQL más reciente y entra como Propietario.');} catReload(); }
 async function addUni(){ const e=(val('nUniEdif')||'').trim(); const n=(val('nUniNom')||'').trim(); const t=document.getElementById('nUniTipo').value; if(!e){alert('Crea primero un edificio.');return;} if(!n)return; const{error}=await sb.from('mant_unidades').insert({edificio:e,nombre:n,tipo:t,orden:(CAT.unidades||[]).filter(u=>u.edificio===e).length+1}); if(error){alert(error.message);return;} toast('✓ Unidad añadida'); catReload(); }
+async function addUniTo(ed,i){ const el=document.getElementById('addUni_'+i); const n=(el?el.value:'').trim(); if(!n)return; const ts=document.getElementById('addUniTipo_'+i); const t=ts?ts.value:'apartamento'; const{error}=await sb.from('mant_unidades').insert({edificio:ed,nombre:n,tipo:t,orden:(CAT.unidades||[]).filter(u=>u.edificio===ed).length+1}); if(error){alert(error.message);return;} toast('✓ Unidad añadida'); catReload(); }
 async function delUni(e,n){ if(!confirm('¿Eliminar la unidad "'+n+'"?'))return; const{error}=await sb.from('mant_unidades').delete().eq('edificio',e).eq('nombre',n); if(error){alert(error.message);return;} const{data:chk}=await sb.from('mant_unidades').select('id').eq('edificio',e).eq('nombre',n); if(chk&&chk.length){alert('No se pudo borrar (permisos). Ejecuta el SQL más reciente y entra como Propietario.');} catReload(); }
 
 /* ---------------- REGISTROS PENDIENTES (aprobación) ---------------- */
@@ -3740,7 +3747,7 @@ let msgTab='ver', msgUnit=null, twoFAok=false, tplEditId=null, tplFormOpen=false
 function tplCancel(){ tplFormOpen=false; tplEditId=null; tplDraft={}; show('mensajes'); }
 function tplFormProp(){ const p=(document.getElementById('tProp')||{}).value||''; const dl=document.getElementById('tUniDL'); const inp=document.getElementById('tUni'); if(!dl||!inp)return; const entries=TPL_UNI.filter(u=>u.prop===p); const whole=p&&entries.length===1&&entries[0].kind==='e'; inp.value=''; if(!p||whole){ dl.innerHTML=''; inp.disabled=true; inp.placeholder=whole?'Propiedad completa':'Todas las unidades'; } else { inp.disabled=false; inp.placeholder='Todas / escribe nº…'; dl.innerHTML=entries.filter(u=>u.kind==='u').map(u=>`<option value="${esc(u.nombre)}"></option>`).join(''); } }
 function canMsg(){return PROFILE.dept==='Atención al cliente'||isAdmin();}
-function canMsgEdit(){ if(isAdmin())return true; if(PROFILE.role==='direccion')return true; const ac=(PROFILE.dept==='Atención al cliente')||(PROFILE.area==='Atención al cliente'); return ac&&PROFILE.role==='responsable'; }
+function canMsgEdit(){ if(isAdmin())return true; if(PROFILE.role!=='direccion')return false; const a=(PROFILE.area||''); return a==='Comercial'||a==='Atención al cliente'; }
 function fillTpl(c,u){return (c||'')
   .split('{propiedad}').join(u.prop||'')
   .split('{NºUnidad}').join(u.nombre||'').split('{NoUnidad}').join(u.nombre||'')
