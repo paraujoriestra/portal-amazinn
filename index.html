@@ -5061,10 +5061,10 @@ function incExportCSV(){
 function incPlantilla(){
   if(typeof XLSX==='undefined'){ alert('No se pudo cargar el lector de Excel. Revisa tu conexión.'); return; }
   const cols=['Edificio','Unidad','Descripción','Urgencia','Categoría','Estado','Fecha creación','Fecha resolución','Resuelto por','Coste','Afecta huésped','Comentario resolución'];
-  const ej1=['Casa Diez','Nº 1','El aire acondicionado no enfría','alta','climatizacion','pendiente','2026-05-12','','','','sí',''];
-  const ej2=['Hotel Mío','Nº 24','Repintar marca en pared','baja','pintura','terminada','2026-04-30','2026-05-03','Jorge Mela','45','no','Repintado y secado; sin novedad'];
+  const ej1=['Casa Diez','1','El aire acondicionado no enfría','alta','climatizacion','pendiente','2026-05-12','','','','sí',''];
+  const ej2=['Hotel Mío','24','Repintar marca en pared','baja','pintura','terminada','2026-04-30','2026-05-03','Jorge Mela, Pedro Quintero','45','no','Repintado y secado; sin novedad'];
   const ej3=['Altavida','Zona Común','Bomba de piscina con ruido','media','climatizacion','en curso','2026-05-20','','','','no',''];
-  const guia=['Descripción = el problema reportado · Comentario resolución = lo que dejó escrito mantenimiento al terminarla · ESTADOS: pendiente / en curso / terminada (=resuelta, va al histórico) / cancelada','','','','','','','','','','',''];
+  const guia=['Descripción = el problema · Comentario resolución = lo que dejó escrito mantenimiento · Resuelto por = uno o VARIOS nombres separados por coma · ESTADOS: pendiente / en curso / terminada (=resuelta) / cancelada','','','','','','','','','','',''];
   const ws=XLSX.utils.aoa_to_sheet([cols,ej1,ej2,ej3,[],guia]); const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'Incidencias'); XLSX.writeFile(wb,'plantilla_incidencias.xlsx');
 }
 function incMapEstado(s){ s=(s||'').toLowerCase().trim();
@@ -5099,15 +5099,17 @@ async function incImportExcel(input){
       const fechaRes=(()=>{ const s=(''+(fResRaw||'')).trim(); if(!(fResRaw instanceof Date)&&!s) return null; return incParseFecha(fResRaw); })();
       const afecta=/^(s|y|1|true|sí|si)/i.test(rowGet(map,'afecta huesped','afecta huésped','afecta','huesped','huésped'));
       const costeRaw=rowGet(map,'coste','costo','importe','precio','gasto');
+      const realStr=rowGet(map,'resuelto por','resuelto','realizado por','realizadores','tecnico','técnico','trabajadores');
+      const realizadores=realStr?(''+realStr).split(/[,;\/]+/).map(s=>s.trim()).filter(Boolean):[];
       const row={ via:'importado', urgencia:incMapUrg(rowGet(map,'urgencia','prioridad','urgency')),
         categoria:(rowGet(map,'categoria','categoría','tipo','tipo de averia')||'').toLowerCase()||null,
         edificio:edif||'', unidad:uni||'', descripcion:desc||'(sin descripción)', estado:est,
-        asignado_a:null, asignado_a_nombre:null, asignado_equipo:'*', tomada_por:null, tomada_por_nombre:null,
+        asignado_a:null, asignado_a_nombre:null, asignado_equipo:'*', tomada_por:null, tomada_por_nombre:null, realizadores:realizadores,
         afecta_huesped:afecta, coste:(costeRaw===''?null:(parseFloat((''+costeRaw).replace(',','.'))||null)),
         nota_solucion:(rowGet(map,'comentario resolucion','comentario resolución','comentario','nota solucion','nota solución','solucion','solución','observaciones','nota','notas')||null),
         creado_por:ME.id, creado_por_nombre:PROFILE.nombre, historial:[{act:'Importada desde Excel',who:PROFILE.nombre,t:new Date().toISOString()}],
         created_at:fecha, updated_at:new Date().toISOString() };
-      if(est==='terminada'){ const ra=fechaRes||fecha; row.resuelta_at=ra; row.updated_at=ra; row.resuelto_por_nombre=rowGet(map,'resuelto por','resuelto','tecnico','técnico','realizado por')||PROFILE.nombre; }
+      if(est==='terminada'){ const ra=fechaRes||fecha; row.resuelta_at=ra; row.updated_at=ra; row.resuelto_por_nombre=(realizadores.length?realizadores.join(', '):PROFILE.nombre); }
       return row;
     }).filter(Boolean);
     if(!mapped.length){ alert('No se reconocieron las columnas. Descarga la plantilla y usa esos encabezados (Edificio, Unidad, Descripción, Urgencia, Categoría, Estado, Fecha…).'); return; }
@@ -5242,8 +5244,9 @@ function incFormHTML(){
     <select id="iCat"><option value="">— Sin categoría —</option>${INC_CAT.map(([v,l])=>`<option value="${v}">${l}</option>`).join('')}</select>
     <div class="row">
       <div><label>Edificio</label><select id="iEdif" onchange="incFormEdif()">${edOpts}</select></div>
-      <div><label>Unidad / zona</label><select id="iUni"><option value="">— Selecciona edificio —</option></select></div>
+      <div><label>Unidad(es) / zona <small style="color:var(--suave);font-weight:400">(elige varias con Ctrl/Cmd)</small></label><select id="iUni" multiple size="6" style="width:100%"><option value="">— Selecciona edificio —</option></select></div>
     </div>
+    <label style="font-weight:400;display:flex;gap:6px;align-items:center;cursor:pointer;margin:2px 0 6px"><input type="checkbox" id="iUnaSola"> 🔗 Tratar como UNA sola tarea (no crear una por unidad)</label>
     <label>¿Cuál es la incidencia?</label>
     <textarea id="iDesc" rows="3" required placeholder="Describe el problema con el máximo detalle"></textarea>
     <label>Fotos / vídeo (opcional)</label>
@@ -5256,7 +5259,7 @@ function incFormHTML(){
     <div class="inc-final" style="margin-top:12px"><button class="btn-ok" type="submit">Crear incidencia</button><button class="btn-sm ghost" type="button" onclick="incNuevaCancel()">Cancelar</button></div>
   </form></div>`;
 }
-function incFormEdif(){ const ed=(document.getElementById('iEdif')||{}).value||''; const uni=document.getElementById('iUni'); if(!uni)return; const list=MANT_UNI.filter(u=>u.edificio===ed); uni.innerHTML=`<option value="">— Selecciona —</option>`+list.map(u=>`<option>${esc(u.nombre)}${u.tipo==='comun'?' (zona común)':''}</option>`).join(''); }
+function incFormEdif(){ const ed=(document.getElementById('iEdif')||{}).value||''; const uni=document.getElementById('iUni'); if(!uni)return; const list=MANT_UNI.filter(u=>u.edificio===ed); uni.innerHTML=list.length?list.map(u=>`<option value="${esc(u.nombre)}">${esc(u.nombre)}${u.tipo==='comun'?' (zona común)':''}</option>`).join(''):'<option value="">(este edificio no tiene unidades)</option>'; }
 function incFormEquipo(){ const t=(document.getElementById('iEquipo')||{}).value||'*'; const per=document.getElementById('iPersona'); if(!per)return; const list=MANT_STAFF.filter(s=> mantInTeam(s,t)); per.innerHTML=`<option value="">Todo el equipo (que alguien la tome)</option>`+list.map(s=>`<option value="${s.id}">${esc(s.nombre)}</option>`).join(''); }
 async function incCreate(e){
   e.preventDefault();
@@ -5266,24 +5269,32 @@ async function incCreate(e){
   const persona=personaId?MANT_STAFF.find(s=>String(s.id)===String(personaId)):null;
   const btn=e.target.querySelector('button[type=submit]'); if(btn){btn.disabled=true;btn.textContent='⏳ Guardando…';}
   const afecta=!!(document.getElementById('iAfecta')||{}).checked, fuera=!!(document.getElementById('iFuera')||{}).checked;
-  const row={ via:g('iVia'), urgencia:g('iUrg'), categoria:g('iCat')||null, edificio:g('iEdif')||null, unidad:g('iUni')||null, descripcion:desc,
+  const uniSel=document.getElementById('iUni');
+  let unis = uniSel ? [...uniSel.selectedOptions].map(o=>o.value).filter(Boolean) : [];
+  const unaSola = !!(document.getElementById('iUnaSola')||{}).checked;
+  const base={ via:g('iVia'), urgencia:g('iUrg'), categoria:g('iCat')||null, edificio:g('iEdif')||null, descripcion:desc,
     afecta_huesped:afecta, fuera_servicio:fuera,
     asignado_equipo:g('iEquipo')||'*', asignado_a:personaId||null, asignado_a_nombre:persona?persona.nombre:null,
-    estado: personaId?'asignada':'pendiente', creado_por:ME.id, creado_por_nombre:PROFILE.nombre,
-    historial:[{t:new Date().toISOString(),who:PROFILE.nombre,act:'Creada'}] };
-  const ins=await sb.from('mant_incidencias').insert(row).select('id').single();
+    estado: personaId?'asignada':'pendiente', creado_por:ME.id, creado_por_nombre:PROFILE.nombre };
+  const mkHist=()=>[{t:new Date().toISOString(),who:PROFILE.nombre,act:'Creada'}];
+  // Decidir: una por unidad, o una sola para todas
+  let rows;
+  if(unis.length>1 && !unaSola){ rows=unis.map(u=>({...base,unidad:u,historial:mkHist()})); }
+  else { rows=[{...base, unidad:(unaSola? unis.join(', ') : (unis[0]||null)), historial:mkHist()}]; }
+  const ins=await sb.from('mant_incidencias').insert(rows).select('id');
   if(ins.error){ alert('No se pudo crear: '+ins.error.message); if(btn){btn.disabled=false;btn.textContent='Crear incidencia';} return false; }
-  const id=ins.data.id;
-  await incUpload(id,(document.getElementById('iFotos')||{}).files||[],'reporte');
-  const loc=(row.edificio||'—')+(row.unidad?' · '+row.unidad:'');
-  const urgLbl=INC_URG[row.urgencia]?INC_URG[row.urgencia][0]:row.urgencia;
+  const ids=(ins.data||[]).map(x=>x.id);
+  for(const id of ids){ await incUpload(id,(document.getElementById('iFotos')||{}).files||[],'reporte'); }
+  const uniTxt = unaSola? unis.join(', ') : (unis.length>1? unis.join(', ') : (unis[0]||''));
+  const loc=(base.edificio||'—')+(uniTxt?' · '+uniTxt:'');
+  const urgLbl=INC_URG[base.urgencia]?INC_URG[base.urgencia][0]:base.urgencia;
   if(personaId && String(personaId)!==String(ME.id)){
-    try{ await sb.from('mensajes').insert({de_id:ME.id,para_id:personaId,de_nombre:PROFILE.nombre,para_nombre:persona?persona.nombre:'',texto:`🛠️ Se te ha asignado una incidencia (${urgLbl}) en ${loc}: ${desc.slice(0,120)}`,leido:false}); }catch(e){}
-  } else if(!personaId && row.urgencia==='alta'){
+    try{ await sb.from('mensajes').insert({de_id:ME.id,para_id:personaId,de_nombre:PROFILE.nombre,para_nombre:persona?persona.nombre:'',texto:`🛠️ Se te ha asignado ${ids.length>1?ids.length+' incidencias':'una incidencia'} (${urgLbl}) en ${loc}: ${desc.slice(0,120)}`,leido:false}); }catch(e){}
+  } else if(!personaId && base.urgencia==='alta'){
     await notifyTeam('Mantenimiento','🔴',`URGENTE sin asignar en ${loc} — ¡que alguien la tome!`,'incidencias');
   }
-  if(afecta||fuera){ try{ await notifyTeam('Atención al cliente','🛎️',`Incidencia que afecta a la unidad ${loc}${fuera?' (FUERA DE SERVICIO)':''}`,'incidencias'); }catch(e){} }
-  incFormOpen=false; incNew=false; toast('✓ Incidencia creada'); show('incidencias'); return false;
+  if(afecta||fuera){ try{ await notifyTeam('Atención al cliente','🛎️',`Incidencia que afecta a ${loc}${fuera?' (FUERA DE SERVICIO)':''}`,'incidencias'); }catch(e){} }
+  incFormOpen=false; incNew=false; toast('✓ '+(ids.length>1?ids.length+' incidencias creadas':'Incidencia creada')); show('incidencias'); return false;
 }
 async function incUpload(incId, files, tipo){
   for(const f of (files||[])){
@@ -5309,8 +5320,11 @@ async function incReasignarme(id){
 function incQuienOpts(i){
   const list=MANT_STAFF.slice();
   if(!list.find(s=>String(s.id)===String(ME.id))) list.unshift({id:ME.id,nombre:PROFILE.nombre+' (yo)'});
-  const sel=i.tomada_por||ME.id;
-  return list.map(s=>`<option value="${s.id}" ${String(sel)===String(s.id)?'selected':''}>${esc(s.nombre)}</option>`).join('');
+  const selNames=(Array.isArray(i.realizadores)&&i.realizadores.length)?i.realizadores:(i.resuelto_por_nombre?[i.resuelto_por_nombre]:[]);
+  const selIds=new Set();
+  list.forEach(s=>{ const nm=(s.nombre||'').replace(' (yo)',''); if(selNames.includes(nm)||selNames.includes(s.nombre)) selIds.add(String(s.id)); });
+  if(!selIds.size) selIds.add(String(i.tomada_por||ME.id));
+  return list.map(s=>`<option value="${s.id}" ${selIds.has(String(s.id))?'selected':''}>${esc(s.nombre)}</option>`).join('');
 }
 async function incTimer(id,action){
   const i=INC.find(x=>String(x.id)===String(id)); if(!i)return;
@@ -5329,10 +5343,12 @@ async function incFinalizar(id,estadoFinal){
   const i=INC.find(x=>String(x.id)===String(id)); if(!i)return;
   const add=i.timer_ini?Math.floor((Date.now()-new Date(i.timer_ini).getTime())/1000):0;
   const nota=(document.getElementById('incNota')||{}).value||i.nota_solucion||null;
-  const selQ=(document.getElementById('incQuien')||{}).value||ME.id;
-  const quien=(String(selQ)===String(ME.id))?PROFILE.nombre:(((MANT_STAFF.find(s=>String(s.id)===String(selQ))||{}).nombre)||PROFILE.nombre);
+  const selEl=document.getElementById('incQuien');
+  let ids=selEl?[...selEl.selectedOptions].map(o=>o.value):[]; if(!ids.length) ids=[String(i.tomada_por||ME.id)];
+  const nameOf=id=>String(id)===String(ME.id)?PROFILE.nombre:(((MANT_STAFF.find(s=>String(s.id)===String(id))||{}).nombre)||'');
+  const names=ids.map(nameOf).filter(Boolean); const quien=names.join(', ')||PROFILE.nombre;
   const costeV=(document.getElementById('incCoste')||{}).value; const provV=(document.getElementById('incProv')||{}).value;
-  const upd={tiempo_seg:(i.tiempo_seg||0)+add,timer_ini:null,nota_solucion:nota,tomada_por:selQ,tomada_por_nombre:quien,coste:(costeV===''||costeV==null)?null:Number(costeV),proveedor:(provV||'').trim()||null,updated_at:new Date().toISOString()};
+  const upd={tiempo_seg:(i.tiempo_seg||0)+add,timer_ini:null,nota_solucion:nota,realizadores:names,tomada_por:ids[0],tomada_por_nombre:names[0]||PROFILE.nombre,coste:(costeV===''||costeV==null)?null:Number(costeV),proveedor:(provV||'').trim()||null,updated_at:new Date().toISOString()};
   if(estadoFinal==='terminada'){ upd.estado='terminada'; upd.resuelto_por_nombre=quien; upd.resuelta_at=new Date().toISOString(); upd.historial=incLog(i,'Terminada · realizada por '+quien); }
   else { upd.estado='a_medias'; upd.historial=incLog(i,'Dejada a medias'); }
   await sb.from('mant_incidencias').update(upd).eq('id',id);
@@ -5446,7 +5462,7 @@ function renderIncDetail(id){
        <label style="margin-top:10px;display:block">Nota de la solución (opcional)</label><textarea id="incNota" class="inc-note" placeholder="Qué se hizo para resolverlo…">${esc(i.nota_solucion||'')}</textarea>
        <div class="row"><div><label style="margin-top:10px;display:block">Coste de la reparación (opcional)</label><input id="incCoste" type="number" min="0" step="0.01" placeholder="Ej: 35" value="${i.coste!=null?i.coste:''}"></div>
        <div><label style="margin-top:10px;display:block">Proveedor (si fue externo)</label><input id="incProv" placeholder="Empresa / técnico externo" value="${esc(i.proveedor||'')}"></div></div>
-       <label style="margin-top:10px;display:block">¿Quién ha realizado la incidencia?</label><select id="incQuien">${incQuienOpts(i)}</select>
+       <label style="margin-top:10px;display:block">¿Quién(es) la realizaron? <small style="color:var(--suave);font-weight:400">(mantén Ctrl/Cmd para elegir varios)</small></label><select id="incQuien" multiple size="5" style="min-width:240px;width:100%">${incQuienOpts(i)}</select>
        <div class="inc-final">
          <button class="btn-ok" onclick="incFinalizar(${i.id},'terminada')">✅ Marcar terminada</button>
          <button class="btn-sm" onclick="incFinalizar(${i.id},'a_medias')">⏸️ Dejar a medias</button>
