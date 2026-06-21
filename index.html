@@ -5255,7 +5255,7 @@ function incFormHTML(){
         <select id="iUniPick" onchange="incUniAdd(this.value);this.value=''" style="width:100%"><option value="">— Selecciona edificio —</option></select>
         <div id="iUniBox" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px"></div></div>
     </div>
-    <label style="font-weight:400;display:flex;gap:6px;align-items:center;cursor:pointer;margin:2px 0 6px"><input type="checkbox" id="iUnaSola"> 🔗 Tratar como UNA sola tarea (no crear una por unidad)</label>
+    <div id="iUnaSolaWrap" style="display:none"><label style="font-weight:400;display:flex;gap:6px;align-items:center;cursor:pointer;margin:2px 0 6px"><input type="checkbox" id="iUnaSola"> 🔗 Tratar como UNA sola tarea (no crear una por unidad)</label></div>
     <label>¿Cuál es la incidencia?</label>
     <textarea id="iDesc" rows="3" required placeholder="Describe el problema con el máximo detalle"></textarea>
     <label>Fotos / vídeo (opcional)</label>
@@ -5273,7 +5273,8 @@ function incFormEdif(){ const ed=(document.getElementById('iEdif')||{}).value||'
 function incUniRender(){ const box=document.getElementById('iUniBox'); const pick=document.getElementById('iUniPick'); if(!box||!pick)return;
   box.innerHTML = incUnisSel.length? incUnisSel.map(n=>`<span style="display:inline-flex;align-items:center;gap:6px;background:var(--gris);border:1px solid var(--gris2);border-radius:16px;padding:4px 6px 4px 12px;font-size:13px">${esc(n)}<b style="cursor:pointer;color:var(--suave)" onclick="incUniDel('${(''+n).replace(/'/g,"\\'")}')">✕</b></span>`).join('') : '<span style="color:var(--suave);font-size:12.5px">Ninguna unidad añadida</span>';
   const rem=incUniAvail.filter(n=>!incUnisSel.includes(n));
-  pick.innerHTML='<option value="">➕ Añadir unidad…</option>'+(rem.length?rem.map(n=>`<option value="${esc(n)}">${esc(n)}</option>`).join(''):'')+(incUniAvail.length?'':'');
+  pick.innerHTML='<option value="">➕ Añadir unidad…</option>'+rem.map(n=>`<option value="${esc(n)}">${esc(n)}</option>`).join('');
+  const w=document.getElementById('iUnaSolaWrap'); if(w){ const show=incUnisSel.length>1; w.style.display=show?'block':'none'; if(!show){ const c=document.getElementById('iUnaSola'); if(c) c.checked=false; } }
 }
 function incUniAdd(n){ if(!n)return; if(!incUnisSel.includes(n)) incUnisSel.push(n); incUniRender(); }
 function incUniDel(n){ incUnisSel=incUnisSel.filter(x=>x!==n); incUniRender(); }
