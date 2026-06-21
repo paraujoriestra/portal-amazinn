@@ -944,9 +944,9 @@ const LOGO="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAWgAAAFCCAYAAADc0keFAA
 
 let DEPTS = ["Dirección","Recursos Humanos","Atención al cliente","Operaciones","Limpieza","Mantenimiento","Almacén","Recepción nocturna","Marketing"];
 // Estructura: Áreas › Departamentos › Posiciones › Equipos
-let CAT = { areas:[], deptos:[], posiciones:[], equipos:[], ubicaciones:[], edificios:[], unidades:[] };
+let CAT = { areas:[], deptos:[], posiciones:[], equipos:[], ubicaciones:[], edificios:[], unidades:[], categorias:[] };
 async function loadCatalogos(){
-  const [a,d,p,e,u,ed,un] = await Promise.all([
+  const [a,d,p,e,u,ed,un,ct] = await Promise.all([
     sb.from('areas').select('nombre').order('nombre'),
     sb.from('departamentos').select('nombre,area').order('nombre'),
     sb.from('posiciones').select('nombre').order('id'),
@@ -954,6 +954,7 @@ async function loadCatalogos(){
     sb.from('ubicaciones').select('nombre').order('nombre'),
     sb.from('mant_edificios').select('nombre').order('nombre'),
     sb.from('mant_unidades').select('edificio,nombre,tipo').order('orden').order('nombre'),
+    sb.from('mant_categorias').select('nombre,slug,orden').order('orden').order('nombre'),
   ]);
   CAT.areas      = (a.data||[]).map(x=>x.nombre);
   CAT.deptos     = d.data||[];
@@ -962,6 +963,7 @@ async function loadCatalogos(){
   CAT.ubicaciones= (u.data||[]).map(x=>x.nombre);
   CAT.edificios  = (ed.data||[]).map(x=>x.nombre);
   CAT.unidades   = un.data||[];
+  if(ct && !ct.error && (ct.data||[]).length){ CAT.categorias=ct.data; INC_CAT=ct.data.map(r=>[r.slug||r.nombre, r.nombre]); }
   if(CAT.deptos.length) DEPTS = CAT.deptos.map(x=>x.nombre);
 }
 function deptArea(nombre){ const d=CAT.deptos.find(x=>x.nombre===nombre); return d?d.area:''; }
@@ -3433,6 +3435,7 @@ function pageCatalogos(){
   const posList=CAT.posiciones.map(p=>`<div class="cat-row"><span>${esc(p)}</span><button class="cat-x" onclick="delPos('${p.replace(/'/g,"\\'")}')">🗑</button></div>`).join('')||'<div class="cat-empty">—</div>';
   const equipoList=CAT.equipos.map(e=>`<div class="cat-row"><span>${esc(e)}</span><button class="cat-x" onclick="delEquipo('${e.replace(/'/g,"\\'")}')">🗑</button></div>`).join('')||'<div class="cat-empty">Sin equipos todavía</div>';
   const ubicList=CAT.ubicaciones.map(u=>`<div class="cat-row"><span>${esc(u)}</span><button class="cat-x" onclick="delUbic('${u.replace(/'/g,"\\'")}')">🗑</button></div>`).join('')||'<div class="cat-empty">Sin ubicaciones todavía</div>';
+  const catCatList=(CAT.categorias||[]).map(c=>`<div class="cat-row"><span>${esc(c.nombre)}</span><button class="cat-x" onclick="delCat('${(c.slug||c.nombre).replace(/'/g,"\\'")}')">🗑</button></div>`).join('')||'<div class="cat-empty">Sin categorías (se usan las por defecto)</div>';
   const edBlocks=CAT.edificios.map((ed,i)=>{
     const us=(CAT.unidades||[]).filter(u=>u.edificio===ed);
     const edJ=ed.replace(/'/g,"\\'");
@@ -3473,6 +3476,10 @@ function pageCatalogos(){
 
       <div class="panel"><h2>📍 Ubicaciones</h2><div class="cat-list">${ubicList}</div>
         <div class="cat-add"><input id="nUbic" placeholder="Nueva ubicación (ej: Recepción central)"><button class="btn" onclick="addUbic()">+</button></div></div>
+
+      <div class="panel"><h2>🛠️ Categorías de incidencias/preventivo</h2><div class="cat-list">${catCatList}</div>
+        <div class="cat-add"><input id="nCat" placeholder="Nueva categoría (ej: 🪵 Carpintería)"><button class="btn" onclick="addCat()">+</button></div>
+        <div style="font-size:11.5px;color:var(--suave);margin-top:6px">Puedes incluir un emoji al principio. Se usan en Incidencias y Mantenimiento preventivo.</div></div>
     </div>
     <div class="panel" style="margin-top:16px"><h2>🏢 Edificios y unidades <small style="color:var(--suave);font-weight:400">· Mantenimiento</small></h2>
       <div class="cat-add" style="margin-bottom:6px">
@@ -3509,6 +3516,9 @@ async function addEquipo(){ const n=(val('nEquipo')||'').trim(); if(!n)return; c
 async function delEquipo(n){ if(!confirm('¿Eliminar el equipo "'+n+'"?'))return; const{error}=await sb.from('equipos').delete().eq('nombre',n); if(error){alert(error.message);return;} catReload(); }
 async function addUbic(){ const n=(val('nUbic')||'').trim(); if(!n)return; const{error}=await sb.from('ubicaciones').insert({nombre:n}); if(error){alert(error.message);return;} toast('✓ Añadida'); catReload(); }
 async function delUbic(n){ if(!confirm('¿Eliminar la ubicación "'+n+'"?'))return; const{error}=await sb.from('ubicaciones').delete().eq('nombre',n); if(error){alert(error.message);return;} catReload(); }
+function catSlug(s){ return (''+(s||'')).normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,'').slice(0,40)||('cat'+Date.now()); }
+async function addCat(){ const n=(val('nCat')||'').trim(); if(!n)return; const slug=catSlug(n); if((CAT.categorias||[]).some(c=>(c.slug||'')===slug)){alert('Ya existe una categoría parecida.');return;} const orden=(CAT.categorias||[]).length+1; const{error}=await sb.from('mant_categorias').insert({nombre:n,slug,orden}); if(error){alert(error.message);return;} toast('✓ Categoría añadida'); catReload(); }
+async function delCat(slug){ if(!confirm('¿Eliminar esta categoría? Las incidencias que ya la usaban la conservarán como texto.'))return; const{error}=await sb.from('mant_categorias').delete().eq('slug',slug); if(error){alert(error.message);return;} catReload(); }
 async function addEdif(){ const n=(val('nEdif')||'').trim(); if(!n)return; if((CAT.edificios||[]).includes(n)){alert('Ya existe un edificio con ese nombre.');return;} const cnt=Math.max(0,parseInt(val('nEdifNum'),10)||0); const{error}=await sb.from('mant_edificios').insert({nombre:n,orden:(CAT.edificios||[]).length+1}); if(error){alert(error.message);return;} const units=[{edificio:n,nombre:'Zona Común',tipo:'comun',orden:0}]; for(let k=1;k<=cnt;k++) units.push({edificio:n,nombre:''+k,tipo:'apartamento',orden:k}); const r=await sb.from('mant_unidades').insert(units); if(r.error){alert('Edificio creado, pero error al crear unidades: '+r.error.message);} toast('✓ Edificio creado'); catReload(); }
 async function delEdif(n){ if(!confirm('¿Eliminar el edificio "'+n+'" y sus unidades?'))return; await sb.from('mant_unidades').delete().eq('edificio',n); const{error}=await sb.from('mant_edificios').delete().eq('nombre',n); if(error){alert(error.message);return;} const{data:chk}=await sb.from('mant_edificios').select('id').eq('nombre',n); if(chk&&chk.length){alert('No se pudo borrar (permisos). Ejecuta el SQL más reciente y entra como Propietario.');} catReload(); }
 async function addUni(){ const e=(val('nUniEdif')||'').trim(); const n=(val('nUniNom')||'').trim(); const t=document.getElementById('nUniTipo').value; if(!e){alert('Crea primero un edificio.');return;} if(!n)return; const{error}=await sb.from('mant_unidades').insert({edificio:e,nombre:n,tipo:t,orden:(CAT.unidades||[]).filter(u=>u.edificio===e).length+1}); if(error){alert(error.message);return;} toast('✓ Unidad añadida'); catReload(); }
@@ -4917,7 +4927,7 @@ let prevFormOpen=false, prevEditId=null, prevSel=null, prevTab='lista', prevCalR
 const INC_URG={alta:['Alta','b-red','🔴'],media:['Media','b-amber','🟠'],baja:['Baja','b-grey','🟢']};
 const INC_EST={pendiente:['Pendiente','b-grey'],asignada:['Asignada','b-blue'],en_curso:['En curso','b-amber'],pausada:['Pausada','b-amber'],a_medias:['A medias','b-amber'],terminada:['Terminada','b-green'],cancelada:['Cancelada','b-grey']};
 const INC_VIA={cliente_ota:'🌐 Cliente (OTA)',limpieza:'🧹 Limpieza',personal:'👤 Personal interno'};
-const INC_CAT=[['fontaneria','🚰 Fontanería'],['electricidad','💡 Electricidad'],['climatizacion','❄️ Climatización'],['electrodomesticos','🔌 Electrodomésticos'],['mobiliario','🛋️ Mobiliario'],['cerrajeria','🔑 Cerrajería'],['pintura','🎨 Pintura'],['otros','🔧 Otros']];
+let INC_CAT=[['fontaneria','🚰 Fontanería'],['electricidad','💡 Electricidad'],['climatizacion','❄️ Climatización'],['electrodomesticos','🔌 Electrodomésticos'],['mobiliario','🛋️ Mobiliario'],['cerrajeria','🔑 Cerrajería'],['pintura','🎨 Pintura'],['otros','🔧 Otros']];
 function incCatLabel(c){ const f=INC_CAT.find(x=>x[0]===c); return f?f[1]:(c||'Sin categoría'); }
 const SLA_H={alta:24,media:72,baja:168};
 function incVencida(i){ if(['terminada','cancelada'].includes(i.estado))return false; const lim=SLA_H[i.urgencia]||72; return (Date.now()-new Date(i.created_at).getTime())/3600000 > lim; }
