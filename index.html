@@ -5105,7 +5105,7 @@ async function incImportExcel(input){
         asignado_a:null, asignado_a_nombre:null, asignado_equipo:'*', tomada_por:null, tomada_por_nombre:null,
         afecta_huesped:afecta, coste:(costeRaw===''?null:(parseFloat((''+costeRaw).replace(',','.'))||null)),
         nota_solucion:(rowGet(map,'comentario resolucion','comentario resolución','comentario','nota solucion','nota solución','solucion','solución','observaciones','nota','notas')||null),
-        creado_por:ME.id, creado_por_nombre:PROFILE.nombre, historial:'Importado desde Excel el '+new Date().toLocaleDateString('es-ES'),
+        creado_por:ME.id, creado_por_nombre:PROFILE.nombre, historial:[{act:'Importada desde Excel',who:PROFILE.nombre,t:new Date().toISOString()}],
         created_at:fecha, updated_at:new Date().toISOString() };
       if(est==='terminada'){ const ra=fechaRes||fecha; row.resuelta_at=ra; row.updated_at=ra; row.resuelto_por_nombre=rowGet(map,'resuelto por','resuelto','tecnico','técnico','realizado por')||PROFILE.nombre; }
       return row;
@@ -5453,7 +5453,7 @@ function renderIncDetail(id){
          <button class="btn-sm x" onclick="incCancelar(${i.id})">✖️ Cancelar (vuelve a pendiente)</button>
        </div>
      </div>`:'')
-  + ( (i.historial&&i.historial.length)? `<div class="panel"><h3 class="inc-h3">🕒 Historial de actividad</h3><ul class="inc-timeline">${i.historial.slice().reverse().map(h=>`<li><b>${esc(h.act||'')}</b>${h.who?' · '+esc(h.who):''}<br><small>${h.t?new Date(h.t).toLocaleString('es-ES'):''}</small></li>`).join('')}</ul></div>` : '');
+  + ( (Array.isArray(i.historial)&&i.historial.length)? `<div class="panel"><h3 class="inc-h3">🕒 Historial de actividad</h3><ul class="inc-timeline">${i.historial.slice().reverse().map(h=>`<li><b>${esc(h.act||'')}</b>${h.who?' · '+esc(h.who):''}<br><small>${h.t?new Date(h.t).toLocaleString('es-ES'):''}</small></li>`).join('')}</ul></div>` : '');
 }
 function renderIncPanel(I){
   const pad=n=>(''+n).padStart(2,'0'); const today=new Date();
