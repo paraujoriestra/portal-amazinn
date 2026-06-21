@@ -4920,8 +4920,41 @@ async function createKudo(e){e.preventDefault();const para=document.getElementBy
 /* ---------------- INCIDENCIAS ---------------- */
 /* ================= MANTENIMIENTO · INCIDENCIAS (v2) ================= */
 let incFormOpen=false, incTab='bandeja', incSel=null, incTimerInt=null, incEditOpen=false, incNew=false;
-let incFilters={ambito:'',edificio:'',unidad:'',urgencia:'',estado:'',q:'',categoria:'',afecta:''}; let incFiltersOpen=false;
+let incFilters={ambito:'',edificio:'',unidad:'',urgencia:'',estado:'',q:'',categoria:'',afecta:''}; let incFiltersOpen=false; let incOrden='';
+const INC_STATS_EXCLUDE=new Set(['Aurelio Núñez','Oscar Naranjo Monroy','Deibis Palacio Melendez','Carlos Gabriel Gonzalez']);
 function incToggleFilters(){ incFiltersOpen=!incFiltersOpen; show('incidencias'); }
+function incSetOrden(v){ incOrden=v; show('incidencias'); }
+function incDue(i){ const t=i.created_at?new Date(i.created_at).getTime():0; return t+((SLA_H[i.urgencia]||72)*3600000); }
+function incMatchesFilters(i){ const f=incFilters;
+  if(f.edificio && i.edificio!==f.edificio) return false;
+  if(f.unidad && i.unidad!==f.unidad) return false;
+  if(f.urgencia && i.urgencia!==f.urgencia) return false;
+  if(f.estado && i.estado!==f.estado) return false;
+  if(f.categoria && (i.categoria||'')!==f.categoria) return false;
+  if(f.afecta==='si' && !i.afecta_huesped) return false;
+  if(f.q){ const q=f.q.toLowerCase(); const hay=((i.descripcion||'')+' '+(i.edificio||'')+' '+(i.unidad||'')+' '+incCatLabel(i.categoria)+' '+(i.creado_por_nombre||'')+' '+(i.tomada_por_nombre||'')+' '+(i.resuelto_por_nombre||'')).toLowerCase(); if(!hay.includes(q)) return false; }
+  return true; }
+function incOrderHTML(){ return `<select onchange="incSetOrden(this.value)" style="padding:7px 10px;border:1px solid var(--gris2);border-radius:8px;font-size:13px;font-family:inherit">
+  <option value="" ${incOrden===''?'selected':''}>Orden: por defecto</option>
+  <option value="prioridad" ${incOrden==='prioridad'?'selected':''}>Orden: Prioridad</option>
+  <option value="alta" ${incOrden==='alta'?'selected':''}>Orden: Fecha de alta</option>
+  <option value="caducidad" ${incOrden==='caducidad'?'selected':''}>Orden: Fecha de caducidad</option>
+</select>`; }
+function incFiltersPanelHTML(){ const f=incFilters;
+  const edOpts=`<option value="">Todos los edificios</option>`+MANT_EDIF.map(e=>`<option ${f.edificio===e.nombre?'selected':''}>${esc(e.nombre)}</option>`).join('');
+  const uniList=MANT_UNI.filter(u=>!f.edificio||u.edificio===f.edificio);
+  const unOpts=`<option value="">Todas las unidades</option>`+uniList.map(u=>`<option ${f.unidad===u.nombre?'selected':''}>${esc(u.nombre)}</option>`).join('');
+  const urgOpts=`<option value="">Toda urgencia</option>`+Object.entries(INC_URG).map(([k,v])=>`<option value="${k}" ${f.urgencia===k?'selected':''}>${v[2]} ${v[0]}</option>`).join('');
+  const catOpts=`<option value="">Toda categoría</option>`+INC_CAT.map(([v,l])=>`<option value="${v}" ${f.categoria===v?'selected':''}>${l}</option>`).join('');
+  const anyF=(f.edificio||f.unidad||f.urgencia||f.q||f.categoria||f.afecta);
+  return `<div class="inc-filters">
+    <input type="search" placeholder="🔎 Buscar…" value="${esc(f.q||'')}" onchange="incSetFilter('q',this.value)" style="padding:7px 10px;border:1px solid var(--gris2);border-radius:8px;font-size:13px;font-family:inherit;min-width:150px">
+    <select onchange="incSetFilter('edificio',this.value)">${edOpts}</select>
+    <select onchange="incSetFilter('unidad',this.value)">${unOpts}</select>
+    ${isProvider()?'':`<select onchange="incSetFilter('categoria',this.value)">${catOpts}</select>`}
+    <select onchange="incSetFilter('urgencia',this.value)">${urgOpts}</select>
+    ${anyF?`<button class="inc-clear" onclick="incClearFilters()">✕ Limpiar</button>`:''}
+  </div>`; }
 let MANT_EDIF=[], MANT_UNI=[], MANT_STAFF=[], MANT_TEAMS=[], MANT_PREV=[], PREV_INC=[], INC=[], INC_FOTOS={};
 let prevFormOpen=false, prevEditId=null, prevSel=null, prevTab='lista', prevCalRef=null, prevFilterCat='';
 const INC_URG={alta:['Alta','b-red','🔴'],media:['Media','b-amber','🟠'],baja:['Baja','b-grey','🟢']};
@@ -5041,11 +5074,11 @@ async function pageIncidencias(){
   let body; const fullScreen=(incSel!=null||incNew);
   if(incNew){ body=renderIncForm(); }
   else if(incSel!=null){ body=renderIncDetail(incSel); }
-  else if(incTab==='panel'&&canManage){ body=renderIncPanel(INC); }
+  else if(incTab==='panel'&&canManage){ const anyF=(incFilters.edificio||incFilters.unidad||incFilters.urgencia||incFilters.q||incFilters.categoria||incFilters.afecta); body=`<div style="margin-bottom:12px;display:flex;gap:8px;align-items:center;flex-wrap:wrap"><button class="inc-chip ${(incFiltersOpen||anyF)?'on':''}" onclick="incToggleFilters()">🔎 Filtros${anyF?' •':''}</button></div>${incFiltersOpen?incFiltersPanelHTML():''}`+renderIncPanel(INC.filter(incMatchesFilters)); }
   else if(incTab==='calendario'){ body=renderPrevCal(); }
-  else if(incTab==='historial'){ body=`<div style="margin-bottom:10px"><button class="btn-sm ghost" onclick="incExportCSV()">⬇️ Exportar CSV (todas)</button></div>`+renderIncList(true); }
+  else if(incTab==='historial'){ const anyF=(incFilters.edificio||incFilters.unidad||incFilters.urgencia||incFilters.q||incFilters.categoria||incFilters.afecta); body=`<div style="margin-bottom:10px;display:flex;gap:8px;align-items:center;flex-wrap:wrap"><button class="inc-chip ${(incFiltersOpen||anyF)?'on':''}" onclick="incToggleFilters()">🔎 Filtros${anyF?' •':''}</button>${incOrderHTML()}<button class="btn-sm ghost" onclick="incExportCSV()">⬇️ Exportar CSV (todas)</button></div>${incFiltersOpen?incFiltersPanelHTML():''}`+renderIncList(true); }
   else { body=renderIncBandeja(); }
-  const tools=(canManage&&!fullScreen)?`<div style="margin:0 0 12px;display:flex;gap:10px;flex-wrap:wrap;align-items:center"><label class="btn ghost" style="cursor:pointer;padding:6px 12px">📥 Importar incidencias (Excel)<input type="file" accept=".xlsx,.xls,.csv" style="display:none" onchange="incImportExcel(this)"></label><a href="#" style="font-size:12px;color:var(--acento)" onclick="incPlantilla();return false">descargar plantilla</a></div>`:'';
+  const tools='';
   document.getElementById('main').innerHTML=`<div class="page-title">Incidencias y mantenimiento</div><div class="page-sub">Reporta y haz seguimiento de averías por edificio y apartamento</div>${fullScreen?'':tabs}${fullScreen?'':tools}${body}`;
   if(incTimerInt){clearInterval(incTimerInt);incTimerInt=null;}
   if(incSel!=null){ const i=INC.find(x=>String(x.id)===String(incSel)); if(i&&i.timer_ini){ incTimerInt=setInterval(()=>{const el=document.getElementById('incTimerDisp'); if(el)el.textContent=incFmtT(incElapsed(i)); else {clearInterval(incTimerInt);incTimerInt=null;} },1000); } }
@@ -5161,15 +5194,8 @@ function renderIncBandeja(){
   return `
     ${banner}
     <div class="inc-chips">${chipsHTML}</div>
-    <div style="margin-bottom:12px"><button class="inc-chip ${(incFiltersOpen||anyF)?'on':''}" onclick="incToggleFilters()">🔎 Filtros${anyF?' •':''}</button></div>
-    ${incFiltersOpen?`<div class="inc-filters">
-      <input type="search" placeholder="🔎 Buscar…" value="${esc(f.q||'')}" onchange="incSetFilter('q',this.value)" style="padding:7px 10px;border:1px solid var(--gris2);border-radius:8px;font-size:13px;font-family:inherit;min-width:150px">
-      <select onchange="incSetFilter('edificio',this.value)">${edOpts}</select>
-      <select onchange="incSetFilter('unidad',this.value)">${unOpts}</select>
-      ${isProvider()?'':`<select onchange="incSetFilter('categoria',this.value)">${catOpts}</select>`}
-      <select onchange="incSetFilter('urgencia',this.value)">${urgOpts}</select>
-      ${anyF?`<button class="inc-clear" onclick="incClearFilters()">✕ Limpiar</button>`:''}
-    </div>`:''}
+    <div style="margin-bottom:12px;display:flex;gap:8px;align-items:center;flex-wrap:wrap"><button class="inc-chip ${(incFiltersOpen||anyF)?'on':''}" onclick="incToggleFilters()">🔎 Filtros${anyF?' •':''}</button>${incOrderHTML()}</div>
+    ${incFiltersOpen?incFiltersPanelHTML():''}
     ${renderIncList(false)}`;
 }
 function incFilteredList(hist){
@@ -5185,16 +5211,13 @@ function incFilteredList(hist){
       else if(f.ambito==='curso'){ if(!['en_curso','pausada','a_medias'].includes(i.estado)) return false; }
       else if(f.ambito==='sinasignar'){ if(!(i.estado==='pendiente' && !i.asignado_a)) return false; if(!(incCan()||i.asignado_equipo==='*'||myInTeam(i.asignado_equipo))) return false; }
     }
-    if(f.edificio && i.edificio!==f.edificio) return false;
-    if(f.unidad && i.unidad!==f.unidad) return false;
-    if(f.urgencia && i.urgencia!==f.urgencia) return false;
-    if(f.estado && i.estado!==f.estado) return false;
-    if(f.categoria && (i.categoria||'')!==f.categoria) return false;
-    if(f.afecta==='si' && !i.afecta_huesped) return false;
-    if(f.q){ const q=f.q.toLowerCase(); const hay=((i.descripcion||'')+' '+(i.edificio||'')+' '+(i.unidad||'')+' '+incCatLabel(i.categoria)+' '+(i.creado_por_nombre||'')+' '+(i.tomada_por_nombre||'')).toLowerCase(); if(!hay.includes(q)) return false; }
+    if(!incMatchesFilters(i)) return false;
     return true;
   });
   arr.sort((a,b)=>{
+    if(incOrden==='alta') return new Date(b.created_at)-new Date(a.created_at);
+    if(incOrden==='caducidad') return incDue(a)-incDue(b);
+    if(incOrden==='prioridad'){ const ua=(urgRank[a.urgencia]!=null?urgRank[a.urgencia]:1), ub=(urgRank[b.urgencia]!=null?urgRank[b.urgencia]:1); if(ua!==ub) return ua-ub; return new Date(a.created_at)-new Date(b.created_at); }
     if(hist) return new Date(b.resuelta_at||b.updated_at||b.created_at)-new Date(a.resuelta_at||a.updated_at||a.created_at);
     const va=incVencida(a)?0:1, vb=incVencida(b)?0:1; if(va!==vb) return va-vb;
     const ua=(urgRank[a.urgencia]!=null?urgRank[a.urgencia]:1), ub=(urgRank[b.urgencia]!=null?urgRank[b.urgencia]:1);
@@ -5526,12 +5549,12 @@ function renderIncPanel(I){
     porCat[incCatLabel(x.categoria)]=(porCat[incCatLabel(x.categoria)]||0)+1;
     gastoEdif[ed]=(gastoEdif[ed]||0)+(Number(x.coste)||0);
     const rk=(x.edificio||'?')+' · '+(x.unidad||'?')+' · '+incCatLabel(x.categoria); recCount[rk]=(recCount[rk]||0)+1;
-    const cr=x.creado_por_nombre||'—'; repPorPersona[cr]=(repPorPersona[cr]||0)+1; });
-  term.forEach(x=>{ incResolvers(x).forEach(r=>{ resPorPersona[r]=(resPorPersona[r]||0)+1; }); });
+    const cr=x.creado_por_nombre||'—'; if(!INC_STATS_EXCLUDE.has(cr)) repPorPersona[cr]=(repPorPersona[cr]||0)+1; });
+  term.forEach(x=>{ incResolvers(x).forEach(r=>{ if(INC_STATS_EXCLUDE.has(r))return; resPorPersona[r]=(resPorPersona[r]||0)+1; }); });
   const recurrentes=Object.entries(recCount).filter(([k,v])=>v>=2).sort((a,b)=>b[1]-a[1]).slice(0,8);
   const techStats={};
-  I.forEach(x=>{ if(!['terminada','cancelada'].includes(x.estado)){ const w=x.tomada_por_nombre||x.asignado_a_nombre; if(w){(techStats[w]=techStats[w]||{act:0,res:0,seg:0,venc:0}).act++; if(incVencida(x))techStats[w].venc++;} } });
-  term.forEach(x=>{ incResolvers(x).forEach(w=>{ if(!w||w==='—')return; (techStats[w]=techStats[w]||{act:0,res:0,seg:0,venc:0}); techStats[w].res++; techStats[w].seg+=(x.tiempo_seg||0); }); });
+  I.forEach(x=>{ if(!['terminada','cancelada'].includes(x.estado)){ const w=x.tomada_por_nombre||x.asignado_a_nombre; if(w && !INC_STATS_EXCLUDE.has(w)){(techStats[w]=techStats[w]||{act:0,res:0,seg:0,venc:0}).act++; if(incVencida(x))techStats[w].venc++;} } });
+  term.forEach(x=>{ incResolvers(x).forEach(w=>{ if(!w||w==='—'||INC_STATS_EXCLUDE.has(w))return; (techStats[w]=techStats[w]||{act:0,res:0,seg:0,venc:0}); techStats[w].res++; techStats[w].seg+=(x.tiempo_seg||0); }); });
   const techRows=Object.entries(techStats).sort((a,b)=>b[1].res-a[1].res);
   const techHTML=techRows.length?`<div class="asg-scroll"><table class="asg-table"><thead><tr><th>Técnico</th><th>Activas</th><th>⏰ Vencidas</th><th>Resueltas</th><th>Tiempo medio</th></tr></thead><tbody>${techRows.map(([k,v])=>`<tr><td><b>${esc(k)}</b></td><td>${v.act}</td><td${v.venc?' style="color:#c0392b;font-weight:700"':''}>${v.venc}</td><td>${v.res}</td><td>${v.res?incFmtT(v.seg/v.res):'—'}</td></tr>`).join('')}</tbody></table></div>`:'<div style="color:var(--suave);font-size:13px">Sin datos todavía</div>';
   const dias=[]; for(let i=13;i>=0;i--){ const d=new Date(today); d.setDate(today.getDate()-i); const k=iso(d); dias.push({label:pad(d.getDate())+'/'+pad(d.getMonth()+1),r:term.filter(x=>resDe(x)===k).length,c:I.filter(x=>fechaDe(x)===k).length}); }
