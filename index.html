@@ -5498,6 +5498,7 @@ function renderIncDetail(id){
      </div>`:'')
   + ( (Array.isArray(i.historial)&&i.historial.length)? `<div class="panel"><h3 class="inc-h3">🕒 Historial de actividad</h3><ul class="inc-timeline">${i.historial.slice().reverse().map(h=>`<li><b>${esc(h.act||'')}</b>${h.who?' · '+esc(h.who):''}<br><small>${h.t?new Date(h.t).toLocaleString('es-ES'):''}</small></li>`).join('')}</ul></div>` : '');
 }
+function incResolvers(x){ if(Array.isArray(x.realizadores)&&x.realizadores.length) return x.realizadores; if(x.resuelto_por_nombre) return (''+x.resuelto_por_nombre).split(/[,;]+/).map(s=>s.trim()).filter(Boolean); return ['—']; }
 function renderIncPanel(I){
   const pad=n=>(''+n).padStart(2,'0'); const today=new Date();
   const iso=d=>d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());
@@ -5526,11 +5527,11 @@ function renderIncPanel(I){
     gastoEdif[ed]=(gastoEdif[ed]||0)+(Number(x.coste)||0);
     const rk=(x.edificio||'?')+' · '+(x.unidad||'?')+' · '+incCatLabel(x.categoria); recCount[rk]=(recCount[rk]||0)+1;
     const cr=x.creado_por_nombre||'—'; repPorPersona[cr]=(repPorPersona[cr]||0)+1; });
-  term.forEach(x=>{ const r=x.resuelto_por_nombre||'—'; resPorPersona[r]=(resPorPersona[r]||0)+1; });
+  term.forEach(x=>{ incResolvers(x).forEach(r=>{ resPorPersona[r]=(resPorPersona[r]||0)+1; }); });
   const recurrentes=Object.entries(recCount).filter(([k,v])=>v>=2).sort((a,b)=>b[1]-a[1]).slice(0,8);
   const techStats={};
   I.forEach(x=>{ if(!['terminada','cancelada'].includes(x.estado)){ const w=x.tomada_por_nombre||x.asignado_a_nombre; if(w){(techStats[w]=techStats[w]||{act:0,res:0,seg:0,venc:0}).act++; if(incVencida(x))techStats[w].venc++;} } });
-  term.forEach(x=>{ const w=x.resuelto_por_nombre; if(w){(techStats[w]=techStats[w]||{act:0,res:0,seg:0,venc:0}); techStats[w].res++; techStats[w].seg+=(x.tiempo_seg||0);} });
+  term.forEach(x=>{ incResolvers(x).forEach(w=>{ if(!w||w==='—')return; (techStats[w]=techStats[w]||{act:0,res:0,seg:0,venc:0}); techStats[w].res++; techStats[w].seg+=(x.tiempo_seg||0); }); });
   const techRows=Object.entries(techStats).sort((a,b)=>b[1].res-a[1].res);
   const techHTML=techRows.length?`<div class="asg-scroll"><table class="asg-table"><thead><tr><th>Técnico</th><th>Activas</th><th>⏰ Vencidas</th><th>Resueltas</th><th>Tiempo medio</th></tr></thead><tbody>${techRows.map(([k,v])=>`<tr><td><b>${esc(k)}</b></td><td>${v.act}</td><td${v.venc?' style="color:#c0392b;font-weight:700"':''}>${v.venc}</td><td>${v.res}</td><td>${v.res?incFmtT(v.seg/v.res):'—'}</td></tr>`).join('')}</tbody></table></div>`:'<div style="color:var(--suave);font-size:13px">Sin datos todavía</div>';
   const dias=[]; for(let i=13;i>=0;i--){ const d=new Date(today); d.setDate(today.getDate()-i); const k=iso(d); dias.push({label:pad(d.getDate())+'/'+pad(d.getMonth()+1),r:term.filter(x=>resDe(x)===k).length,c:I.filter(x=>fechaDe(x)===k).length}); }
