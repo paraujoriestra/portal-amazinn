@@ -1057,6 +1057,7 @@ async function enterApp(user){
     if(PROFILE.estado==='rechazado') showRejected(); else showThanks();
     return;
   }
+  if(PROFILE.pin_temporal){ showForcePin(); return; }   // PIN temporal → obligar a cambiarlo
   await loadCatalogos();
   await loadAccesos();
   document.getElementById('login').style.display='none';
@@ -1094,13 +1095,42 @@ function showThanks(){ loginMsg('✅','¡Muchas gracias!','Tu registro se ha env
 function showRejected(){ loginMsg('🚫','Acceso no aprobado','Tu solicitud de registro no fue aprobada.<br>Si crees que es un error, contacta con tu responsable.'); }
 async function pinForgot(){
   let email=(document.getElementById('liEmail').value||'').trim();
-  if(!email){ email=(prompt('Escribe tu email para enviarte el restablecimiento del PIN:')||'').trim(); }
+  if(!email){ email=(prompt('Escribe tu email para avisar a un administrador:')||'').trim(); }
   if(!email){ return; }
   const errEl=document.getElementById('liErr');
-  const { error } = await sb.auth.resetPasswordForEmail(email, { redirectTo: location.origin + location.pathname });
-  if(error){ errEl.style.color='var(--rojo)'; errEl.textContent='No se pudo enviar: '+error.message; return; }
+  try{ const { error } = await sb.from('pin_solicitudes').insert({ email:email.toLowerCase() }); if(error) throw error; }
+  catch(e){ errEl.style.color='var(--rojo)'; errEl.textContent='No se pudo registrar la solicitud: '+((e&&e.message)||e); return; }
   errEl.style.color='#2c8a4a';
-  errEl.innerHTML='✓ Te enviamos un correo a <b>'+esc(email)+'</b>. Ábrelo y pulsa el enlace para poner un PIN nuevo.';
+  errEl.innerHTML='✓ Solicitud registrada. Un <b>administrador</b> te pondrá un PIN temporal; contáctale y entra con ese PIN (te pedirá cambiarlo).';
+}
+function showForcePin(){
+  document.getElementById('app').style.display='none';
+  const lc=document.querySelector('#login .login-card');
+  if(lc) lc.innerHTML=`<img src="${LOGO}" style="height:54px;margin:0 auto 12px;display:block">
+    <h2 style="text-align:center;margin:0 0 4px">Crea tu nuevo PIN</h2>
+    <p style="text-align:center;color:var(--suave);font-size:13.5px;margin:0 0 14px">Tu PIN es temporal. Elige uno nuevo de 6 dígitos para continuar.</p>
+    <form onsubmit="return forcePinSave(event)">
+      <label>Nuevo PIN (6 dígitos)</label>
+      <input id="fpPin" type="password" inputmode="numeric" maxlength="6" required placeholder="••••••" oninput="this.value=this.value.replace(/\\D/g,'').slice(0,6)">
+      <label>Repite el PIN</label>
+      <input id="fpPin2" type="password" inputmode="numeric" maxlength="6" required placeholder="••••••" oninput="this.value=this.value.replace(/\\D/g,'').slice(0,6)">
+      <button type="submit" style="margin-top:10px">Guardar y entrar</button>
+    </form>
+    <div class="login-err" id="fpErr"></div>`;
+  document.getElementById('login').style.display='flex';
+}
+async function forcePinSave(e){
+  e.preventDefault();
+  const p1=document.getElementById('fpPin').value, p2=document.getElementById('fpPin2').value;
+  const err=document.getElementById('fpErr'); err.style.color='var(--rojo)';
+  if(!/^\d{6}$/.test(p1)){ err.textContent='El PIN debe tener exactamente 6 dígitos.'; return false; }
+  if(/^(\d)\1{5}$/.test(p1)){ err.textContent='El PIN no puede tener los 6 dígitos iguales.'; return false; }
+  if(p1!==p2){ err.textContent='Los dos PIN no coinciden.'; return false; }
+  const { error } = await sb.auth.updateUser({ password:p1 });
+  if(error){ err.textContent='No se pudo guardar: '+error.message; return false; }
+  try{ await sb.from('profiles').update({ pin_temporal:false }).eq('id', ME.id); }catch(_){}
+  location.reload();
+  return false;
 }
 function showPinRecovery(){
   document.getElementById('app').style.display='none';
@@ -3612,6 +3642,10 @@ async function pageAdmin(){
       ${userForm()}`;
     return;
   }
+  let pinReqs=[]; try{ const{data:pr}=await sb.from('pin_solicitudes').select('*').eq('estado','pendiente').order('created_at',{ascending:false}); pinReqs=pr||[]; }catch(_){}
+  const reqPanel = pinReqs.length? `<div class="panel" style="border-left:4px solid #e0a800"><b>🔑 Solicitudes de PIN olvidado (${pinReqs.length})</b>
+    <div style="margin-top:8px;display:flex;flex-direction:column;gap:7px">${pinReqs.map(s=>{ const u=us.find(x=>(x.email||'').toLowerCase()===(s.email||'').toLowerCase());
+      return `<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:13px;border-bottom:1px solid var(--gris);padding-bottom:7px"><b>${esc(s.email)}</b>${u?` · ${esc(u.nombre||'')}`:' · <span style="color:var(--rojo)">sin cuenta</span>'} <span style="color:var(--suave);font-size:11.5px">${reclFecha(s.created_at)}</span>${u?`<button class="btn" style="padding:4px 11px;font-size:12px;margin-left:auto" onclick="adminResetPin('${u.id}')">🔑 Poner PIN temporal</button>`:`<button class="btn ghost" style="padding:4px 11px;font-size:12px;margin-left:auto" onclick="pinReqDismiss(${s.id})">Descartar</button>`}</div>`; }).join('')}</div></div>`:'';
   const rl=r=>roleNice(r);
   const rows=us.map(u=>{
     const esOwner=u.role==='propietario';
@@ -3625,6 +3659,7 @@ async function pageAdmin(){
     <td>${accion}</td></tr>`;}).join('');
   document.getElementById('main').innerHTML=`<div class="page-title">Usuarios</div><div class="page-sub">Gestión de empleados y roles</div>
     <div class="panel" style="background:var(--azul-claro);border:none;font-size:13px">ℹ️ Para <b>crear</b> nuevos accesos, los empleados se registran desde la pantalla de inicio (o los añades en Supabase → Authentication). Aquí asignas su <b>departamento, rol, vacaciones y cumpleaños</b>.</div>
+    ${reqPanel}
     <div class="panel"><table><thead><tr><th>Foto</th><th>Nombre / email</th><th>Departamento / área</th><th>Posición</th><th>Rol</th><th>Vac.</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`;
 }
 let userDraft={}, ADMIN_US=[];
@@ -3634,12 +3669,30 @@ function adminRowMenu(e,id){ e.stopPropagation();
   let m=document.getElementById('rowMenuPop'); if(!m){ m=document.createElement('div'); m.id='rowMenuPop'; m.className='rowmenu-pop'; document.body.appendChild(m); }
   const u=(ADMIN_US||[]).find(x=>x.id===id)||{};
   let html=`<button onclick="closeRowMenu();userEditById('${id}')">✏️ Editar</button>`;
+  if(id!==ME.id && u.role!=='propietario') html+=`<button onclick="closeRowMenu();adminResetPin('${id}')">🔑 Restablecer PIN</button>`;
   if(isOwner() && id!==ME.id && u.role!=='propietario') html+=`<button onclick="closeRowMenu();deleteUser('${id}')">🗑️ Eliminar</button>`;
   m.innerHTML=html;
   const r=e.currentTarget.getBoundingClientRect(); m.style.display='flex';
   m.style.top=(r.bottom+window.scrollY+4)+'px'; m.style.left=(Math.max(8,Math.min(r.left,window.innerWidth-168))+window.scrollX)+'px';
   setTimeout(()=>document.addEventListener('click',closeRowMenu),0);
 }
+async function adminResetPin(id){
+  const u=(ADMIN_US||[]).find(x=>x.id===id)||{}; if(!u.email){ alert('Ese usuario no tiene email registrado.'); return; }
+  if(!confirm(`¿Poner un PIN temporal a ${u.nombre||u.email}?\n\nSe generará un PIN nuevo que deberás comunicarle. Al entrar, el portal le pedirá cambiarlo.`)) return;
+  let pin; do{ pin=String(Math.floor(100000+Math.random()*900000)); }while(/^(\d)\1{5}$/.test(pin));
+  let session; try{ session=(await sb.auth.getSession()).data.session; }catch(_){}
+  if(!session){ alert('Tu sesión no es válida. Vuelve a entrar.'); return; }
+  try{
+    const res=await fetch(`${SUPABASE_URL}/functions/v1/reset-pin`,{ method:'POST', headers:{ 'Content-Type':'application/json','Authorization':'Bearer '+session.access_token,'apikey':SUPABASE_ANON_KEY }, body:JSON.stringify({ email:u.email, nuevo_pin:pin }) });
+    const out=await res.json().catch(()=>({}));
+    if(!res.ok || out.error){ alert('No se pudo restablecer el PIN:\n'+(out.error||('Error '+res.status))+'\n\n¿Está desplegada la función «reset-pin»? (ver GUIA_RESET_PIN.md)'); return; }
+    try{ await sb.from('pin_solicitudes').update({ estado:'resuelta', resuelto_por:PROFILE.nombre, resuelto_at:new Date().toISOString() }).eq('email',u.email.toLowerCase()).eq('estado','pendiente'); }catch(_){}
+    try{ auditLog('Restableció el PIN de '+(u.nombre||u.email),'pin'); }catch(_){}
+    alert(`✅ PIN temporal para ${u.nombre||u.email}:\n\n            ${pin}\n\nComunícaselo. Al entrar, se le pedirá cambiarlo por uno propio.`);
+    show('admin');
+  }catch(e){ alert('Error de conexión: '+((e&&e.message)||e)); }
+}
+async function pinReqDismiss(id){ try{ await sb.from('pin_solicitudes').update({ estado:'resuelta', resuelto_por:PROFILE.nombre, resuelto_at:new Date().toISOString() }).eq('id',id); }catch(e){ alert(e.message||e); return; } toast('Solicitud descartada'); show('admin'); }
 async function deleteUser(id){
   if(!isOwner()){ alert('Solo el Propietario puede eliminar usuarios.'); return; }
   const u=(ADMIN_US||[]).find(x=>x.id===id)||{}; const nombre=u.nombre||'este usuario';
