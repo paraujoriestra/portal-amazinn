@@ -59,6 +59,9 @@
     <div class="file" id="f_filebox" onclick="document.getElementById('f_file').click()">📎 Toca para adjuntar tu CV (PDF, Word o imagen)</div>
     <input type="file" id="f_file" accept=".pdf,.doc,.docx,.png,.jpg,.jpeg" style="display:none" onchange="onFile()">
 
+    <label>Comentario <span style="color:var(--suave);font-weight:400">(opcional)</span></label>
+    <textarea id="f_coment" rows="3" placeholder="Si quieres, cuéntanos por qué te gustaría unirte, tu disponibilidad o tu experiencia…" style="width:100%;padding:12px 14px;border:1px solid var(--gris2);border-radius:11px;font-family:inherit;font-size:15px;outline:none;resize:vertical"></textarea>
+
     <div class="err" id="f_err"></div>
     <button class="btn" id="f_btn" onclick="enviar()">Enviar candidatura</button>
     <div class="note">Tus datos se usarán únicamente para procesos de selección de Amazinn Places.</div>
@@ -86,6 +89,7 @@
   async function enviar(){
     const nombre=document.getElementById('f_nombre').value.trim();
     const tel=document.getElementById('f_tel').value.trim();
+    const coment=document.getElementById('f_coment').value.trim();
     const areas=[...sel];
     document.getElementById('f_err').style.display='none';
     if(!nombre){ showErr('Escribe tu nombre y apellido.'); return; }
@@ -101,7 +105,7 @@
       const path=Date.now()+'_'+safe+'.'+ext;
       const up=await sb.storage.from('cv').upload(path, file, {upsert:false});
       if(up.error) throw up.error;
-      const ins=await sb.from('reclutamiento').insert({nombre,telefono:tel,areas,cv_path:path,cv_nombre:file.name,estado:'recibido'});
+      const ins=await sb.from('reclutamiento').insert({nombre,telefono:tel,areas,comentario:coment,cv_path:path,cv_nombre:file.name,estado:'recibido'});
       if(ins.error) throw ins.error;
       document.getElementById('card').innerHTML=`<div class="ok"><div class="big">🎉</div><h2>¡Candidatura enviada!</h2>
         <p class="lead">Gracias, ${nombre.split(' ')[0]}. Hemos recibido tu CV. Si encaja con lo que buscamos, te contactaremos por teléfono.</p></div>`;

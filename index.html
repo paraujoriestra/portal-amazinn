@@ -3872,10 +3872,12 @@ function reclCard(r){
       <div style="font-size:12.5px;color:var(--suave);margin-top:3px">📞 ${esc(r.telefono||'—')}</div></div>
       <div style="font-size:11px;color:var(--suave);white-space:nowrap">${reclFecha(r.created_at)}</div></div>
     <div style="display:flex;gap:5px;flex-wrap:wrap">${areas||'<span style="font-size:11px;color:var(--suave)">Sin área</span>'}</div>
+    ${r.comentario?`<div style="font-size:12.5px;color:#2c3a47;background:#eef4fb;border-radius:8px;padding:7px 10px">💬 «${esc(r.comentario)}»</div>`:''}
     ${r.notas?`<div style="font-size:12px;color:#41505e;background:#f8fafc;border-left:3px solid var(--gris2);padding:6px 9px;border-radius:0 6px 6px 0">📝 ${esc(r.notas)}</div>`:''}
     <div style="display:flex;gap:7px;flex-wrap:wrap;align-items:center;border-top:1px solid var(--gris);padding-top:10px;margin-top:2px">
       <button class="btn ghost" style="padding:6px 12px;font-size:12.5px" onclick="reclCV('${esc(r.cv_path||'')}','${esc((r.cv_nombre||'CV').replace(/'/g,''))}')">👁️ Ver CV</button>
       <button class="btn ghost" style="padding:6px 11px;font-size:12.5px" onclick="reclNota(${r.id})">📝 Nota</button>
+      <button class="btn ghost" style="padding:6px 11px;font-size:12.5px" onclick="reclEditAreas(${r.id})">🏷️ Áreas</button>
       ${isAdmin()?`<button class="btn ghost" style="padding:6px 10px;font-size:12.5px;color:#c0392b" onclick="reclDel(${r.id})">🗑</button>`:''}
       <select onchange="if(this.value)reclMove(${r.id},this.value)" style="margin-left:auto;padding:7px 9px;border:1px solid var(--gris2);border-radius:8px;font-size:12.5px;font-family:inherit;color:var(--azul);font-weight:600"><option value="">Mover a…</option>${moveOpts}</select>
     </div></div>`;
@@ -3883,6 +3885,20 @@ function reclCard(r){
 function reclCopy(){ const el=document.getElementById('reclLink'); if(!el)return; el.select(); try{document.execCommand('copy');}catch(e){} try{navigator.clipboard&&navigator.clipboard.writeText(el.value);}catch(e){} toast('✓ Enlace copiado'); }
 async function reclMove(id,estado){ const{error}=await sb.from('reclutamiento').update({estado,revisado_por:PROFILE.nombre}).eq('id',id); if(error){alert(error.message);return;} try{auditLog('Movió un candidato a '+reclStageLbl(estado),'reclutamiento');}catch(_){} toast('✓ Movido a '+reclStageLbl(estado)); show('reclutamiento'); }
 async function reclNota(id){ const r=RECL.find(x=>String(x.id)===String(id)); const v=prompt('Nota interna sobre el candidato:', r&&r.notas?r.notas:''); if(v===null)return; const{error}=await sb.from('reclutamiento').update({notas:v}).eq('id',id); if(error){alert(error.message);return;} toast('✓ Nota guardada'); show('reclutamiento'); }
+function reclEditAreas(id){
+  const r=RECL.find(x=>String(x.id)===String(id)); if(!r)return; const cur=new Set(r.areas||[]);
+  const checks=RECL_AREAS.map(a=>`<label style="display:flex;align-items:center;gap:9px;padding:9px 11px;border:1px solid var(--gris2);border-radius:9px;cursor:pointer;font-size:13.5px"><input type="checkbox" value="${esc(a)}" ${cur.has(a)?'checked':''} style="width:17px;height:17px"> ${esc(a)}</label>`).join('');
+  const ov=document.createElement('div'); ov.id='reclAreaOv';
+  ov.style.cssText='position:fixed;inset:0;background:rgba(15,23,32,.6);z-index:99999;display:flex;align-items:center;justify-content:center;padding:18px';
+  ov.innerHTML=`<div style="background:#fff;border-radius:14px;max-width:380px;width:100%;padding:20px"><h2 style="margin:0 0 4px;font-size:17px">Áreas del candidato</h2>
+    <p style="font-size:12.5px;color:var(--suave);margin:0 0 12px">${esc(r.nombre||'')} — marca las áreas que mejor encajen (puedes cambiar las que puso al registrarse).</p>
+    <div id="reclAreaChecks" style="display:flex;flex-direction:column;gap:7px">${checks}</div>
+    <div style="display:flex;gap:8px;margin-top:16px"><button class="btn" onclick="reclSaveAreas(${id})">Guardar</button><button class="btn ghost" onclick="reclCloseAreas()">Cancelar</button></div></div>`;
+  ov.onclick=(e)=>{ if(e.target===ov) reclCloseAreas(); };
+  document.body.appendChild(ov);
+}
+function reclCloseAreas(){ const o=document.getElementById('reclAreaOv'); if(o)o.remove(); }
+async function reclSaveAreas(id){ const box=document.getElementById('reclAreaChecks'); const areas=[...box.querySelectorAll('input:checked')].map(c=>c.value); const{error}=await sb.from('reclutamiento').update({areas}).eq('id',id); if(error){alert(error.message);return;} try{auditLog('Cambió las áreas de un candidato','reclutamiento');}catch(_){} reclCloseAreas(); toast('✓ Áreas actualizadas'); show('reclutamiento'); }
 async function reclDel(id){ if(!confirm('¿Eliminar este candidato y su CV? Esta acción no se puede deshacer.'))return; const r=RECL.find(x=>String(x.id)===String(id)); if(r&&r.cv_path){ try{await sb.storage.from('cv').remove([r.cv_path]);}catch(e){} } const{error}=await sb.from('reclutamiento').delete().eq('id',id); if(error){alert(error.message);return;} toast('✓ Eliminado'); show('reclutamiento'); }
 async function reclCV(path,nombre){
   if(!path){ alert('Este candidato no tiene CV adjunto.'); return; }
