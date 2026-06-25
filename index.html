@@ -3828,58 +3828,86 @@ function glosRender(){
   box.innerHTML=`<div class="panel"><div style="font-size:12px;color:var(--suave);margin-bottom:8px">${list.length} término(s)</div>`+list.map(x=>`<div style="padding:9px 0;border-bottom:1px solid var(--gris)"><b style="color:var(--azul)">${esc(x.t)}</b><div style="font-size:13.5px;color:var(--texto);margin-top:2px">${esc(x.d)}</div></div>`).join('')+`</div>`;
 }
 /* ===================== RECLUTAMIENTO (captación de CV) ===================== */
-let RECL=[], reclArea='';
+let RECL=[], reclArea='', reclStage='recibido';
 const RECL_AREAS=['Atención al cliente','Mantenimiento','Limpieza','Almacén','Nocturnos','Otros'];
-const RECL_STAGES=[['recibido','📥 Recibidos','#2980b9'],['preseleccionado','⭐ Preseleccionados','#16a085'],['reserva','💾 Reserva','#b9770e'],['descartado','❌ Descartados','#c0392b']];
-function reclStageLbl(k){const s=RECL_STAGES.find(x=>x[0]===k);return s?s[1]:k;}
+const RECL_STAGES=[['recibido','📥','Recibidos','#2980b9'],['preseleccionado','⭐','Preseleccionados','#16a085'],['entrevistado','🗣️','Entrevistados','#8e44ad'],['contratado','✅','Contratados','#1e8a5a'],['reserva','💾','Reserva','#b9770e'],['descartado','❌','Descartados','#c0392b']];
+function reclStageLbl(k){const s=RECL_STAGES.find(x=>x[0]===k);return s?(s[1]+' '+s[2]):k;}
 function reclFecha(d){ if(!d)return''; const x=new Date(d); return isNaN(x)?'':x.toLocaleDateString('es-ES',{day:'2-digit',month:'short',year:'numeric'}); }
 async function pageReclutamiento(){
   asgEnsureStyle();
   const {data}=await sb.from('reclutamiento').select('*').order('created_at',{ascending:false});
   RECL=data||[];
-  const filt=reclArea?RECL.filter(r=>(r.areas||[]).includes(reclArea)):RECL;
   const applyURL=new URL('aplica.html',location.href).href;
   const qrURL='https://api.qrserver.com/v1/create-qr-code/?size=200x200&margin=8&data='+encodeURIComponent(applyURL);
-  const capta=`<div class="panel" style="display:flex;gap:18px;flex-wrap:wrap;align-items:center">
-    <div style="text-align:center"><img src="${qrURL}" alt="QR" style="width:130px;height:130px;border-radius:10px;border:1px solid var(--gris2)"><div style="font-size:11px;color:var(--suave);margin-top:4px">Escanéalo para aplicar</div></div>
-    <div style="flex:1;min-width:220px">
-      <div style="font-weight:700;color:var(--azul);font-size:15px">📣 Recibe CV desde fuera</div>
-      <p style="font-size:13px;color:var(--suave);margin:6px 0 10px">Comparte este enlace o el QR (en redes, anuncios o en recepción). Cualquier persona podrá enviar su CV y aparecerá en «Recibidos».</p>
-      <div style="display:flex;gap:8px;flex-wrap:wrap"><input id="reclLink" value="${esc(applyURL)}" readonly style="flex:1;min-width:200px;padding:9px 12px;border:1px solid var(--gris2);border-radius:9px;font-size:13px;font-family:inherit"><button class="btn" onclick="reclCopy()">📋 Copiar enlace</button><a class="btn ghost" href="${qrURL}" target="_blank" download="QR-aplica-amazinn.png">⬇️ Descargar QR</a></div>
-    </div></div>`;
-  const areaBtns=['',...RECL_AREAS].map(a=>`<button class="btn ${reclArea===a?'':'ghost'}" style="padding:5px 12px;font-size:12.5px" onclick="reclArea='${a}';show('reclutamiento')">${a||'Todas'}</button>`).join(' ');
-  const cols=RECL_STAGES.map(([k,lbl,col])=>{
-    const items=filt.filter(r=>(r.estado||'recibido')===k);
-    return `<div style="flex:1;min-width:250px;background:#f5f8fb;border-radius:12px;padding:10px">
-      <div style="display:flex;justify-content:space-between;align-items:center;font-weight:800;font-size:12.5px;color:${col};margin-bottom:10px"><span>${lbl}</span><span style="background:${col};color:#fff;border-radius:12px;padding:1px 9px;font-size:11px">${items.length}</span></div>
-      ${items.map(reclCard).join('')||'<div style="color:var(--suave);font-size:12px;padding:8px 4px">Sin candidatos.</div>'}
-    </div>`;
-  }).join('');
+  const capta=`<details class="panel" style="padding:0"><summary style="cursor:pointer;padding:13px 16px;font-weight:700;color:var(--azul);list-style:none">📣 Recibir CV desde fuera (QR y enlace)</summary>
+    <div style="display:flex;gap:18px;flex-wrap:wrap;align-items:center;padding:0 16px 16px">
+      <div style="text-align:center"><img src="${qrURL}" alt="QR" style="width:120px;height:120px;border-radius:10px;border:1px solid var(--gris2)"><div style="font-size:11px;color:var(--suave);margin-top:4px">Escanéalo para aplicar</div></div>
+      <div style="flex:1;min-width:220px">
+        <p style="font-size:13px;color:var(--suave);margin:0 0 10px">Comparte este enlace o el QR (en redes, anuncios o en recepción). Cualquier persona podrá enviar su CV y aparecerá en «Recibidos».</p>
+        <div style="display:flex;gap:8px;flex-wrap:wrap"><input id="reclLink" value="${esc(applyURL)}" readonly style="flex:1;min-width:200px;padding:9px 12px;border:1px solid var(--gris2);border-radius:9px;font-size:13px;font-family:inherit"><button class="btn" onclick="reclCopy()">📋 Copiar enlace</button><a class="btn ghost" href="${qrURL}" target="_blank" download="QR-aplica-amazinn.png">⬇️ Descargar QR</a></div>
+      </div></div></details>`;
+  const byArea = reclArea? RECL.filter(r=>(r.areas||[]).includes(reclArea)) : RECL;
+  if(!RECL_STAGES.some(s=>s[0]===reclStage)) reclStage='recibido';
+  const stagePills=RECL_STAGES.map(([k,ic,lbl,col])=>{ const n=byArea.filter(r=>(r.estado||'recibido')===k).length; const on=reclStage===k;
+    return `<button onclick="reclStage='${k}';show('reclutamiento')" style="display:flex;align-items:center;gap:7px;padding:9px 13px;border-radius:10px;border:1.5px solid ${on?col:'var(--gris2)'};background:${on?col:'#fff'};color:${on?'#fff':'#41505e'};font-family:inherit;font-size:13px;font-weight:600;cursor:pointer">${ic} ${lbl} <span style="background:${on?'rgba(255,255,255,.28)':'#eef2f7'};color:${on?'#fff':col};border-radius:10px;padding:0 7px;font-size:11.5px;font-weight:700">${n}</span></button>`; }).join('');
+  const areaBtns=['',...RECL_AREAS].map(a=>`<button onclick="reclArea='${a}';show('reclutamiento')" style="padding:6px 12px;font-size:12.5px;border-radius:18px;border:1px solid ${reclArea===a?'var(--azul)':'var(--gris2)'};background:${reclArea===a?'var(--azul)':'#fff'};color:${reclArea===a?'#fff':'#41505e'};font-family:inherit;cursor:pointer">${a||'Todas las áreas'}</button>`).join(' ');
+  const items=byArea.filter(r=>(r.estado||'recibido')===reclStage);
+  const cur=RECL_STAGES.find(s=>s[0]===reclStage);
+  const list= items.length
+    ? `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(310px,1fr));gap:13px">${items.map(reclCard).join('')}</div>`
+    : `<div class="panel" style="color:var(--suave);text-align:center;padding:34px"><div style="font-size:40px;margin-bottom:6px">${cur?cur[1]:'📭'}</div>No hay candidatos en «${cur?esc(cur[2]):''}»${reclArea?' para el área «'+esc(reclArea)+'»':''}.</div>`;
   document.getElementById('main').innerHTML=`<div class="page-title">Reclutamiento</div><div class="page-sub">Capta, recibe y clasifica las candidaturas de tu equipo</div>
     ${capta}
-    <div class="panel" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><span style="font-size:12.5px;font-weight:600;color:var(--suave)">Filtrar por área:</span>${areaBtns}</div>
-    <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-start">${cols}</div>`;
+    <div class="panel"><div style="font-size:11px;font-weight:800;letter-spacing:.5px;color:var(--suave);margin-bottom:8px">FASE</div><div style="display:flex;gap:8px;flex-wrap:wrap">${stagePills}</div>
+      <div style="font-size:11px;font-weight:800;letter-spacing:.5px;color:var(--suave);margin:15px 0 8px">FILTRAR POR ÁREA</div><div style="display:flex;gap:7px;flex-wrap:wrap">${areaBtns}</div></div>
+    ${list}`;
 }
 function reclCard(r){
-  const areas=(r.areas||[]).map(a=>`<span style="background:#eef2f7;color:#34557a;padding:2px 8px;border-radius:12px;font-size:10.5px;font-weight:600">${esc(a)}</span>`).join(' ');
-  const stageOpts=RECL_STAGES.map(([k,lbl])=>`<option value="${k}" ${ (r.estado||'recibido')===k?'selected':''}>${lbl}</option>`).join('');
-  return `<div style="background:#fff;border:1px solid var(--gris2);border-radius:10px;padding:11px 12px;margin-bottom:9px">
-    <div style="font-weight:700;font-size:14px">${esc(r.nombre||'—')}</div>
-    <div style="font-size:12.5px;color:var(--suave);margin:2px 0 6px">📞 ${esc(r.telefono||'—')} · ${reclFecha(r.created_at)}</div>
-    <div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:8px">${areas||''}</div>
-    ${r.notas?`<div style="font-size:12px;color:#41505e;background:#fafbfc;border-left:3px solid var(--gris2);padding:5px 8px;border-radius:0 6px 6px 0;margin-bottom:8px">📝 ${esc(r.notas)}</div>`:''}
-    <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
-      ${r.cv_path?`<button class="btn ghost" style="padding:5px 10px;font-size:12px" onclick="reclCV('${esc(r.cv_path)}')">📄 Ver CV</button>`:'<span style="font-size:11px;color:var(--suave)">Sin CV</span>'}
-      <button class="btn ghost" style="padding:5px 10px;font-size:12px" onclick="reclNota(${r.id})">📝 Nota</button>
-      ${isAdmin()?`<button class="btn ghost" style="padding:5px 9px;font-size:12px;color:#c0392b" onclick="reclDel(${r.id})">🗑</button>`:''}
-      <select onchange="reclMove(${r.id},this.value)" style="margin-left:auto;padding:6px 8px;border:1px solid var(--gris2);border-radius:8px;font-size:12px;font-family:inherit">${stageOpts}</select>
+  const st=RECL_STAGES.find(s=>s[0]===(r.estado||'recibido'))||RECL_STAGES[0];
+  const areas=(r.areas||[]).map(a=>`<span style="background:#eef2f7;color:#34557a;padding:2px 9px;border-radius:12px;font-size:11px;font-weight:600">${esc(a)}</span>`).join(' ');
+  const moveOpts=RECL_STAGES.filter(s=>s[0]!==(r.estado||'recibido')).map(([k,ic,lbl])=>`<option value="${k}">${ic} ${lbl}</option>`).join('');
+  return `<div style="background:#fff;border:1px solid var(--gris2);border-top:4px solid ${st[3]};border-radius:12px;padding:14px 15px;display:flex;flex-direction:column;gap:9px">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">
+      <div style="min-width:0"><div style="font-weight:700;font-size:15.5px;line-height:1.2">${esc(r.nombre||'—')}</div>
+      <div style="font-size:12.5px;color:var(--suave);margin-top:3px">📞 ${esc(r.telefono||'—')}</div></div>
+      <div style="font-size:11px;color:var(--suave);white-space:nowrap">${reclFecha(r.created_at)}</div></div>
+    <div style="display:flex;gap:5px;flex-wrap:wrap">${areas||'<span style="font-size:11px;color:var(--suave)">Sin área</span>'}</div>
+    ${r.notas?`<div style="font-size:12px;color:#41505e;background:#f8fafc;border-left:3px solid var(--gris2);padding:6px 9px;border-radius:0 6px 6px 0">📝 ${esc(r.notas)}</div>`:''}
+    <div style="display:flex;gap:7px;flex-wrap:wrap;align-items:center;border-top:1px solid var(--gris);padding-top:10px;margin-top:2px">
+      <button class="btn ghost" style="padding:6px 12px;font-size:12.5px" onclick="reclCV('${esc(r.cv_path||'')}','${esc((r.cv_nombre||'CV').replace(/'/g,''))}')">👁️ Ver CV</button>
+      <button class="btn ghost" style="padding:6px 11px;font-size:12.5px" onclick="reclNota(${r.id})">📝 Nota</button>
+      ${isAdmin()?`<button class="btn ghost" style="padding:6px 10px;font-size:12.5px;color:#c0392b" onclick="reclDel(${r.id})">🗑</button>`:''}
+      <select onchange="if(this.value)reclMove(${r.id},this.value)" style="margin-left:auto;padding:7px 9px;border:1px solid var(--gris2);border-radius:8px;font-size:12.5px;font-family:inherit;color:var(--azul);font-weight:600"><option value="">Mover a…</option>${moveOpts}</select>
     </div></div>`;
 }
 function reclCopy(){ const el=document.getElementById('reclLink'); if(!el)return; el.select(); try{document.execCommand('copy');}catch(e){} try{navigator.clipboard&&navigator.clipboard.writeText(el.value);}catch(e){} toast('✓ Enlace copiado'); }
 async function reclMove(id,estado){ const{error}=await sb.from('reclutamiento').update({estado,revisado_por:PROFILE.nombre}).eq('id',id); if(error){alert(error.message);return;} try{auditLog('Movió un candidato a '+reclStageLbl(estado),'reclutamiento');}catch(_){} toast('✓ Movido a '+reclStageLbl(estado)); show('reclutamiento'); }
 async function reclNota(id){ const r=RECL.find(x=>String(x.id)===String(id)); const v=prompt('Nota interna sobre el candidato:', r&&r.notas?r.notas:''); if(v===null)return; const{error}=await sb.from('reclutamiento').update({notas:v}).eq('id',id); if(error){alert(error.message);return;} toast('✓ Nota guardada'); show('reclutamiento'); }
 async function reclDel(id){ if(!confirm('¿Eliminar este candidato y su CV? Esta acción no se puede deshacer.'))return; const r=RECL.find(x=>String(x.id)===String(id)); if(r&&r.cv_path){ try{await sb.storage.from('cv').remove([r.cv_path]);}catch(e){} } const{error}=await sb.from('reclutamiento').delete().eq('id',id); if(error){alert(error.message);return;} toast('✓ Eliminado'); show('reclutamiento'); }
-async function reclCV(path){ try{ const{data,error}=await sb.storage.from('cv').createSignedUrl(path,3600); if(error||!data){alert('No se pudo abrir el CV: '+((error&&error.message)||'')); return;} window.open(data.signedUrl,'_blank'); }catch(e){ alert('No se pudo abrir el CV.'); } }
+async function reclCV(path,nombre){
+  if(!path){ alert('Este candidato no tiene CV adjunto.'); return; }
+  let url='';
+  try{ const{data,error}=await sb.storage.from('cv').createSignedUrl(path,3600); if(error||!data) throw (error||new Error('sin url')); url=data.signedUrl; }
+  catch(e){ alert('No se pudo abrir el CV.'); return; }
+  reclShowPreview(url,nombre||'CV',path);
+}
+function reclShowPreview(url,nombre,path){
+  const ext=((path||'').split('.').pop()||'').toLowerCase();
+  const isImg=['png','jpg','jpeg','gif','webp'].includes(ext);
+  const isPdf=ext==='pdf';
+  const body = isPdf? `<iframe src="${url}" style="width:100%;height:100%;border:none"></iframe>`
+    : isImg? `<div style="width:100%;height:100%;overflow:auto;text-align:center;background:#f1f5f9"><img src="${url}" style="max-width:100%;height:auto"></div>`
+    : `<div style="padding:46px 20px;text-align:center;color:var(--suave)"><div style="font-size:46px">📄</div><p>Este formato (${esc(ext||'desconocido')}) no se puede previsualizar aquí.<br>Pulsa «Abrir / descargar» para verlo.</p></div>`;
+  const ov=document.createElement('div'); ov.id='reclPrevOv';
+  ov.style.cssText='position:fixed;inset:0;background:rgba(15,23,32,.74);z-index:99999;display:flex;flex-direction:column;padding:16px';
+  ov.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center;color:#fff;margin-bottom:11px;gap:10px;flex-wrap:wrap"><b style="font-size:15px">📄 ${esc(nombre)}</b><div style="display:flex;gap:8px"><a class="btn" href="${url}" target="_blank" style="padding:7px 13px">⬇️ Abrir / descargar</a><button class="btn" style="padding:7px 13px;background:#fff;color:var(--azul)" onclick="reclClosePreview()">✕ Cerrar</button></div></div>
+    <div style="flex:1;background:#fff;border-radius:10px;overflow:hidden">${body}</div>`;
+  ov.onclick=(e)=>{ if(e.target===ov) reclClosePreview(); };
+  document.addEventListener('keydown',reclEscClose);
+  document.body.appendChild(ov);
+}
+function reclEscClose(e){ if(e.key==='Escape') reclClosePreview(); }
+function reclClosePreview(){ const o=document.getElementById('reclPrevOv'); if(o)o.remove(); document.removeEventListener('keydown',reclEscClose); }
 /* ===================== CIERRES DE CAJA (hotel · Panamá) ===================== */
 let ccTab='historial', ccView=null, CCAJA=[], ccFrom='', ccTo='', ccFiltOpen=false;
 const CC_BILLETES=[100,50,20,10,5,1];
