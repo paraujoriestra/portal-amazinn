@@ -3992,18 +3992,21 @@ function fillTpl(c,u){return (c||'')
   .split('{NºUnidad}').join(u.nombre||'').split('{NoUnidad}').join(u.nombre||'')
   .split('{NºPlanta}').join(u.planta||'').split('{NoPlanta}').join(u.planta||'')
   .split('{código}').join(u.codigo||'')
+  .split('{wifi}').join(u.wifi_red||u.wifi||'')
+  .split('{wifi_clave}').join(u.wifi_pass||'').split('{wifiClave}').join(u.wifi_pass||'').split('{clave_wifi}').join(u.wifi_pass||'').split('{contraseña_wifi}').join(u.wifi_pass||'')
   /* compatibilidad con variables antiguas */
-  .split('{apartamento}').join(u.nombre||'').split('{numero}').join(u.numero||'').split('{codigo}').join(u.codigo||'').split('{wifi}').join(u.wifi||'');}
+  .split('{apartamento}').join(u.nombre||'').split('{numero}').join(u.numero||'').split('{codigo}').join(u.codigo||'');}
 async function auditLog(accion,tipo){await sb.from('auditoria').insert({user_nombre:PROFILE.nombre,accion,tipo});}
 function setMsgTab(t){msgTab=t;tplFormOpen=false;show('mensajes');}
 async function pageMensajes(){
   const manage=canMsgEdit();
   if(manage&&tplFormOpen){ document.getElementById('main').innerHTML=`<div class="page-title">${tplEditId?'Editar plantilla':'Nueva plantilla'}</div><div class="page-sub">Plantillas por apartamento para Atención al cliente</div>${await tplForm()}`; return; }
-  const tabs=[['ver','👁️ Ver mensajes'],['tpl','🗂️ Gestionar plantillas'],['cods','🔑 Códigos de acceso']];
+  const tabs=[['ver','👁️ Ver mensajes'],['tpl','🗂️ Gestionar plantillas'],['cods','🔑 Códigos de acceso'],['wifis','📶 Wifis']];
   if(manage&&!tabs.some(t=>t[0]===msgTab))msgTab='ver';
   let body;
   if(!manage||msgTab==='ver') body=await msgViewer();
   else if(msgTab==='tpl') body=await msgManage();
+  else if(msgTab==='wifis') body=await msgWifis();
   else body=await msgCodes();
   document.getElementById('main').innerHTML=`<div class="page-title">Mensajes y plantillas</div><div class="page-sub">Plantillas por apartamento para Atención al cliente</div>
     ${manage?`<div class="tabs">${tabs.map(t=>`<button class="${msgTab===t[0]?'on':''}" onclick="setMsgTab('${t[0]}')">${t[1]}</button>`).join('')}</div>`:''}${body}`;
@@ -4016,8 +4019,9 @@ async function loadUnidades(){
   const eds=ed.data||[], uns=un.data||[]; const out=[];
   eds.forEach(e=>{
     const apts=uns.filter(u=>u.edificio===e.nombre && u.tipo!=='comun');
-    if(apts.length){ apts.forEach(u=>out.push({id:u.id,raw:u.id,kind:'u',nombre:u.nombre,prop:e.nombre,tipo:'apartamento',numero:u.numero||'',planta:u.planta||'',codigo:u.codigo||'',wifi:u.wifi||'',cod_acceso:!!u.cod_acceso})); }
-    else { out.push({id:'E'+e.id,raw:e.id,kind:'e',nombre:e.nombre,prop:e.nombre,tipo:'apartamento',whole:true,numero:e.numero||'',planta:e.planta||'',codigo:e.codigo||'',wifi:e.wifi||'',cod_acceso:!!e.cod_acceso}); }
+    const wr=e.wifi_red||'', wp=e.wifi_pass||'';
+    if(apts.length){ apts.forEach(u=>out.push({id:u.id,raw:u.id,kind:'u',nombre:u.nombre,prop:e.nombre,tipo:'apartamento',numero:u.numero||'',planta:u.planta||'',codigo:u.codigo||'',wifi:u.wifi||'',wifi_red:wr,wifi_pass:wp,cod_acceso:!!u.cod_acceso})); }
+    else { out.push({id:'E'+e.id,raw:e.id,kind:'e',nombre:e.nombre,prop:e.nombre,tipo:'apartamento',whole:true,numero:e.numero||'',planta:e.planta||'',codigo:e.codigo||'',wifi:e.wifi||'',wifi_red:wr,wifi_pass:wp,cod_acceso:!!e.cod_acceso}); }
   });
   return out;
 }
@@ -4118,7 +4122,7 @@ async function tplForm(){
   return `<div class="panel" style="max-width:760px"><form class="box" onsubmit="return tplSave(event)" style="max-width:none">
     <div class="row"><div><label>Título</label><input id="tT" required value="${t.titulo?esc(t.titulo):''}"></div><div><label>Categoría</label><select id="tC">${TPL_CATS.map(c=>`<option ${t.cat===c?'selected':''}>${c}</option>`).join('')}</select></div></div>
     <label>Contenido</label><textarea id="tB" rows="6" required>${t.cuerpo?esc(t.cuerpo):''}</textarea>
-    <small style="color:var(--suave)">Variables: {propiedad} {NºUnidad} {NºPlanta} {código} {wifi}</small>
+    <small style="color:var(--suave)">Variables: {propiedad} {NºUnidad} {NºPlanta} {código} {wifi} {wifi_clave}</small>
     <div style="margin-top:10px"><label>Propiedad</label><input id="tProp" list="tPropDL" value="${esc(selProp)}" placeholder="Escribe o elige…" oninput="tplFormProp()">${propDL}</div>
     <div style="margin-top:10px"><label>Unidades <small style="color:var(--suave);font-weight:400">(deja la lista vacía = propiedad completa)</small></label>
       <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap"><select id="tUniPick" ${pickDisabled?'disabled':''} style="flex:1;min-width:160px">${unitOpts}</select><button class="btn ghost" type="button" onclick="tplUnitAdd()" style="padding:8px 12px;white-space:nowrap">+ Añadir</button></div>
@@ -4181,6 +4185,24 @@ async function saveCodes(){
     if(pl!==(u.planta||'')||cod!==(u.codigo||'')){const tbl=u.kind==='e'?'mant_edificios':'mant_unidades';await sb.from(tbl).update({planta:pl,codigo:cod}).eq('id',u.raw);
       if(cod!==(u.codigo||''))auditLog(`Cambió el código de acceso de ${u.nombre} (${u.codigo}→${cod})`,'codigo');n++;}}
   toast(n?`✓ ${n} cambio(s) guardados`:'Sin cambios');show('mensajes');
+}
+async function msgWifis(){
+  const {data}=await sb.from('mant_edificios').select('*').order('nombre');
+  const eds=data||[];
+  if(!eds.length) return `<div class="panel" style="color:var(--suave)">No hay propiedades en el catálogo. Créalas en Catálogos.</div>`;
+  const canE=canMsgEdit();
+  const rows=eds.map(e=>`<tr><td><b>${esc(e.nombre)}</b></td>
+    <td><input id="wr_${e.id}" value="${esc(e.wifi_red||'')}" placeholder="Nombre de la red" ${canE?'':'disabled'} style="padding:7px;border:1px solid var(--gris2);border-radius:7px;min-width:170px;font-family:inherit"></td>
+    <td><input id="wp_${e.id}" value="${esc(e.wifi_pass||'')}" placeholder="Contraseña" ${canE?'':'disabled'} style="padding:7px;border:1px solid var(--gris2);border-radius:7px;min-width:150px;font-weight:700;color:var(--azul);font-family:inherit"></td></tr>`).join('');
+  return `<div class="panel" style="background:var(--azul-claro);border:none;font-size:13.5px">📶 Guarda el <b>nombre de la red</b> y la <b>contraseña</b> WiFi de cada propiedad. Úsalas en las plantillas con <code>{wifi}</code> (red) y <code>{wifi_clave}</code> (contraseña).</div>
+    <div class="panel"><table><thead><tr><th>Propiedad</th><th>Red WiFi</th><th>Contraseña</th></tr></thead><tbody>${rows}</tbody></table>
+    ${canE?`<div style="margin-top:14px"><button class="btn" onclick="saveWifis()">💾 Guardar cambios</button></div>`:''}</div>`;
+}
+async function saveWifis(){
+  const {data}=await sb.from('mant_edificios').select('id,nombre,wifi_red,wifi_pass'); let n=0;
+  for(const e of (data||[])){ const r=val('wr_'+e.id), p=val('wp_'+e.id);
+    if(r!==(e.wifi_red||'')||p!==(e.wifi_pass||'')){ const{error}=await sb.from('mant_edificios').update({wifi_red:r,wifi_pass:p}).eq('id',e.id); if(error){alert(error.message);return;} try{auditLog('Actualizó el WiFi de '+e.nombre,'wifi');}catch(_){} n++; } }
+  toast(n?`✓ ${n} cambio(s) guardados`:'Sin cambios'); show('mensajes');
 }
 
 /* ---------------- COTIZACIONES DE PROVEEDORES ---------------- */
