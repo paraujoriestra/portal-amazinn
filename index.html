@@ -1167,7 +1167,7 @@ const NAV=[
   {id:'mensajes',ic:'💬',t:'Mensajes y plantillas', depts:['Atención al cliente'], seeRoles:['direccion']},
   {id:'transfer',ic:'🚐',t:'Transfer', depts:['Atención al cliente'], seeRoles:['direccion']},
   {id:'bitacora',ic:'📝',t:'Bitácoras', depts:['Atención al cliente'], seeRoles:['direccion']},
-  {id:'cierres',ic:'🧾',t:'Cierres de caja', depts:['Atención al cliente'], seeRoles:['direccion'], lockRoles:['empleado','responsable']},
+  {id:'cierres',ic:'🧾',t:'Cierres de caja', depts:['Atención al cliente','Finanzas'], seeRoles:['direccion']},
   {grp:'Marketing'},
   {id:'marca',ic:'🎨',t:'Marca y recursos'},
   {id:'carteles',ic:'🪧',t:'Carteles'},
@@ -1486,7 +1486,7 @@ function show(id){
   else if(id==='cotiprov'){ ld('<div class="page-title">Cotizaciones proveedores</div><div class="page-sub">Cargando…</div>'); pageCotiProv(); }
   else if(id==='backup'){ ld('<div class="page-title">Copia de seguridad</div><div class="page-sub">Cargando…</div>'); pageBackup(); }
   else if(id==='bitacora'){ ld('<div class="page-title">Bitácora</div><div class="page-sub">Cargando…</div>'); pageBitacora(); }
-  else if(id==='cierres'){ m.innerHTML='<div class="page-title">Cierres de caja</div><div class="panel" style="color:var(--suave)">🧾 Sección en construcción. Estará disponible próximamente.</div>'; }
+  else if(id==='cierres'){ ld('<div class="page-title">Cierres de caja</div><div class="page-sub">Cargando…</div>'); pageCierres(); }
   else if(id==='formacion'){ ld('<div class="page-title">Formaciones</div><div class="page-sub">Cargando…</div>'); pageFormacion(); }
   else if(id==='kpis'){ ld('<div class="page-title">KPIs</div><div class="page-sub">Cargando…</div>'); pageKpis(); }
   else if(id==='auditoria'){ ld('<div class="page-title">Auditoría</div><div class="page-sub">Cargando…</div>'); pageAuditoria(); }
@@ -3758,6 +3758,168 @@ function tplCancel(){ tplFormOpen=false; tplEditId=null; tplDraft={}; show('mens
 function tplFormProp(){ const p=(document.getElementById('tProp')||{}).value||''; const dl=document.getElementById('tUniDL'); const inp=document.getElementById('tUni'); if(!dl||!inp)return; const entries=TPL_UNI.filter(u=>u.prop===p); const whole=p&&entries.length===1&&entries[0].kind==='e'; inp.value=''; if(!p||whole){ dl.innerHTML=''; inp.disabled=true; inp.placeholder=whole?'Propiedad completa':'Todas las unidades'; } else { inp.disabled=false; inp.placeholder='Todas / escribe nº…'; dl.innerHTML=entries.filter(u=>u.kind==='u').map(u=>`<option value="${esc(u.nombre)}"></option>`).join(''); } }
 function canMsg(){return PROFILE.dept==='Atención al cliente'||isAdmin();}
 function canMsgEdit(){ if(isAdmin())return true; if(PROFILE.role!=='direccion')return false; const a=(PROFILE.area||''); return a==='Comercial'||a==='Atención al cliente'; }
+/* ===================== CIERRES DE CAJA (hotel · Panamá) ===================== */
+let ccTab='historial', ccView=null, CCAJA=[], ccFrom='', ccTo='', ccFiltOpen=false;
+const CC_BILLETES=[100,50,20,10,5,1];
+const CC_MONEDAS=[1,0.50,0.25,0.10,0.05,0.01];
+const CC_METODOS=[['efectivo','💵 Efectivo'],['tarjeta','💳 Tarjeta'],['yappy','📲 Yappy'],['ach','🏦 Transferencia / ACH'],['otros','➕ Otros']];
+function ccM(n){ return '$'+((parseFloat(n)||0).toFixed(2)); }
+function ccAllowedNow(){ if(isAdmin())return true; if(PROFILE.role==='direccion')return true; const dep=(PROFILE.dept||''),area=(PROFILE.area||''); if(dep==='Finanzas'||area==='Finanzas')return true; return false; }
+function ccCan(){ return ccAllowedNow(); }
+function ccDid(v){ return 'cc_d_'+(''+v).replace('.','_'); }
+function ccSetTab(t){ ccTab=t; ccView=null; show('cierres'); }
+function ccOpen(id){ ccView=id; show('cierres'); }
+function ccBack(){ ccView=null; show('cierres'); }
+function ccToggleFilt(){ ccFiltOpen=!ccFiltOpen; show('cierres'); }
+function ccSetFilt(k,v){ if(k==='from')ccFrom=v; else ccTo=v; show('cierres'); }
+function ccClearFilt(){ ccFrom=''; ccTo=''; show('cierres'); }
+function ccFiltered(){ return CCAJA.filter(c=>{ const f=c.fecha||''; if(ccFrom && f<ccFrom)return false; if(ccTo && f>ccTo)return false; return true; }); }
+function ccFiltBar(){ const anyF=ccFrom||ccTo; const inp='padding:7px 10px;border:1px solid var(--gris2);border-radius:8px;font-size:13px;font-family:inherit';
+  return `<div style="margin-bottom:12px;display:flex;gap:8px;align-items:center;flex-wrap:wrap"><button class="inc-chip ${(ccFiltOpen||anyF)?'on':''}" onclick="ccToggleFilt()">🔎 Filtros${anyF?' •':''}</button></div>
+  ${ccFiltOpen?`<div class="inc-filters" style="align-items:center"><label style="font-size:12.5px;color:var(--suave);display:flex;gap:6px;align-items:center">Desde <input type="date" value="${esc(ccFrom)}" onchange="ccSetFilt('from',this.value)" style="${inp}"></label><label style="font-size:12.5px;color:var(--suave);display:flex;gap:6px;align-items:center">Hasta <input type="date" value="${esc(ccTo)}" onchange="ccSetFilt('to',this.value)" style="${inp}"></label>${anyF?`<button class="inc-clear" onclick="ccClearFilt()">✕ Limpiar</button>`:''}</div>`:''}`;
+}
+async function pageCierres(){
+  if(!ccAllowedNow()){ document.getElementById('main').innerHTML='<div class="page-title">🧾 Cierres de caja</div><div class="panel" style="color:var(--suave)">🧾 Sección disponible <b>muy pronto</b>.</div>'; return; }
+  const r=await sb.from('cierres_caja').select('*').order('fecha',{ascending:false}).order('id',{ascending:false});
+  CCAJA=r.data||[];
+  const tab=(k,l)=>`<button class="asg-tab ${ccTab===k&&ccView==null?'on':''}" onclick="ccSetTab('${k}')">${l}</button>`;
+  const tabs=`<div class="page-title">🧾 Cierres de caja</div><div class="page-sub">Arqueo y cuadre de caja por turno · Recepción del hotel</div>
+    <div class="asg-tabs">${tab('historial','🗂️ Historial')}${tab('panel','📊 Panel')}${ccCan()?tab('nuevo','➕ Nuevo cierre'):''}</div>`;
+  let body;
+  if(ccView!=null) body=ccDetail(ccView);
+  else if(ccTab==='nuevo'&&ccCan()) body=ccForm();
+  else if(ccTab==='panel') body=ccFiltBar()+ccPanel();
+  else body=ccFiltBar()+ccHistorial();
+  document.getElementById('main').innerHTML=tabs+body;
+  if(ccTab==='nuevo'&&ccView==null&&ccCan()){ try{ccCalc();}catch(e){} }
+}
+function ccHistorial(){
+  const L=ccFiltered();
+  if(!L.length) return `<div class="panel" style="color:var(--suave)">No hay cierres${(ccFrom||ccTo)?' en ese rango de fechas':' registrados'}.${ccCan()&&!CCAJA.length?' Crea el primero en “Nuevo cierre”.':''}</div>`;
+  return `<div class="cc-grid">${L.map(c=>{ const dif=parseFloat(c.diferencia)||0; const col=dif===0?'#1e8a5a':(dif>0?'#b9770e':'#c0392b'); const lbl=dif===0?'Cuadrada':(dif>0?'Sobrante':'Faltante');
+    return `<div class="panel" style="margin:0;cursor:pointer" onclick="ccOpen(${c.id})">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><b>${esc(fechaLarga(c.fecha))}</b><span class="badge" style="background:#eef2f7;color:#34557a">${esc(c.turno||'')}</span></div>
+      <div style="font-size:13px;color:var(--suave);margin:4px 0 8px">👤 ${esc(c.responsable||'—')}</div>
+      <div style="display:flex;justify-content:space-between;font-size:13.5px"><span>Ventas del turno</span><b>${ccM(c.ventas_total)}</b></div>
+      <div style="display:flex;justify-content:space-between;font-size:13.5px;margin-top:3px"><span>Diferencia</span><b style="color:${col}">${dif>0?'+':''}${ccM(dif)} · ${lbl}</b></div>
+    </div>`;}).join('')}</div>`;
+}
+function ccPanel(){
+  const L=ccFiltered();
+  if(!L.length) return `<div class="panel" style="color:var(--suave)">No hay cierres${(ccFrom||ccTo)?' en ese rango':''} para analizar.</div>`;
+  const sum=(f)=>L.reduce((a,c)=>a+(parseFloat(f(c))||0),0);
+  const ventas=sum(c=>c.ventas_total);
+  const met={}; CC_METODOS.forEach(([k])=>met[k]=L.reduce((a,c)=>a+(parseFloat((c.metodos||{})[k])||0),0));
+  const gastos=sum(c=>c.gastos);
+  const descN=L.filter(c=>(parseFloat(c.diferencia)||0)!==0);
+  const faltante=L.reduce((a,c)=>{const d=parseFloat(c.diferencia)||0;return a+(d<0?d:0);},0);
+  const sobrante=L.reduce((a,c)=>{const d=parseFloat(c.diferencia)||0;return a+(d>0?d:0);},0);
+  const porTurno={}; L.forEach(c=>{const t=c.turno||'—'; porTurno[t]=porTurno[t]||{n:0,v:0}; porTurno[t].n++; porTurno[t].v+=(parseFloat(c.ventas_total)||0);});
+  const porResp={}; L.forEach(c=>{const t=c.responsable||'—'; porResp[t]=(porResp[t]||0)+(parseFloat(c.ventas_total)||0);});
+  const kpi=(n,l,col)=>`<div class="kpi"><div class="kpi-n"${col?` style="color:${col}"`:''}>${n}</div><div class="kpi-l">${l}</div></div>`;
+  const barRows=(obj,fmt)=>{ const arr=Object.entries(obj).sort((a,b)=>b[1]-a[1]); const mx=Math.max(1,...arr.map(x=>x[1])); return arr.map(([k,v])=>`<div class="kp-row"><span class="kp-k">${esc(k)}</span><span class="kp-bar"><i style="width:${Math.round(v/mx*100)}%"></i></span><b class="kp-v">${fmt(v)}</b></div>`).join(''); };
+  const metHTML=CC_METODOS.map(([k,l])=>`<div class="kp-row"><span class="kp-k">${l}</span><span class="kp-bar"><i style="width:${ventas?Math.round(met[k]/Math.max(1,ventas)*100):0}%"></i></span><b class="kp-v">${ccM(met[k])}</b></div>`).join('');
+  return `<div class="kpi-cards">
+      ${kpi(L.length,'Cierres')}
+      ${kpi(ccM(ventas),'Ventas totales')}
+      ${kpi(ccM(ventas/L.length),'Media por cierre')}
+      ${kpi(ccM(met.efectivo),'En efectivo')}
+      ${kpi(ccM(met.tarjeta),'En tarjeta')}
+      ${kpi(ccM(gastos),'Gastos efectivo')}
+      ${kpi(descN.length,'Cierres descuadrados',descN.length?'#c0392b':'#1e8a5a')}
+      ${kpi(ccM(sobrante+faltante),'Descuadre neto',(sobrante+faltante)===0?'#1e8a5a':'#c0392b')}
+    </div>
+    <div class="kp-grid2">
+      <div class="panel"><h2>💳 Ventas por método de pago</h2>${metHTML}</div>
+      <div class="panel"><h2>🕐 Ventas por turno</h2>${barRows(Object.fromEntries(Object.entries(porTurno).map(([k,v])=>[k,v.v])),ccM)||'<div style="color:var(--suave);font-size:13px">—</div>'}</div>
+    </div>
+    <div class="panel"><h2>👤 Ventas por responsable</h2>${barRows(porResp,ccM)||'<div style="color:var(--suave);font-size:13px">—</div>'}</div>
+    ${descN.length?`<div class="panel" style="background:#fdecea;border:1px solid #f5c6cb"><h2 style="margin-top:0;color:#c0392b">⚠ Cierres con descuadre (${descN.length})</h2>${descN.map(c=>{const d=parseFloat(c.diferencia)||0;return `<div style="display:flex;justify-content:space-between;font-size:13.5px;padding:3px 0;cursor:pointer" onclick="ccOpen(${c.id})"><span>${esc(fechaLarga(c.fecha))} · ${esc(c.turno||'')} · ${esc(c.responsable||'')}</span><b style="color:${d>0?'#b9770e':'#c0392b'}">${d>0?'+':''}${ccM(d)}</b></div>`;}).join('')}</div>`:'<div class="panel" style="background:#e4f5ec;border:1px solid #bfe7c4;color:#1e8a5a;font-weight:600">✅ Todos los cierres del periodo cuadran perfectamente.</div>'}`;
+}
+function ccForm(){
+  const ss='width:100%;padding:9px 11px;border:1px solid var(--gris2);border-radius:8px;font-family:inherit;font-size:14px';
+  const hoy=hoyISO();
+  const metRows=CC_METODOS.map(([k,l])=>`<div><label style="font-size:12.5px;color:var(--suave)">${l}</label><input id="cc_m_${k}" type="number" min="0" step="0.01" value="" placeholder="0.00" oninput="ccCalc()" style="${ss}"></div>`).join('');
+  const denomRow=(arr,titulo)=>`<div style="font-weight:600;font-size:12.5px;margin:8px 0 4px">${titulo}</div><div class="cc-denoms">${arr.map(v=>`<div class="cc-den"><span>${ccM(v)}</span><input id="${ccDid(v)}" type="number" min="0" step="1" placeholder="0" oninput="ccCalc()"></div>`).join('')}</div>`;
+  return `<div style="margin-bottom:12px"><button onclick="ccSetTab('historial')" style="background:none;border:none;color:var(--azul);font-weight:600;font-size:14px;cursor:pointer;font-family:inherit;padding:6px 4px">← Volver al listado</button></div>
+  <div class="cc-cols">
+    <div class="panel"><h2 style="margin-top:0">Datos del turno</h2>
+      <div class="row"><div><label>Fecha</label><input id="cc_fecha" type="date" value="${esc(hoy)}" style="${ss}"></div>
+        <div><label>Turno</label><select id="cc_turno" style="${ss}"><option>Mañana</option><option selected>Tarde</option><option>Noche</option></select></div></div>
+      <label>Responsable de caja</label><input id="cc_resp" value="${esc(PROFILE.nombre||'')}" style="${ss}">
+      <label>Fondo de caja inicial (USD)</label><input id="cc_fondo" type="number" min="0" step="0.01" value="200" placeholder="0.00" oninput="ccCalc()" style="${ss}">
+      <h2 style="margin:16px 0 6px">Ingresos por método de pago</h2>
+      <div class="row" style="flex-wrap:wrap;gap:10px">${metRows}</div>
+      <h2 style="margin:16px 0 6px">Gastos / salidas de efectivo</h2>
+      <div class="row"><div><label>Importe (USD)</label><input id="cc_gastos" type="number" min="0" step="0.01" value="" placeholder="0.00" oninput="ccCalc()" style="${ss}"></div>
+        <div><label>Motivo</label><input id="cc_gastos_motivo" placeholder="Ej: compra de hielo, propinas…" style="${ss}"></div></div>
+      <label style="margin-top:10px;display:block">Observaciones</label><textarea id="cc_obs" rows="2" style="${ss}" placeholder="Incidencias del turno, notas…"></textarea>
+    </div>
+    <div class="panel"><h2 style="margin-top:0">Arqueo de efectivo (USD)</h2>
+      <p style="font-size:12px;color:var(--suave);margin:-4px 0 8px">Cuenta los billetes y monedas reales en caja.</p>
+      ${denomRow(CC_BILLETES,'Billetes')}
+      ${denomRow(CC_MONEDAS,'Monedas')}
+      <div id="ccResumen" style="margin-top:14px"></div>
+      <div style="margin-top:14px"><button class="btn" onclick="ccSave()">💾 Guardar cierre</button></div>
+    </div>
+  </div>`;
+}
+function ccCalc(){
+  const g=id=>parseFloat((document.getElementById(id)||{}).value)||0;
+  const fondo=g('cc_fondo'), efec=g('cc_m_efectivo'), gastos=g('cc_gastos');
+  let contado=0; [...CC_BILLETES,...CC_MONEDAS].forEach(v=>{ contado+=v*(parseInt((document.getElementById(ccDid(v))||{}).value)||0); });
+  let ventas=0; CC_METODOS.forEach(([k])=>ventas+=g('cc_m_'+k));
+  const esperado=fondo+efec-gastos; const dif=Math.round((contado-esperado)*100)/100;
+  const col=dif===0?'#1e8a5a':(dif>0?'#b9770e':'#c0392b'); const lbl=dif===0?'✅ Caja cuadrada':(dif>0?'⚠ Sobrante':'⚠ Faltante');
+  const box=document.getElementById('ccResumen'); if(!box)return;
+  const line=(a,b,bold)=>`<div style="display:flex;justify-content:space-between;padding:4px 0;font-size:13.5px${bold?';font-weight:700':''}"><span>${a}</span><span>${b}</span></div>`;
+  box.innerHTML=`<div style="border-top:1px solid var(--gris2);padding-top:8px">
+    ${line('Ventas totales del turno',ccM(ventas))}
+    ${line('Esperado en efectivo',ccM(esperado))}
+    ${line('Contado (arqueo)',ccM(contado))}
+    <div style="display:flex;justify-content:space-between;padding:8px 0 0;font-size:15px;font-weight:800;color:${col};border-top:1px dashed var(--gris2);margin-top:4px"><span>${lbl}</span><span>${dif>0?'+':''}${ccM(dif)}</span></div>
+  </div>`;
+}
+async function ccSave(){
+  const g=id=>(document.getElementById(id)||{}).value;
+  const gn=id=>parseFloat((document.getElementById(id)||{}).value)||0;
+  const metodos={}; CC_METODOS.forEach(([k])=>metodos[k]=gn('cc_m_'+k));
+  const arqueo={}; [...CC_BILLETES,...CC_MONEDAS].forEach(v=>{ const q=parseInt((document.getElementById(ccDid(v))||{}).value)||0; if(q) arqueo[v]=q; });
+  let contado=0; for(const v in arqueo) contado+=parseFloat(v)*arqueo[v];
+  let ventas=0; for(const k in metodos) ventas+=metodos[k];
+  const fondo=gn('cc_fondo'), gastos=gn('cc_gastos'); const esperado=fondo+metodos.efectivo-gastos; const dif=Math.round((contado-esperado)*100)/100;
+  const row={ fecha:g('cc_fecha')||hoyISO(), turno:g('cc_turno'), responsable:g('cc_resp')||PROFILE.nombre, fondo_inicial:fondo,
+    metodos, gastos, gastos_motivo:g('cc_gastos_motivo')||null, arqueo, contado, esperado, diferencia:dif, ventas_total:ventas,
+    observaciones:g('cc_obs')||null, creado_por:ME.id, creado_por_nombre:PROFILE.nombre, created_at:new Date().toISOString() };
+  const {error}=await sb.from('cierres_caja').insert(row); if(error){ alert('No se pudo guardar: '+error.message); return; }
+  toast('✓ Cierre de caja guardado'); ccTab='historial'; ccView=null; show('cierres');
+}
+function ccDetail(id){
+  const c=CCAJA.find(x=>String(x.id)===String(id)); if(!c) return `<button class="btn ghost" onclick="ccBack()">← Volver</button><div class="panel">No encontrado.</div>`;
+  const met=c.metodos||{}; const arq=c.arqueo||{};
+  const dif=parseFloat(c.diferencia)||0; const col=dif===0?'#1e8a5a':(dif>0?'#b9770e':'#c0392b'); const lbl=dif===0?'✅ Caja cuadrada':(dif>0?'⚠ Sobrante':'⚠ Faltante');
+  const metRows=CC_METODOS.filter(([k])=>met[k]).map(([k,l])=>`<div style="display:flex;justify-content:space-between;padding:3px 0;font-size:13.5px"><span>${l}</span><b>${ccM(met[k])}</b></div>`).join('')||'<div style="color:var(--suave);font-size:13px">—</div>';
+  const arqRows=[...CC_BILLETES,...CC_MONEDAS].filter(v=>arq[v]).map(v=>`<div style="display:flex;justify-content:space-between;padding:2px 0;font-size:13px"><span>${ccM(v)} × ${arq[v]}</span><b>${ccM(parseFloat(v)*arq[v])}</b></div>`).join('')||'<div style="color:var(--suave);font-size:13px">—</div>';
+  return `<div style="margin-bottom:14px;display:flex;gap:10px;flex-wrap:wrap;align-items:center"><button onclick="ccBack()" style="background:none;border:none;color:var(--azul);font-weight:600;font-size:14px;cursor:pointer;font-family:inherit;padding:6px 4px">← Volver al listado</button><button class="btn" onclick="ccPDF()" style="margin-left:auto">🖨️ Imprimir / PDF</button></div>
+  <div id="ccDoc" class="cc-cols">
+    <div class="panel"><h2 style="margin-top:0">${esc(fechaLarga(c.fecha))} · ${esc(c.turno||'')}</h2>
+      <div style="font-size:13.5px;color:var(--suave);margin-bottom:10px">👤 Responsable: <b style="color:var(--texto)">${esc(c.responsable||'—')}</b></div>
+      <div style="display:flex;justify-content:space-between;padding:3px 0;font-size:13.5px"><span>Fondo de caja inicial</span><b>${ccM(c.fondo_inicial)}</b></div>
+      <h3 class="inc-h3">Ingresos por método</h3>${metRows}
+      <div style="display:flex;justify-content:space-between;padding:6px 0 0;border-top:1px solid var(--gris2);margin-top:6px;font-weight:700"><span>Ventas totales</span><span>${ccM(c.ventas_total)}</span></div>
+      ${(parseFloat(c.gastos)||0)?`<h3 class="inc-h3">Gastos de efectivo</h3><div style="display:flex;justify-content:space-between;font-size:13.5px"><span>${esc(c.gastos_motivo||'Gastos')}</span><b>−${ccM(c.gastos)}</b></div>`:''}
+      ${c.observaciones?`<h3 class="inc-h3">Observaciones</h3><div style="font-size:13.5px;white-space:pre-wrap">${esc(c.observaciones)}</div>`:''}
+    </div>
+    <div class="panel"><h2 style="margin-top:0">Arqueo de efectivo</h2>${arqRows}
+      <div style="border-top:1px solid var(--gris2);margin-top:8px;padding-top:8px">
+        <div style="display:flex;justify-content:space-between;padding:3px 0;font-size:13.5px"><span>Esperado en efectivo</span><b>${ccM(c.esperado)}</b></div>
+        <div style="display:flex;justify-content:space-between;padding:3px 0;font-size:13.5px"><span>Contado</span><b>${ccM(c.contado)}</b></div>
+        <div style="display:flex;justify-content:space-between;padding:8px 0 0;font-size:16px;font-weight:800;color:${col};border-top:1px dashed var(--gris2);margin-top:4px"><span>${lbl}</span><span>${dif>0?'+':''}${ccM(dif)}</span></div>
+      </div></div>
+  </div>`;
+}
+function ccPDF(){ const el=document.getElementById('ccDoc'); if(!el)return; if(typeof html2pdf==='undefined'){ window.print(); return; } html2pdf().set({margin:8,filename:'cierre_caja.pdf',image:{type:'jpeg',quality:.98},html2canvas:{scale:2,backgroundColor:'#ffffff'},jsPDF:{unit:'mm',format:'a4',orientation:'portrait'}}).from(el).save(); }
+
 function fillTpl(c,u){return (c||'')
   .split('{propiedad}').join(u.prop||'')
   .split('{NºUnidad}').join(u.nombre||'').split('{NoUnidad}').join(u.nombre||'')
@@ -3830,10 +3992,40 @@ async function msgManage(){
       <button onclick="tplDup(${t.id})">⧉ Duplicar</button>
       <button onclick="tplDelete(${t.id})" style="color:#c0392b">🗑 Eliminar</button>
     </div></details></div>`).join('');
-  return `<div style="margin-bottom:14px"><button class="btn" onclick="tplNew()">+ Nueva plantilla</button></div>
+  return `<div style="margin-bottom:14px;display:flex;gap:10px;flex-wrap:wrap;align-items:center"><button class="btn" onclick="tplNew()">+ Nueva plantilla</button><button class="btn ghost" onclick="tplExport()">⬇️ Descargar copia (Excel)</button><label class="btn ghost" style="cursor:pointer">⬆️ Importar copia<input type="file" accept=".xlsx,.xls" style="display:none" onchange="tplImport(this)"></label></div>
     <div class="panel"><h2>Plantillas (${(tpls||[]).length})</h2>${rows||'<div style="color:var(--suave)">Sin plantillas.</div>'}</div>`;
 }
 async function tplDelete(id){ if(!confirm('¿Eliminar esta plantilla de forma permanente?'))return; const{error}=await sb.from('plantillas').delete().eq('id',id); if(error){alert(error.message);return;} try{auditLog('Eliminó una plantilla','plantilla');}catch(e){} toast('Plantilla eliminada'); show('mensajes'); }
+async function tplExport(){
+  if(typeof XLSX==='undefined'){ alert('No se pudo cargar el lector de Excel.'); return; }
+  const {data}=await sb.from('plantillas').select('*').order('id'); const list=data||[];
+  if(!list.length){ alert('No hay plantillas para descargar.'); return; }
+  const out=await loadUnidades(); const nameById={}; out.forEach(u=>{ nameById[String(u.id)]=u.kind==='u'?(u.prop+' · '+u.nombre):(u.prop+' (completa)'); });
+  const cols=['Título','Categoría','Contenido','Apartamentos','unidades_id'];
+  const rows=list.map(t=>[t.titulo||'',t.cat||'',t.cuerpo||'',(t.unidades||[]).map(id=>nameById[String(id)]||id).join(' ; '),(t.unidades||[]).join(';')]);
+  const ws=XLSX.utils.aoa_to_sheet([cols,...rows]); const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'Plantillas'); XLSX.writeFile(wb,'plantillas_copia.xlsx');
+}
+async function tplImport(input){
+  const f=input.files[0]; input.value=''; if(!f) return;
+  if(!canMsgEdit()){ alert('No tienes permiso para importar plantillas.'); return; }
+  if(typeof XLSX==='undefined'){ alert('No se pudo cargar el lector de Excel.'); return; }
+  try{
+    const buf=await f.arrayBuffer(); const wb=XLSX.read(buf,{type:'array'}); const ws=wb.Sheets[wb.SheetNames[0]];
+    const rows=XLSX.utils.sheet_to_json(ws,{defval:''});
+    const out=await loadUnidades(); const idByName={}; out.forEach(u=>{ idByName[(u.prop+' · '+u.nombre)]=String(u.id); idByName[u.prop+' (completa)']=String(u.id); });
+    const mapped=rows.map(r=>{ const m={}; Object.keys(r).forEach(k=>m[normKey(k)]=r[k]);
+      const tit=(rowGet(m,'titulo','título','title')||'').trim(); if(!tit) return null;
+      let unis=[]; const idsRaw=rowGet(m,'unidades_id','unidades id','ids');
+      if(idsRaw) unis=(''+idsRaw).split(/[;,]+/).map(s=>s.trim()).filter(Boolean);
+      if(!unis.length){ const apts=rowGet(m,'apartamentos','apartamento','unidades'); if(apts) unis=(''+apts).split(/;+/).map(s=>idByName[s.trim()]).filter(Boolean); }
+      return { titulo:tit, cat:(rowGet(m,'categoria','categoría','cat')||'').trim()||null, cuerpo:(rowGet(m,'contenido','cuerpo','texto','mensaje')||''), unidades:unis.map(String), autor_nombre:PROFILE.nombre };
+    }).filter(Boolean);
+    if(!mapped.length){ alert('No se reconocieron plantillas en el archivo. Usa una copia descargada con el botón "Descargar copia".'); return; }
+    if(!confirm('Se importarán '+mapped.length+' plantilla(s). (Se añaden; si ya existen, se duplicarán.) ¿Continuar?')) return;
+    const {error}=await sb.from('plantillas').insert(mapped); if(error){ alert('Error al importar: '+error.message); return; }
+    toast('✓ '+mapped.length+' plantilla(s) importadas'); show('mensajes');
+  }catch(e){ alert('No se pudo leer el archivo: '+((e&&e.message)||e)); }
+}
 let tplDraft={};
 function tplNew(){tplEditId=null;tplDraft={};tplFormOpen=true;show('mensajes');}
 function tplEdit(t){tplEditId=t.id;tplDraft=t;tplFormOpen=true;show('mensajes');}
@@ -5965,6 +6157,13 @@ function asgBuildPDF(d){
 }
 
 function asgEnsureStyle(){ if(document.getElementById('asgStyle')) return; const s=document.createElement('style'); s.id='asgStyle'; s.textContent=`
+.cc-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:14px}
+  .cc-cols{display:grid;grid-template-columns:1fr 1fr;gap:14px;align-items:start}
+  @media(max-width:760px){.cc-cols{grid-template-columns:1fr}}
+  .cc-denoms{display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:8px}
+  .cc-den{display:flex;align-items:center;gap:6px;border:1px solid var(--gris2);border-radius:8px;padding:4px 8px}
+  .cc-den span{font-size:12.5px;color:var(--suave);min-width:46px}
+  .cc-den input{width:100%;border:none;border-bottom:1px solid var(--gris2);font-family:inherit;font-size:14px;padding:2px 0;text-align:right}
   .asg-tabs{display:flex;gap:8px;margin:4px 0 16px;border-bottom:2px solid var(--gris2);flex-wrap:wrap}
   .asg-tab{background:none;border:none;border-bottom:3px solid transparent;margin-bottom:-2px;padding:9px 14px;font-size:14px;font-weight:600;color:var(--suave);cursor:pointer;font-family:inherit}
   .asg-tab.on{color:var(--azul);border-bottom-color:var(--azul)}
