@@ -1147,6 +1147,7 @@ const NAV=[
   {id:'onboarding',ic:'🚀',t:'Onboarding', lockRoles:['empleado','responsable']},
   {id:'sugerencias',ic:'💡',t:'Sugerencias'},
   {id:'kudos',ic:'🏅',t:'Reconocimientos', roles:['responsable','direccion','admin']},
+  {id:'reclutamiento',ic:'🧑‍💼',t:'Reclutamiento', depts:['Recursos Humanos','RRHH'], seeRoles:['direccion']},
   {id:'cumple',ic:'🎂',t:'Cumpleaños'},
   {id:'organigrama',ic:'🏢',t:'Organigrama'},
   {id:'perfil',ic:'👤',t:'Mi perfil'},
@@ -1489,6 +1490,7 @@ function show(id){
   else if(id==='bitacora'){ ld('<div class="page-title">Bitácora</div><div class="page-sub">Cargando…</div>'); pageBitacora(); }
   else if(id==='cierres'){ ld('<div class="page-title">Cierres de caja</div><div class="page-sub">Cargando…</div>'); pageCierres(); }
   else if(id==='glosario'){ pageGlosario(); }
+  else if(id==='reclutamiento'){ ld('<div class="page-title">Reclutamiento</div><div class="page-sub">Cargando…</div>'); pageReclutamiento(); }
   else if(id==='formacion'){ ld('<div class="page-title">Formaciones</div><div class="page-sub">Cargando…</div>'); pageFormacion(); }
   else if(id==='kpis'){ ld('<div class="page-title">KPIs</div><div class="page-sub">Cargando…</div>'); pageKpis(); }
   else if(id==='auditoria'){ ld('<div class="page-title">Auditoría</div><div class="page-sub">Cargando…</div>'); pageAuditoria(); }
@@ -3825,6 +3827,59 @@ function glosRender(){
   if(!list.length){ box.innerHTML='<div class="panel" style="color:var(--suave)">Sin resultados para «'+esc(glosQ)+'».</div>'; return; }
   box.innerHTML=`<div class="panel"><div style="font-size:12px;color:var(--suave);margin-bottom:8px">${list.length} término(s)</div>`+list.map(x=>`<div style="padding:9px 0;border-bottom:1px solid var(--gris)"><b style="color:var(--azul)">${esc(x.t)}</b><div style="font-size:13.5px;color:var(--texto);margin-top:2px">${esc(x.d)}</div></div>`).join('')+`</div>`;
 }
+/* ===================== RECLUTAMIENTO (captación de CV) ===================== */
+let RECL=[], reclArea='';
+const RECL_AREAS=['Atención al cliente','Mantenimiento','Limpieza','Almacén','Nocturnos','Otros'];
+const RECL_STAGES=[['recibido','📥 Recibidos','#2980b9'],['preseleccionado','⭐ Preseleccionados','#16a085'],['reserva','💾 Reserva','#b9770e'],['descartado','❌ Descartados','#c0392b']];
+function reclStageLbl(k){const s=RECL_STAGES.find(x=>x[0]===k);return s?s[1]:k;}
+function reclFecha(d){ if(!d)return''; const x=new Date(d); return isNaN(x)?'':x.toLocaleDateString('es-ES',{day:'2-digit',month:'short',year:'numeric'}); }
+async function pageReclutamiento(){
+  asgEnsureStyle();
+  const {data}=await sb.from('reclutamiento').select('*').order('created_at',{ascending:false});
+  RECL=data||[];
+  const filt=reclArea?RECL.filter(r=>(r.areas||[]).includes(reclArea)):RECL;
+  const applyURL=new URL('aplica.html',location.href).href;
+  const qrURL='https://api.qrserver.com/v1/create-qr-code/?size=200x200&margin=8&data='+encodeURIComponent(applyURL);
+  const capta=`<div class="panel" style="display:flex;gap:18px;flex-wrap:wrap;align-items:center">
+    <div style="text-align:center"><img src="${qrURL}" alt="QR" style="width:130px;height:130px;border-radius:10px;border:1px solid var(--gris2)"><div style="font-size:11px;color:var(--suave);margin-top:4px">Escanéalo para aplicar</div></div>
+    <div style="flex:1;min-width:220px">
+      <div style="font-weight:700;color:var(--azul);font-size:15px">📣 Recibe CV desde fuera</div>
+      <p style="font-size:13px;color:var(--suave);margin:6px 0 10px">Comparte este enlace o el QR (en redes, anuncios o en recepción). Cualquier persona podrá enviar su CV y aparecerá en «Recibidos».</p>
+      <div style="display:flex;gap:8px;flex-wrap:wrap"><input id="reclLink" value="${esc(applyURL)}" readonly style="flex:1;min-width:200px;padding:9px 12px;border:1px solid var(--gris2);border-radius:9px;font-size:13px;font-family:inherit"><button class="btn" onclick="reclCopy()">📋 Copiar enlace</button><a class="btn ghost" href="${qrURL}" target="_blank" download="QR-aplica-amazinn.png">⬇️ Descargar QR</a></div>
+    </div></div>`;
+  const areaBtns=['',...RECL_AREAS].map(a=>`<button class="btn ${reclArea===a?'':'ghost'}" style="padding:5px 12px;font-size:12.5px" onclick="reclArea='${a}';show('reclutamiento')">${a||'Todas'}</button>`).join(' ');
+  const cols=RECL_STAGES.map(([k,lbl,col])=>{
+    const items=filt.filter(r=>(r.estado||'recibido')===k);
+    return `<div style="flex:1;min-width:250px;background:#f5f8fb;border-radius:12px;padding:10px">
+      <div style="display:flex;justify-content:space-between;align-items:center;font-weight:800;font-size:12.5px;color:${col};margin-bottom:10px"><span>${lbl}</span><span style="background:${col};color:#fff;border-radius:12px;padding:1px 9px;font-size:11px">${items.length}</span></div>
+      ${items.map(reclCard).join('')||'<div style="color:var(--suave);font-size:12px;padding:8px 4px">Sin candidatos.</div>'}
+    </div>`;
+  }).join('');
+  document.getElementById('main').innerHTML=`<div class="page-title">Reclutamiento</div><div class="page-sub">Capta, recibe y clasifica las candidaturas de tu equipo</div>
+    ${capta}
+    <div class="panel" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><span style="font-size:12.5px;font-weight:600;color:var(--suave)">Filtrar por área:</span>${areaBtns}</div>
+    <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-start">${cols}</div>`;
+}
+function reclCard(r){
+  const areas=(r.areas||[]).map(a=>`<span style="background:#eef2f7;color:#34557a;padding:2px 8px;border-radius:12px;font-size:10.5px;font-weight:600">${esc(a)}</span>`).join(' ');
+  const stageOpts=RECL_STAGES.map(([k,lbl])=>`<option value="${k}" ${ (r.estado||'recibido')===k?'selected':''}>${lbl}</option>`).join('');
+  return `<div style="background:#fff;border:1px solid var(--gris2);border-radius:10px;padding:11px 12px;margin-bottom:9px">
+    <div style="font-weight:700;font-size:14px">${esc(r.nombre||'—')}</div>
+    <div style="font-size:12.5px;color:var(--suave);margin:2px 0 6px">📞 ${esc(r.telefono||'—')} · ${reclFecha(r.created_at)}</div>
+    <div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:8px">${areas||''}</div>
+    ${r.notas?`<div style="font-size:12px;color:#41505e;background:#fafbfc;border-left:3px solid var(--gris2);padding:5px 8px;border-radius:0 6px 6px 0;margin-bottom:8px">📝 ${esc(r.notas)}</div>`:''}
+    <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+      ${r.cv_path?`<button class="btn ghost" style="padding:5px 10px;font-size:12px" onclick="reclCV('${esc(r.cv_path)}')">📄 Ver CV</button>`:'<span style="font-size:11px;color:var(--suave)">Sin CV</span>'}
+      <button class="btn ghost" style="padding:5px 10px;font-size:12px" onclick="reclNota(${r.id})">📝 Nota</button>
+      ${isAdmin()?`<button class="btn ghost" style="padding:5px 9px;font-size:12px;color:#c0392b" onclick="reclDel(${r.id})">🗑</button>`:''}
+      <select onchange="reclMove(${r.id},this.value)" style="margin-left:auto;padding:6px 8px;border:1px solid var(--gris2);border-radius:8px;font-size:12px;font-family:inherit">${stageOpts}</select>
+    </div></div>`;
+}
+function reclCopy(){ const el=document.getElementById('reclLink'); if(!el)return; el.select(); try{document.execCommand('copy');}catch(e){} try{navigator.clipboard&&navigator.clipboard.writeText(el.value);}catch(e){} toast('✓ Enlace copiado'); }
+async function reclMove(id,estado){ const{error}=await sb.from('reclutamiento').update({estado,revisado_por:PROFILE.nombre}).eq('id',id); if(error){alert(error.message);return;} try{auditLog('Movió un candidato a '+reclStageLbl(estado),'reclutamiento');}catch(_){} toast('✓ Movido a '+reclStageLbl(estado)); show('reclutamiento'); }
+async function reclNota(id){ const r=RECL.find(x=>String(x.id)===String(id)); const v=prompt('Nota interna sobre el candidato:', r&&r.notas?r.notas:''); if(v===null)return; const{error}=await sb.from('reclutamiento').update({notas:v}).eq('id',id); if(error){alert(error.message);return;} toast('✓ Nota guardada'); show('reclutamiento'); }
+async function reclDel(id){ if(!confirm('¿Eliminar este candidato y su CV? Esta acción no se puede deshacer.'))return; const r=RECL.find(x=>String(x.id)===String(id)); if(r&&r.cv_path){ try{await sb.storage.from('cv').remove([r.cv_path]);}catch(e){} } const{error}=await sb.from('reclutamiento').delete().eq('id',id); if(error){alert(error.message);return;} toast('✓ Eliminado'); show('reclutamiento'); }
+async function reclCV(path){ try{ const{data,error}=await sb.storage.from('cv').createSignedUrl(path,3600); if(error||!data){alert('No se pudo abrir el CV: '+((error&&error.message)||'')); return;} window.open(data.signedUrl,'_blank'); }catch(e){ alert('No se pudo abrir el CV.'); } }
 /* ===================== CIERRES DE CAJA (hotel · Panamá) ===================== */
 let ccTab='historial', ccView=null, CCAJA=[], ccFrom='', ccTo='', ccFiltOpen=false;
 const CC_BILLETES=[100,50,20,10,5,1];
@@ -4019,9 +4074,8 @@ async function loadUnidades(){
   const eds=ed.data||[], uns=un.data||[]; const out=[];
   eds.forEach(e=>{
     const apts=uns.filter(u=>u.edificio===e.nombre && u.tipo!=='comun');
-    const wr=e.wifi_red||'', wp=e.wifi_pass||'';
-    if(apts.length){ apts.forEach(u=>out.push({id:u.id,raw:u.id,kind:'u',nombre:u.nombre,prop:e.nombre,tipo:'apartamento',numero:u.numero||'',planta:u.planta||'',codigo:u.codigo||'',wifi:u.wifi||'',wifi_red:wr,wifi_pass:wp,cod_acceso:!!u.cod_acceso})); }
-    else { out.push({id:'E'+e.id,raw:e.id,kind:'e',nombre:e.nombre,prop:e.nombre,tipo:'apartamento',whole:true,numero:e.numero||'',planta:e.planta||'',codigo:e.codigo||'',wifi:e.wifi||'',wifi_red:wr,wifi_pass:wp,cod_acceso:!!e.cod_acceso}); }
+    if(apts.length){ apts.forEach(u=>out.push({id:u.id,raw:u.id,kind:'u',nombre:u.nombre,prop:e.nombre,tipo:'apartamento',numero:u.numero||'',planta:u.planta||'',codigo:u.codigo||'',wifi:u.wifi||'',wifi_red:u.wifi_red||'',wifi_pass:u.wifi_pass||'',cod_acceso:!!u.cod_acceso})); }
+    else { out.push({id:'E'+e.id,raw:e.id,kind:'e',nombre:e.nombre,prop:e.nombre,tipo:'apartamento',whole:true,numero:e.numero||'',planta:e.planta||'',codigo:e.codigo||'',wifi:e.wifi||'',wifi_red:e.wifi_red||'',wifi_pass:e.wifi_pass||'',cod_acceso:!!e.cod_acceso}); }
   });
   return out;
 }
@@ -4187,21 +4241,23 @@ async function saveCodes(){
   toast(n?`✓ ${n} cambio(s) guardados`:'Sin cambios');show('mensajes');
 }
 async function msgWifis(){
-  const {data}=await sb.from('mant_edificios').select('*').order('nombre');
-  const eds=data||[];
-  if(!eds.length) return `<div class="panel" style="color:var(--suave)">No hay propiedades en el catálogo. Créalas en Catálogos.</div>`;
+  const uni=await loadUnidades();
+  if(!uni.length) return `<div class="panel" style="color:var(--suave)">No hay propiedades en el catálogo. Créalas en Catálogos.</div>`;
   const canE=canMsgEdit();
-  const rows=eds.map(e=>`<tr><td><b>${esc(e.nombre)}</b></td>
-    <td><input id="wr_${e.id}" value="${esc(e.wifi_red||'')}" placeholder="Nombre de la red" ${canE?'':'disabled'} style="padding:7px;border:1px solid var(--gris2);border-radius:7px;min-width:170px;font-family:inherit"></td>
-    <td><input id="wp_${e.id}" value="${esc(e.wifi_pass||'')}" placeholder="Contraseña" ${canE?'':'disabled'} style="padding:7px;border:1px solid var(--gris2);border-radius:7px;min-width:150px;font-weight:700;color:var(--azul);font-family:inherit"></td></tr>`).join('');
-  return `<div class="panel" style="background:var(--azul-claro);border:none;font-size:13.5px">📶 Guarda el <b>nombre de la red</b> y la <b>contraseña</b> WiFi de cada propiedad. Úsalas en las plantillas con <code>{wifi}</code> (red) y <code>{wifi_clave}</code> (contraseña).</div>
-    <div class="panel"><table><thead><tr><th>Propiedad</th><th>Red WiFi</th><th>Contraseña</th></tr></thead><tbody>${rows}</tbody></table>
+  let lastProp=null; const rows=uni.map(u=>{
+    const head=(u.prop!==lastProp)?`<tr><td colspan="3" style="background:#f1f5f9;font-weight:700;color:var(--azul);padding:8px 10px">🏢 ${esc(u.prop)}</td></tr>`:''; lastProp=u.prop;
+    return head+`<tr><td><b>${esc(u.nombre)}</b></td>
+      <td><input id="wr_${u.kind}_${u.raw}" value="${esc(u.wifi_red||'')}" placeholder="Nombre de la red" ${canE?'':'disabled'} style="padding:7px;border:1px solid var(--gris2);border-radius:7px;min-width:170px;font-family:inherit"></td>
+      <td><input id="wp_${u.kind}_${u.raw}" value="${esc(u.wifi_pass||'')}" placeholder="Contraseña" ${canE?'':'disabled'} style="padding:7px;border:1px solid var(--gris2);border-radius:7px;min-width:150px;font-weight:700;color:var(--azul);font-family:inherit"></td></tr>`;
+  }).join('');
+  return `<div class="panel" style="background:var(--azul-claro);border:none;font-size:13.5px">📶 Guarda el <b>nombre de la red</b> y la <b>contraseña</b> WiFi de <b>cada unidad</b>. Úsalas en las plantillas con <code>{wifi}</code> (red) y <code>{wifi_clave}</code> (contraseña).</div>
+    <div class="panel"><table><thead><tr><th>Unidad</th><th>Red WiFi</th><th>Contraseña</th></tr></thead><tbody>${rows}</tbody></table>
     ${canE?`<div style="margin-top:14px"><button class="btn" onclick="saveWifis()">💾 Guardar cambios</button></div>`:''}</div>`;
 }
 async function saveWifis(){
-  const {data}=await sb.from('mant_edificios').select('id,nombre,wifi_red,wifi_pass'); let n=0;
-  for(const e of (data||[])){ const r=val('wr_'+e.id), p=val('wp_'+e.id);
-    if(r!==(e.wifi_red||'')||p!==(e.wifi_pass||'')){ const{error}=await sb.from('mant_edificios').update({wifi_red:r,wifi_pass:p}).eq('id',e.id); if(error){alert(error.message);return;} try{auditLog('Actualizó el WiFi de '+e.nombre,'wifi');}catch(_){} n++; } }
+  const uni=await loadUnidades(); let n=0;
+  for(const u of uni){ const r=val('wr_'+u.kind+'_'+u.raw), p=val('wp_'+u.kind+'_'+u.raw);
+    if(r!==(u.wifi_red||'')||p!==(u.wifi_pass||'')){ const tbl=u.kind==='e'?'mant_edificios':'mant_unidades'; const{error}=await sb.from(tbl).update({wifi_red:r,wifi_pass:p}).eq('id',u.raw); if(error){alert(error.message);return;} try{auditLog('Actualizó el WiFi de '+u.prop+' · '+u.nombre,'wifi');}catch(_){} n++; } }
   toast(n?`✓ ${n} cambio(s) guardados`:'Sin cambios'); show('mensajes');
 }
 
