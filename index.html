@@ -1168,6 +1168,7 @@ const NAV=[
   {id:'transfer',ic:'🚐',t:'Transfer', depts:['Atención al cliente'], seeRoles:['direccion']},
   {id:'bitacora',ic:'📝',t:'Bitácoras', depts:['Atención al cliente'], seeRoles:['direccion']},
   {id:'cierres',ic:'🧾',t:'Cierres de caja', depts:['Atención al cliente','Finanzas'], seeRoles:['direccion']},
+  {id:'glosario',ic:'📖',t:'Glosario', depts:['Atención al cliente'], seeRoles:['direccion']},
   {grp:'Marketing'},
   {id:'marca',ic:'🎨',t:'Marca y recursos'},
   {id:'carteles',ic:'🪧',t:'Carteles'},
@@ -1487,6 +1488,7 @@ function show(id){
   else if(id==='backup'){ ld('<div class="page-title">Copia de seguridad</div><div class="page-sub">Cargando…</div>'); pageBackup(); }
   else if(id==='bitacora'){ ld('<div class="page-title">Bitácora</div><div class="page-sub">Cargando…</div>'); pageBitacora(); }
   else if(id==='cierres'){ ld('<div class="page-title">Cierres de caja</div><div class="page-sub">Cargando…</div>'); pageCierres(); }
+  else if(id==='glosario'){ pageGlosario(); }
   else if(id==='formacion'){ ld('<div class="page-title">Formaciones</div><div class="page-sub">Cargando…</div>'); pageFormacion(); }
   else if(id==='kpis'){ ld('<div class="page-title">KPIs</div><div class="page-sub">Cargando…</div>'); pageKpis(); }
   else if(id==='auditoria'){ ld('<div class="page-title">Auditoría</div><div class="page-sub">Cargando…</div>'); pageAuditoria(); }
@@ -3758,6 +3760,67 @@ function tplCancel(){ tplFormOpen=false; tplEditId=null; tplDraft={}; show('mens
 function tplFormProp(){ const p=(document.getElementById('tProp')||{}).value||''; const dl=document.getElementById('tUniDL'); const inp=document.getElementById('tUni'); if(!dl||!inp)return; const entries=TPL_UNI.filter(u=>u.prop===p); const whole=p&&entries.length===1&&entries[0].kind==='e'; inp.value=''; if(!p||whole){ dl.innerHTML=''; inp.disabled=true; inp.placeholder=whole?'Propiedad completa':'Todas las unidades'; } else { inp.disabled=false; inp.placeholder='Todas / escribe nº…'; dl.innerHTML=entries.filter(u=>u.kind==='u').map(u=>`<option value="${esc(u.nombre)}"></option>`).join(''); } }
 function canMsg(){return PROFILE.dept==='Atención al cliente'||isAdmin();}
 function canMsgEdit(){ if(isAdmin())return true; if(PROFILE.role!=='direccion')return false; const a=(PROFILE.area||''); return a==='Comercial'||a==='Atención al cliente'; }
+/* ===================== GLOSARIO (hotelería y alquiler vacacional) ===================== */
+const GLOSARIO=[
+  {t:'ADR (Average Daily Rate)',d:'Tarifa media diaria: ingresos por habitaciones ÷ habitaciones vendidas. Mide el precio medio al que se vende la noche.'},
+  {t:'Amenities',d:'Detalles y comodidades que se ofrecen al huésped (artículos de aseo, agua, café, etc.).'},
+  {t:'Booking window / Antelación',d:'Tiempo entre la fecha de reserva y la de llegada. Ayuda a anticipar la demanda.'},
+  {t:'Channel Manager',d:'Herramienta que sincroniza precios y disponibilidad en todas las OTAs y el motor propio para evitar overbooking.'},
+  {t:'Check-in',d:'Proceso de registro y entrada del huésped al alojamiento.'},
+  {t:'Check-out',d:'Proceso de salida del huésped y cierre de su estancia.'},
+  {t:'Check-in exprés / Self check-in',d:'Entrada autónoma del huésped (códigos, cerradura inteligente o lockbox) sin recepción presencial.'},
+  {t:'Cleaning fee / Tarifa de limpieza',d:'Cargo único por la limpieza del alojamiento, habitual en alquiler vacacional.'},
+  {t:'Comisión OTA',d:'Porcentaje que cobra la plataforma (Booking, Airbnb, Expedia…) por cada reserva.'},
+  {t:'Cuna / Sofá cama',d:'Equipamiento extra para pax adicionales; suele indicarse en la reserva.'},
+  {t:'Daypass',d:'Acceso por el día a instalaciones (piscina, spa) sin pernoctar.'},
+  {t:'Depósito / Fianza',d:'Importe retenido como garantía ante posibles daños; se devuelve tras el check-out si todo está correcto.'},
+  {t:'Early check-in',d:'Entrada anticipada antes de la hora estándar, sujeta a disponibilidad y a veces con cargo.'},
+  {t:'Estancia mínima (Minimum stay)',d:'Número mínimo de noches exigido para poder reservar en ciertas fechas.'},
+  {t:'Fecha valle / Gap night',d:'Noche suelta libre entre dos reservas; difícil de vender.'},
+  {t:'GDS',d:'Sistema global de distribución usado por agencias de viajes para reservar.'},
+  {t:'Hard / Soft check',d:'Revisión profunda (hard) o ligera (soft) del alojamiento entre estancias.'},
+  {t:'Host / Anfitrión',d:'Responsable de gestionar el alojamiento y la experiencia del huésped.'},
+  {t:'Housekeeping',d:'Departamento o tarea de limpieza y preparación de las unidades.'},
+  {t:'Huésped (Guest)',d:'Persona que se aloja; titular de la reserva o acompañante.'},
+  {t:'Late check-out',d:'Salida más tarde de la hora estándar, sujeta a disponibilidad y a veces con cargo.'},
+  {t:'Listing / Anuncio',d:'Ficha publicada de un alojamiento en una plataforma (fotos, descripción, precio).'},
+  {t:'Lockbox',d:'Caja de seguridad con código donde se dejan las llaves para entrada autónoma.'},
+  {t:'No-show',d:'Reserva en la que el huésped no se presenta ni cancela. Suele penalizarse.'},
+  {t:'Noche puente',d:'Noche entre dos festivos; alta demanda.'},
+  {t:'Occupancy / Ocupación',d:'% de unidades ocupadas sobre las disponibles en un periodo.'},
+  {t:'Overbooking',d:'Aceptar más reservas que unidades disponibles; puede obligar a reubicar huéspedes.'},
+  {t:'OTA (Online Travel Agency)',d:'Plataforma de reservas online: Booking, Airbnb, Expedia, Vrbo, etc.'},
+  {t:'Pax',d:'Número de personas de la reserva.'},
+  {t:'PMS (Property Management System)',d:'Software de gestión del alojamiento: reservas, check-in, facturación, limpieza (p. ej. Octorate, Avantio).'},
+  {t:'Política de cancelación',d:'Condiciones bajo las que el huésped puede anular y qué importe se reembolsa.'},
+  {t:'Rack rate / Tarifa rack',d:'Precio oficial máximo publicado, sin descuentos.'},
+  {t:'RevPAR',d:'Ingreso por habitación disponible: ADR × ocupación. Mide el rendimiento global.'},
+  {t:'Room service',d:'Servicio de comida o atención en la propia habitación.'},
+  {t:'Reseña / Review',d:'Valoración pública del huésped tras su estancia; clave para la reputación.'},
+  {t:'Temporada alta / baja',d:'Periodos de mayor o menor demanda que ajustan precios y estancias mínimas.'},
+  {t:'Tarifa no reembolsable',d:'Precio más bajo a cambio de no permitir cancelación con devolución.'},
+  {t:'Transfer',d:'Traslado del huésped (aeropuerto ↔ alojamiento u otros).'},
+  {t:'Turndown service',d:'Preparación de la habitación por la tarde/noche (apertura de cama, detalles).'},
+  {t:'Upselling / Upgrade',d:'Vender una mejora (unidad superior, servicios extra) para aumentar ingresos.'},
+  {t:'Walk-in',d:'Huésped que llega sin reserva previa y solicita alojamiento en el momento.'},
+  {t:'Yappy',d:'Aplicación de pago móvil muy usada en Panamá para cobros y transferencias.'},
+  {t:'Zona común',d:'Áreas compartidas del edificio (lobby, piscina, pasillos, azotea).'}
+];
+let glosQ='';
+function pageGlosario(){
+  document.getElementById('main').innerHTML=`<div class="page-title">📖 Glosario</div><div class="page-sub">Términos de hotelería y alquiler vacacional</div>
+    <input id="glosInput" type="search" oninput="glosRender()" placeholder="🔎 Buscar término o palabra…" value="${esc(glosQ)}" style="width:100%;max-width:420px;padding:10px 12px;border:1px solid var(--gris2);border-radius:10px;font-family:inherit;font-size:14px;margin-bottom:14px">
+    <div id="glosList"></div>`;
+  glosRender();
+}
+function glosRender(){
+  const inp=document.getElementById('glosInput'); glosQ=inp?inp.value:glosQ;
+  const q=(glosQ||'').trim().toLowerCase();
+  const list=GLOSARIO.filter(x=>!q||(x.t+' '+x.d).toLowerCase().includes(q)).sort((a,b)=>a.t.localeCompare(b.t,'es'));
+  const box=document.getElementById('glosList'); if(!box)return;
+  if(!list.length){ box.innerHTML='<div class="panel" style="color:var(--suave)">Sin resultados para «'+esc(glosQ)+'».</div>'; return; }
+  box.innerHTML=`<div class="panel"><div style="font-size:12px;color:var(--suave);margin-bottom:8px">${list.length} término(s)</div>`+list.map(x=>`<div style="padding:9px 0;border-bottom:1px solid var(--gris)"><b style="color:var(--azul)">${esc(x.t)}</b><div style="font-size:13.5px;color:var(--texto);margin-top:2px">${esc(x.d)}</div></div>`).join('')+`</div>`;
+}
 /* ===================== CIERRES DE CAJA (hotel · Panamá) ===================== */
 let ccTab='historial', ccView=null, CCAJA=[], ccFrom='', ccTo='', ccFiltOpen=false;
 const CC_BILLETES=[100,50,20,10,5,1];
