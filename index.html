@@ -4936,14 +4936,31 @@ function pageDocs(){return `<div class="page-title">Documentación</div><div cla
     <tr><td>Nómina (ejemplo)</td><td>—</td><td><span class="badge b-green">Disponible</span></td></tr></tbody></table>
     <div style="font-size:12px;color:var(--suave);margin-top:10px">El almacenamiento real de archivos se conectará con Supabase Storage en una próxima versión.</div></div>`;
 }
-const MKT=[{cat:'Logos',icon:'🏷️',files:['Logo_AmazinnPlaces_negro.png','Logo_AmazinnPlaces_blanco.png','Manual_de_marca.pdf']},
-  {cat:'Identidad gráfica',icon:'🎨',files:['Paleta_de_colores.pdf','Kit_grafico.zip']},
-  {cat:'Dossiers',icon:'📑',files:['Dossier_comercial.pdf','Dossier_inversores.pdf']},
-  {cat:'Presentaciones',icon:'📊',files:['Presentacion_AmazinnPlaces.pptx']}];
-function pageMarca(){return `<div class="page-title">Marca y recursos</div><div class="page-sub">Logos, identidad gráfica, dossiers y presentaciones</div>
-  ${MKT.map(f=>`<div class="panel"><h2>${f.icon} ${f.cat}</h2><div style="display:flex;flex-wrap:wrap;gap:8px">${f.files.map(n=>`<a href="#" onclick="toast('Descarga de demostración: ${n}');return false" style="display:inline-flex;align-items:center;gap:6px;background:var(--gris);border:1px solid var(--gris2);border-radius:8px;padding:7px 11px;font-size:12.5px;text-decoration:none;color:var(--texto)">📎 ${n}</a>`).join('')}</div></div>`).join('')}
-  <div style="font-size:12px;color:var(--suave)">Los archivos reales se conectarán con almacenamiento en la nube en una próxima versión.</div>`;
+let MARCA=[];
+function marcaCan(){ return isAdmin(); } // admin + propietario
+async function pageMarca(){
+  const can=marcaCan();
+  const r=await sb.from('marca_recursos').select('*').order('orden').order('id'); MARCA=r.data||[];
+  const secs=[]; MARCA.forEach(x=>{ if(!secs.find(s=>s.nombre===x.seccion)) secs.push({nombre:x.seccion,icon:x.icon||'📁'}); });
+  const secHTML = secs.length? secs.map(s=>{ const sj=s.nombre.replace(/'/g,"\\'");
+      const files=MARCA.filter(x=>x.seccion===s.nombre && x.archivo);
+      const chips=files.length? files.map(x=>`<span style="display:inline-flex;align-items:center;gap:6px;background:var(--gris);border:1px solid var(--gris2);border-radius:8px;padding:7px 11px;font-size:12.5px"><a href="${esc(x.url||'#')}" target="_blank" rel="noopener" style="text-decoration:none;color:var(--texto)">📎 ${esc(x.archivo)}</a>${can?`<b style="cursor:pointer;color:var(--suave)" title="Eliminar" onclick="marcaDelFile(${x.id})">✕</b>`:''}</span>`).join('') : '<span style="color:var(--suave);font-size:12.5px">Sin archivos todavía</span>';
+      return `<div class="panel"><div style="display:flex;align-items:center;gap:8px"><h2 style="margin:0">${esc(s.icon)} ${esc(s.nombre)}</h2>${can?`<button class="cat-x" style="margin-left:auto" title="Eliminar sección" onclick="marcaDelSeccion('${sj}')">🗑</button>`:''}</div>
+        <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:10px">${chips}</div>
+        ${can?`<div style="margin-top:10px"><label class="btn ghost" style="cursor:pointer;padding:6px 12px;font-size:13px">⬆️ Subir archivo<input type="file" style="display:none" onchange="marcaUpload(this,'${sj}')"></label></div>`:''}</div>`;
+    }).join('') : `<div class="panel" style="color:var(--suave)">Aún no hay secciones.${can?' Crea la primera arriba.':''}</div>`;
+  const addSec = can? `<div class="panel"><h2 style="margin-top:0">➕ Nueva sección</h2><div class="cat-add"><input id="marcaNuevaSec" placeholder="Nombre (ej: 🏷️ Logos, Dossiers, Presentaciones…)"><button class="btn" onclick="marcaAddSeccion()">+ Crear sección</button></div></div>` : '';
+  document.getElementById('main').innerHTML=`<div class="page-title">Marca y recursos</div><div class="page-sub">Logos, identidad gráfica, dossiers y presentaciones</div>${addSec}${secHTML}`;
 }
+async function marcaAddSeccion(){ if(!marcaCan())return; const v=(val('marcaNuevaSec')||'').trim(); if(!v)return; if(MARCA.some(x=>x.seccion===v)){alert('Ya existe esa sección.');return;} const {error}=await sb.from('marca_recursos').insert({seccion:v,icon:'📁',archivo:null,orden:(MARCA.length+1)}); if(error){alert(error.message);return;} toast('✓ Sección creada'); show('marca'); }
+async function marcaUpload(input,seccion){ if(!marcaCan()){alert('Sin permiso.');return;} const f=input.files[0]; input.value=''; if(!f)return;
+  const path=seccion.replace(/[^a-zA-Z0-9]/g,'_')+'/'+Date.now()+'_'+f.name.replace(/[^a-zA-Z0-9._-]/g,'_'); let url='';
+  try{ const up=await sb.storage.from('marca').upload(path,f,{upsert:true}); if(!up.error){ const {data:pub}=sb.storage.from('marca').getPublicUrl(path); url=pub&&pub.publicUrl||''; } }catch(e){}
+  if(!url){ try{ url=URL.createObjectURL(f); }catch(e){} }
+  const {error}=await sb.from('marca_recursos').insert({seccion,icon:'📁',archivo:f.name,url,tipo:f.type||null}); if(error){alert('No se pudo guardar: '+error.message);return;}
+  toast('✓ Archivo subido'); show('marca'); }
+async function marcaDelFile(id){ if(!marcaCan())return; if(!confirm('¿Eliminar este archivo?'))return; const {error}=await sb.from('marca_recursos').delete().eq('id',id); if(error){alert(error.message);return;} toast('Eliminado'); show('marca'); }
+async function marcaDelSeccion(n){ if(!marcaCan())return; if(!confirm('¿Eliminar la sección "'+n+'" y todos sus archivos?'))return; const {error}=await sb.from('marca_recursos').delete().eq('seccion',n); if(error){alert(error.message);return;} toast('Sección eliminada'); show('marca'); }
 const TUTS=[['🛎️','Check-in exprés','Nuevo flujo de recepción'],['🧹','Estándar de limpieza','Checklist de preparación'],['💬','Atención al cliente 5★','Gestión de incidencias y reseñas'],['📊','Motor de reservas','Uso del panel de reservas']];
 function pageTutoriales(){return `<div class="page-title">Tutoriales</div><div class="page-sub">Aprende cómo trabajamos en Amazinn Places</div>
   <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:16px">${TUTS.map(t=>`<div class="panel" style="margin:0;padding:0;overflow:hidden"><div style="height:110px;background:linear-gradient(135deg,var(--azul),var(--azul2));display:flex;align-items:center;justify-content:center;font-size:36px;color:#fff">${t[0]}</div><div style="padding:14px"><b>${t[1]}</b><p style="font-size:13px;color:var(--suave);margin-top:5px">${t[2]}</p></div></div>`).join('')}</div>`;
