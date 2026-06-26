@@ -1403,7 +1403,9 @@ async function loadComUnread(){
 }
 async function loadAprobPend(){ if(!CAN_MANAGE.includes(PROFILE.role)){ setBadge('aprobaciones',0); return; }
   try{ const{count}=await sb.from('solicitudes').select('id',{count:'exact',head:true}).eq('estado','Pendiente'); setBadge('aprobaciones',count||0); }catch(e){} }
-async function loadReclBadge(){ try{ const{count}=await sb.from('reclutamiento').select('id',{count:'exact',head:true}).eq('estado','recibido'); setBadge('reclutamiento',count||0); }catch(e){} }
+function reclSeenKey(){ return 'reclSeen_'+(ME&&ME.id||''); }
+async function loadReclBadge(){ try{ let seen='1970-01-01T00:00:00Z'; try{ seen=localStorage.getItem(reclSeenKey())||seen; }catch(_){} const{count}=await sb.from('reclutamiento').select('id',{count:'exact',head:true}).eq('estado','recibido').gt('created_at',seen); setBadge('reclutamiento',count||0); }catch(e){} }
+function reclMarkSeen(){ try{ localStorage.setItem(reclSeenKey(), new Date().toISOString()); }catch(_){} setBadge('reclutamiento',0); }
 async function refreshBadges(){ await Promise.all([loadMsgUnread(),loadPendingCount(),loadComUnread(),loadAprobPend(),loadReclBadge()]); }
 /* ----- Alcance (Área/Departamento/Equipo) reutilizable ----- */
 function scopeSelects(ids,cur){ cur=cur||{};
@@ -3924,7 +3926,7 @@ async function pageReclutamiento(){
     <div class="panel"><div style="font-size:11px;font-weight:800;letter-spacing:.5px;color:var(--suave);margin-bottom:8px">FASE</div><div style="display:flex;gap:8px;flex-wrap:wrap">${stagePills}</div>
       <div style="font-size:11px;font-weight:800;letter-spacing:.5px;color:var(--suave);margin:15px 0 8px">FILTRAR POR ÁREA</div><div style="display:flex;gap:7px;flex-wrap:wrap">${areaBtns}</div></div>
     ${list}`;
-  try{loadReclBadge();}catch(_){}
+  try{reclMarkSeen();}catch(_){}
 }
 function reclCard(r){
   const st=RECL_STAGES.find(s=>s[0]===(r.estado||'recibido'))||RECL_STAGES[0];
@@ -6464,7 +6466,7 @@ function asgCancelEdit(){ if(!confirm('¿Cancelar esta asignación? Se perderán
 function setAsgTab(t){ asgTab=t; show('asignaciones'); }
 function asgFind(id){ return ASG_PUBS.find(p=>p.id===id); }
 let asgOpenPub=null;
-function asgNewUnit(){ return {unidad:'',checkin:'',tipo:'salida_entrada',pax:'',extra:'',trabajadores:[],t1:'',t2:'',supervisora:'',estado:'pendiente'}; }
+function asgNewUnit(){ return {unidad:'',checkin:'',tipo:'salida_entrada',cliente:'',pax:'',extra:'',trabajadores:[],t1:'',t2:'',supervisora:'',estado:'pendiente'}; }
 function asgTrabAdd(i){ const el=document.getElementById('asgTWin_'+i); if(!el)return; const v=(el.value||'').trim(); const u=ASG.unidades[i]; if(!u){return;} u.trabajadores=Array.isArray(u.trabajadores)?u.trabajadores:asgWorkersOf(u); if(v && !u.trabajadores.includes(v)) u.trabajadores.push(v); el.value=''; asgRenderUTbody(false); setTimeout(()=>{const e=document.getElementById('asgTWin_'+i); if(e)e.focus();},20); }
 function asgTrabDel(i,wi){ const u=ASG.unidades[i]; if(!u)return; u.trabajadores=Array.isArray(u.trabajadores)?u.trabajadores:asgWorkersOf(u); u.trabajadores.splice(wi,1); asgRenderUTbody(false); }
 function asgTimeKey(t){ t=(''+(t||'')).trim(); const m=t.match(/(\d{1,2}):(\d{2})/); if(m) return (+m[1])*60+(+m[2]); const h=t.match(/^(\d{1,2})$/); return h?(+h[1])*60:99999; }
@@ -6475,7 +6477,7 @@ function asgCopyPrev(){
   const prev=mism.filter(p=>!ASG.fecha||p.fecha<ASG.fecha).sort((a,b)=>(b.fecha||'').localeCompare(a.fecha||''))[0]
     || mism.sort((a,b)=>(b.fecha||'').localeCompare(a.fecha||''))[0];
   if(!prev){ alert('No hay un plan anterior de este equipo para copiar.'); return; }
-  ASG.unidades=(prev.unidades||[]).map(u=>({unidad:u.unidad||'',checkin:u.checkin||'',tipo:u.tipo||'salida_entrada',pax:u.pax||'',extra:u.extra||'',trabajadores:asgWorkersOf(u),supervisora:u.supervisora||'',estado:'pendiente'}));
+  ASG.unidades=(prev.unidades||[]).map(u=>({unidad:u.unidad||'',checkin:u.checkin||'',tipo:u.tipo||'salida_entrada',cliente:u.cliente||'',pax:u.pax||'',extra:u.extra||'',trabajadores:asgWorkersOf(u),supervisora:u.supervisora||'',estado:'pendiente'}));
   ASG.comunes=(prev.comunes||[]).map(c=>({area:c.area||'',trabajadores:asgWorkersOf(c),nota:c.nota||''}));
   if(!ASG.unidades.length) ASG.unidades=[asgNewUnit()];
   show('asignaciones'); toast('Copiado del plan del '+fechaLarga(prev.fecha));
@@ -6543,7 +6545,7 @@ async function asgPublicar(){
   else { const cur=asgFind(pubId); const hist=Array.isArray(cur&&cur.historial)?cur.historial.slice():[]; hist.push({t:new Date().toISOString(),who:PROFILE.nombre,act:'Editada'}); const {error}=await sb.from('limpieza_pub').update({fecha:ASG.fecha,equipo:ASG.equipo,historial:hist}).eq('id',pubId); if(error){alert('Error: '+error.message);return;} }
   await sb.from('limpieza_pub_unidades').delete().eq('pub_id',pubId);
   await sb.from('limpieza_pub_comunes').delete().eq('pub_id',pubId);
-  const us=ASG.unidades.filter(u=>(u.unidad||asgWorkersOf(u).length||u.supervisora)).map((u,ix)=>{ const ws=asgWorkersOf(u); return {pub_id:pubId,unidad:u.unidad,checkin:u.checkin||'',tipo:u.tipo,pax:u.pax,extra:u.extra,trabajadores:ws,t1:ws[0]||'',t2:ws[1]||'',supervisora:u.supervisora||'',estado:u.estado||'pendiente',orden:ix}; });
+  const us=ASG.unidades.filter(u=>(u.unidad||asgWorkersOf(u).length||u.supervisora)).map((u,ix)=>{ const ws=asgWorkersOf(u); return {pub_id:pubId,unidad:u.unidad,checkin:u.checkin||'',tipo:u.tipo,cliente:u.cliente||'',pax:u.pax,extra:u.extra,trabajadores:ws,t1:ws[0]||'',t2:ws[1]||'',supervisora:u.supervisora||'',estado:u.estado||'pendiente',orden:ix}; });
   const cs=ASG.comunes.filter(c=>(c.area||asgWorkersOf(c).length||c.nota)).map((c,ix)=>{ const ws=asgWorkersOf(c); return {pub_id:pubId,area:c.area,trabajadores:ws,t1:ws[0]||'',t2:ws[1]||'',nota:c.nota||'',orden:ix}; });
   if(us.length){ const {error}=await sb.from('limpieza_pub_unidades').insert(us); if(error){alert('Error: '+error.message);return;} }
   if(cs.length){ const {error}=await sb.from('limpieza_pub_comunes').insert(cs); if(error){alert('Error: '+error.message);return;} }
@@ -6551,7 +6553,7 @@ async function asgPublicar(){
   ASG.pubId=pubId; asgTab='publicadas'; show('asignaciones');
 }
 function asgEditar(id){ const p=asgFind(id); if(!p) return;
-  ASG={pubId:p.id, equipo:p.equipo||'', fecha:p.fecha, unidades:(p.unidades||[]).map(u=>({unidad:u.unidad||'',checkin:u.checkin||'',tipo:u.tipo||'salida_entrada',pax:u.pax||'',extra:u.extra||'',trabajadores:asgWorkersOf(u),supervisora:u.supervisora||'',estado:u.estado||'pendiente'})), comunes:(p.comunes||[]).map(c=>({area:c.area||'',trabajadores:asgWorkersOf(c),nota:c.nota||''}))};
+  ASG={pubId:p.id, equipo:p.equipo||'', fecha:p.fecha, unidades:(p.unidades||[]).map(u=>({unidad:u.unidad||'',checkin:u.checkin||'',tipo:u.tipo||'salida_entrada',cliente:u.cliente||'',pax:u.pax||'',extra:u.extra||'',trabajadores:asgWorkersOf(u),supervisora:u.supervisora||'',estado:u.estado||'pendiente'})), comunes:(p.comunes||[]).map(c=>({area:c.area||'',trabajadores:asgWorkersOf(c),nota:c.nota||''}))};
   asgTab='asignaciones'; show('asignaciones'); }
 async function asgEliminar(id){ if(!confirm('¿Eliminar esta asignación publicada del historial?')) return;
   const {error}=await sb.from('limpieza_pub').delete().eq('id',id); if(error){alert('Error: '+error.message);return;}
@@ -6559,13 +6561,13 @@ async function asgEliminar(id){ if(!confirm('¿Eliminar esta asignación publica
 function asgPDF(id){ const p=asgFind(id); if(p) asgBuildPDF(p); }
 
 function asgPrintHTML(d){
-  const filasU=(d.unidades||[]).map(u=>`<tr><td><b>${esc(u.unidad)}</b></td><td>${u.checkin?esc(u.checkin):''}</td><td>${u.tipo==='salida'?'<span class="apz-out">Salida</span>':u.tipo==='entrada'?'<span class="apz-in">Entrada</span>':'<span class="apz-out">Salida</span> + <span class="apz-in">Entrada</span>'}</td><td>${esc(u.pax)}</td><td>${esc(u.extra)}</td><td>${esc(asgWorkersOf(u).join(', '))}</td><td>${esc(u.supervisora)}</td></tr>`).join('');
+  const filasU=(d.unidades||[]).map(u=>`<tr><td><b>${esc(u.unidad)}</b></td><td>${u.checkin?esc(u.checkin):''}</td><td>${u.tipo==='salida'?'<span class="apz-out">Salida</span>':u.tipo==='entrada'?'<span class="apz-in">Entrada</span>':'<span class="apz-out">Salida</span> + <span class="apz-in">Entrada</span>'}</td><td>${esc(u.cliente||'')}</td><td>${esc(u.pax)}</td><td>${esc(u.extra)}</td><td>${esc(asgWorkersOf(u).join(', '))}</td><td>${esc(u.supervisora)}</td></tr>`).join('');
   const filasC=(d.comunes||[]).map(c=>`<tr><td><b>${esc(c.area)}</b></td><td>${esc(asgWorkersOf(c).join(', '))}</td><td>${esc(c.nota||'')}</td></tr>`).join('');
   const r=asgComputeResumen(d);
   const resumen=r.length?`<h3 class="apz-h3">Personal llamado a trabajar (${r.length})</h3><div class="apz-res">${r.map((p,i)=>`<div>${i+1}. <b>${esc(p.nombre)}</b> <span style="color:#888">(${[p.u?p.u+' und':'',p.c?p.c+' z.común':''].filter(Boolean).join(' · ')})</span><div style="color:#555;font-size:11px;margin:1px 0 5px 12px">${[...p.unidades,...p.comunes].map(x=>esc(x)).join(' · ')}</div></div>`).join('')}</div>`:'';
   return `<div class="apz-head"><img src="${LOGO}" alt="Amazinn Places" style="height:34px"><div><div class="apz-title">ENTRADAS Y SALIDAS</div><div class="apz-date">${esc(fechaLarga(d.fecha))}${d.equipo?' · Equipo: '+esc(d.equipo):''}</div></div></div>
     <h3 class="apz-h3">Unidades</h3>
-    <table class="apz-table"><colgroup><col style="width:15%"><col style="width:9%"><col style="width:13%"><col style="width:7%"><col style="width:16%"><col style="width:26%"><col style="width:14%"></colgroup><thead><tr><th>Unidad</th><th>Check-in</th><th>Tipo</th><th>Nº pax</th><th>Extra</th><th>Trabajadores</th><th>Supervisora</th></tr></thead><tbody>${filasU||'<tr><td colspan="7" style="color:#999">—</td></tr>'}</tbody></table>
+    <table class="apz-table"><colgroup><col style="width:13%"><col style="width:8%"><col style="width:12%"><col style="width:13%"><col style="width:6%"><col style="width:14%"><col style="width:22%"><col style="width:12%"></colgroup><thead><tr><th>Unidad</th><th>Check-in</th><th>Tipo</th><th>Cliente</th><th>Nº pax</th><th>Extra</th><th>Trabajadores</th><th>Supervisora</th></tr></thead><tbody>${filasU||'<tr><td colspan="8" style="color:#999">—</td></tr>'}</tbody></table>
     ${(d.comunes&&d.comunes.length)?`<h3 class="apz-h3">Zonas comunes</h3><table class="apz-table"><colgroup><col style="width:34%"><col style="width:40%"><col style="width:26%"></colgroup><thead><tr><th>Área común</th><th>Trabajadores</th><th>Nota</th></tr></thead><tbody>${filasC}</tbody></table>`:''}
     ${resumen}`;
 }
@@ -6730,13 +6732,14 @@ function asgUnidadRows(){
     <td><input list="asgUniDL" value="${esc(u.unidad)}" placeholder="Buscar unidad…" oninput="asgUpdU(${i},'unidad',this.value)" class="asg-cell asg-cell-w"></td>
     <td><input type="time" value="${esc(u.checkin||'')}" oninput="asgUpdU(${i},'checkin',this.value)" class="asg-cell asg-cell-s" title="Hora de check-in del huésped"></td>
     <td><select onchange="asgUpdU(${i},'tipo',this.value)" class="asg-cell">${ASG_TIPO.map(o=>`<option value="${o[0]}" ${u.tipo===o[0]?'selected':''}>${o[1]}</option>`).join('')}</select></td>
+    <td><input value="${esc(u.cliente||'')}" placeholder="Cliente…" oninput="asgUpdU(${i},'cliente',this.value)" class="asg-cell"></td>
     <td><input value="${esc(u.pax)}" placeholder="—" oninput="asgUpdU(${i},'pax',this.value)" class="asg-cell asg-cell-s"></td>
     <td><input value="${esc(u.extra)}" placeholder="Cuna, sofá cama…" oninput="asgUpdU(${i},'extra',this.value)" class="asg-cell"></td>
     <td style="min-width:170px">${asgWorkersOf(u).map((w,wi)=>`<span style="display:inline-flex;align-items:center;gap:4px;background:#e7eef7;color:#1b3a5b;padding:2px 7px;border-radius:12px;font-size:11.5px;font-weight:600;margin:0 4px 4px 0">${esc(w)} <span onclick="asgTrabDel(${i},${wi})" style="cursor:pointer;color:#c0392b">✕</span></span>`).join('')}<input list="asgTrabDL" id="asgTWin_${i}" placeholder="+ trabajador" onkeydown="if(event.key==='Enter'){event.preventDefault();asgTrabAdd(${i});}" onchange="asgTrabAdd(${i})" class="asg-cell" style="min-width:120px;margin-top:2px"></td>
     <td><input list="asgTrabDL" value="${esc(u.supervisora)}" placeholder="Supervisora…" oninput="asgUpdU(${i},'supervisora',this.value)" class="asg-cell"></td>
     <td class="asg-act"><button onclick="asgDelUnidad(${i})" title="Quitar fila">🗑</button></td></tr>`
-    : `<tr><td><b>${esc(u.unidad)}</b></td><td>${u.checkin?'🕐 '+esc(u.checkin):''}</td><td>${asgTipoLabel(u.tipo)}</td><td>${esc(u.pax)}</td><td>${u.extra?`<span class="asg-nota">📝 ${esc(u.extra)}</span>`:''}</td><td>${esc(asgWorkersOf(u).join(', '))}</td><td>${esc(u.supervisora)}</td></tr>`).join('');
-  return rows||`<tr><td colspan="${edit?8:7}" style="color:var(--suave)">Sin unidades. Añade una fila.</td></tr>`;
+    : `<tr><td><b>${esc(u.unidad)}</b></td><td>${u.checkin?'🕐 '+esc(u.checkin):''}</td><td>${asgTipoLabel(u.tipo)}</td><td>${esc(u.cliente||'')}</td><td>${esc(u.pax)}</td><td>${u.extra?`<span class="asg-nota">📝 ${esc(u.extra)}</span>`:''}</td><td>${esc(asgWorkersOf(u).join(', '))}</td><td>${esc(u.supervisora)}</td></tr>`).join('');
+  return rows||`<tr><td colspan="${edit?9:8}" style="color:var(--suave)">Sin unidades. Añade una fila.</td></tr>`;
 }
 function asgComunRows(){
   const edit=asgCan();
@@ -6768,7 +6771,7 @@ function asgRenderEditor(){
       ${edit?`<button class="btn ghost" style="margin-left:auto" onclick="asgCancelEdit()">✕ Cancelar</button><button class="btn" onclick="asgPublicar()">${ASG.pubId!=null?'💾 Actualizar publicación':'✓ Publicar'}</button>`:''}
     </div>
     <div class="panel"><h2 style="margin-top:0">🏠 Unidades</h2>
-      <div class="asg-scroll"><table class="asg-table"><thead><tr><th style="min-width:150px">Unidad</th><th>🕐 Check-in</th><th style="min-width:155px">Tipo</th><th>Nº pax</th><th>Extra / nota</th><th style="min-width:170px">Trabajadores</th><th>Supervisora</th>${edit?'<th></th>':''}</tr></thead>
+      <div class="asg-scroll"><table class="asg-table"><thead><tr><th style="min-width:150px">Unidad</th><th>🕐 Check-in</th><th style="min-width:155px">Tipo</th><th>Cliente</th><th>Nº pax</th><th>Extra / nota</th><th style="min-width:170px">Trabajadores</th><th>Supervisora</th>${edit?'<th></th>':''}</tr></thead>
         <tbody id="asgUTbody">${asgUnidadRows()}</tbody></table></div>
       ${edit?`<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px"><button class="btn ghost" onclick="asgAddUnidad()">+ Añadir unidad</button><button class="btn ghost" onclick="asgSortByCheckin()">🕐 Ordenar por check-in</button></div>`:''}
     </div>
