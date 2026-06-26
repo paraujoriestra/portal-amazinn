@@ -6146,6 +6146,50 @@ async function pagePreventivo(){
   document.getElementById('main').innerHTML=`<div class="page-title">Mantenimiento preventivo</div><div class="page-sub">Tareas programadas y recurrentes (piscina, filtros, revisiones…)</div>${tabs}${body}`;
 }
 function prevSetTab(t){ prevTab=t; prevFormOpen=false; prevSel=null; show('preventivo'); }
+function calPrevClose(){ const o=document.getElementById('calPrevOv'); if(o)o.remove(); document.removeEventListener('keydown',calPrevEsc); }
+function calPrevEsc(e){ if(e.key==='Escape') calPrevClose(); }
+function calModalShow(titulo, bodyHTML, openOnclick){
+  const ov=document.createElement('div'); ov.id='calPrevOv';
+  ov.style.cssText='position:fixed;inset:0;background:rgba(15,23,32,.6);z-index:99999;display:flex;align-items:center;justify-content:center;padding:18px';
+  ov.innerHTML=`<div style="background:#fff;border-radius:14px;max-width:440px;width:100%;padding:20px;max-height:88vh;overflow:auto"><div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px"><h2 style="margin:0;font-size:18px">${titulo}</h2><button onclick="calPrevClose()" style="border:none;background:none;font-size:20px;cursor:pointer;color:var(--suave)">✕</button></div><div style="margin-top:10px">${bodyHTML}</div><div style="display:flex;gap:8px;margin-top:18px;flex-wrap:wrap">${openOnclick?`<button class="btn" onclick="${openOnclick}">📂 Abrir</button>`:''}<button class="btn ghost" onclick="calPrevClose()">Cerrar</button></div></div>`;
+  ov.onclick=(e)=>{ if(e.target===ov) calPrevClose(); };
+  document.addEventListener('keydown',calPrevEsc);
+  document.body.appendChild(ov);
+}
+function calRow(ic,lbl,v){ return (v==null||v==='')?'':`<div style="display:flex;gap:8px;font-size:13.5px;padding:4px 0;border-bottom:1px solid var(--gris)"><span style="color:var(--suave);min-width:120px">${ic} ${lbl}</span><b>${esc(''+v)}</b></div>`; }
+function prevPreview(id){
+  const t=MANT_PREV.find(x=>String(x.id)===String(id)); if(!t)return;
+  const today=new Date(); today.setHours(0,0,0,0);
+  const prox=t.proximo?new Date(t.proximo+'T00:00:00'):null;
+  const overdue=prox&&prox<today&&t.activo!==false;
+  const estadoTxt=(t.activo===false)?'Inactiva':overdue?'⏰ Vencida':'Activa';
+  const asg=t.asignado_a_nombre?t.asignado_a_nombre:(t.asignado_equipo?t.asignado_equipo:'Sin asignar');
+  const body=`
+    <div style="margin-bottom:8px"><span style="background:#eef4fb;color:#2563aa;font-weight:700;font-size:12px;padding:3px 10px;border-radius:20px">🗓️ Preventivo · ${estadoTxt}</span></div>
+    ${calRow('🏠','Ubicación',(t.edificio||'Cualquiera')+(t.unidad?' · '+t.unidad:''))}
+    ${calRow('🏷️','Categoría',incCatLabel(t.categoria))}
+    ${calRow('📅','Próximo',prox?prox.toLocaleDateString('es-ES'):'—')}
+    ${calRow('🔁','Frecuencia',t.frecuencia_dias?('cada '+t.frecuencia_dias+' días'):'')}
+    ${calRow('👤','Asignada a',asg)}
+    ${t.ultima?calRow('✓','Última vez',new Date(t.ultima+'T00:00:00').toLocaleDateString('es-ES')):''}
+    ${t.notas?`<div style="font-size:12.5px;margin-top:8px;color:#3a4654;background:var(--gris);padding:7px 10px;border-radius:8px">📝 ${esc(t.notas)}</div>`:''}`;
+  calModalShow('🗓️ '+esc(t.titulo), body, `prevPreviewOpen(${t.id})`);
+}
+function prevPreviewOpen(id){ calPrevClose(); prevOpen(id); }
+function incPreviewCal(id){
+  const x=(PREV_INC||[]).find(i=>String(i.id)===String(id)); if(!x)return;
+  const lim=SLA_H[x.urgencia]||72; const limIso=prevLocalIso(new Date(new Date(x.created_at).getTime()+lim*3600000));
+  const body=`
+    <div style="margin-bottom:8px"><span style="background:#fff3e0;color:#b9770e;font-weight:700;font-size:12px;padding:3px 10px;border-radius:20px">🛠 Incidencia · ${esc(x.estado||'')}</span></div>
+    ${calRow('🏠','Ubicación',(x.edificio||'')+(x.unidad?' · '+x.unidad:''))}
+    ${calRow('⚠️','Urgencia',x.urgencia||'media')}
+    ${calRow('🏷️','Categoría',incCatLabel(x.categoria))}
+    ${calRow('📅','Creada',x.created_at?new Date(x.created_at).toLocaleDateString('es-ES'):'')}
+    ${calRow('⏰','Fecha límite',new Date(limIso+'T00:00:00').toLocaleDateString('es-ES'))}
+    ${x.descripcion?`<div style="font-size:12.5px;margin-top:8px;color:#3a4654;background:var(--gris);padding:7px 10px;border-radius:8px">📝 ${esc(x.descripcion)}</div>`:''}`;
+  calModalShow('🛠 Incidencia', body, `incPreviewCalOpen(${x.id})`);
+}
+function incPreviewCalOpen(id){ calPrevClose(); prevOpenInc(id); }
 function prevOpen(id){ prevSel=id; show('preventivo'); }
 function prevBack(){ prevSel=null; show('preventivo'); }
 function prevSetMonth(delta){ const base=prevCalRef?new Date(prevCalRef):new Date(); base.setDate(1); base.setMonth(base.getMonth()+delta); prevCalRef=base; show('preventivo'); }
@@ -6163,8 +6207,8 @@ function renderPrevCal(){
   for(let d=1; d<=daysInMonth; d++){
     const iso=y+'-'+String(m+1).padStart(2,'0')+'-'+String(d).padStart(2,'0');
     const isToday=iso===todayISO;
-    const chipsP=(byDate[iso]||[]).map(t=>`<div class="cal-task${iso<todayISO?' over':''}" onclick="prevOpen(${t.id})" title="Preventivo: ${esc(t.titulo)}">🗓️ ${esc(t.titulo)}</div>`).join('');
-    const chipsI=(byInc[iso]||[]).map(x=>{const lbl=(x.edificio||'')+(x.unidad?' '+x.unidad:'')||'Incidencia'; return `<div class="cal-task inc${iso<todayISO?' over':''}" onclick="prevOpenInc(${x.id})" title="Incidencia: ${esc(x.descripcion||'')}">🛠 ${esc(lbl)}</div>`;}).join('');
+    const chipsP=(byDate[iso]||[]).map(t=>`<div class="cal-task${iso<todayISO?' over':''}" style="cursor:pointer" onclick="prevPreview(${t.id})" title="Preventivo: ${esc(t.titulo)}">🗓️ ${esc(t.titulo)}</div>`).join('');
+    const chipsI=(byInc[iso]||[]).map(x=>{const lbl=(x.edificio||'')+(x.unidad?' '+x.unidad:'')||'Incidencia'; return `<div class="cal-task inc${iso<todayISO?' over':''}" style="cursor:pointer" onclick="incPreviewCal(${x.id})" title="Incidencia: ${esc(x.descripcion||'')}">🛠 ${esc(lbl)}</div>`;}).join('');
     cells+=`<div class="cal-cell${isToday?' cal-today':''}"><div class="cal-d">${d}</div>${chipsP}${chipsI}</div>`;
   }
   return `<div class="cal-nav"><button class="btn-sm ghost" onclick="prevSetMonth(-1)">←</button><b style="text-transform:capitalize;min-width:160px;text-align:center">${monthName}</b><button class="btn-sm ghost" onclick="prevSetMonth(1)">→</button></div>
