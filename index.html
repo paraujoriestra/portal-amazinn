@@ -5735,7 +5735,7 @@ function incFilteredList(hist){
     if(prov && (i.categoria||'')!==esp) return false;
     if(!prov && !hist){
       if(f.ambito==='reportadas'){ if(i.creado_por!==me) return false; }
-      else if(f.ambito==='mias'){ if(i.tomada_por!==me && i.asignado_a!==me) return false; }
+      else if(f.ambito==='mias'){ if(i.tomada_por!==me && !incIsAssignedToMe(i)) return false; }
       else if(f.ambito==='equipo'){ if(!(i.asignado_equipo==='*'||myInTeam(i.asignado_equipo))) return false; }
       else if(f.ambito==='curso'){ if(!['en_curso','pausada','a_medias'].includes(i.estado)) return false; }
       else if(f.ambito==='sinasignar'){ if(!(i.estado==='pendiente' && !i.asignado_a)) return false; if(!(incCan()||i.asignado_equipo==='*'||myInTeam(i.asignado_equipo))) return false; }
@@ -5793,7 +5793,7 @@ function incCardHTML(i){
       ${(incCan()||i.creado_por===me)?`<button class="btn-sm x" onclick="incDelete(${i.id})">🗑</button>`:''}
     </div></div>`;
 }
-function incNuevaOpen(){ incNew=true; incFormOpen=false; incUnisSel=[]; incUniAvail=[]; show('incidencias'); }
+function incNuevaOpen(){ incNew=true; incFormOpen=false; incUnisSel=[]; incUniAvail=[]; incAsigSel=[]; show('incidencias'); }
 function incNuevaCancel(){ incNew=false; show('incidencias'); }
 function renderIncForm(){
   return `<h2 style="margin:4px 0 4px">+ Nueva incidencia</h2>
@@ -5825,12 +5825,19 @@ function incFormHTML(){
     <div style="display:flex;gap:18px;flex-wrap:wrap;margin:12px 0 2px"><label style="font-weight:400;display:flex;gap:6px;align-items:center;cursor:pointer"><input type="checkbox" id="iAfecta"> 🛎️ Afecta a un huésped / reserva activa</label><label style="font-weight:400;display:flex;gap:6px;align-items:center;cursor:pointer"><input type="checkbox" id="iFuera"> ⛔ Unidad fuera de servicio</label></div>
     <div class="row">
       <div><label>Asignar a equipo</label><select id="iEquipo" onchange="incFormEquipo()">${teamOpts}</select></div>
-      <div><label>Asignar a persona</label><select id="iPersona">${perOpts}</select></div>
+      <div><label>Asignar a persona(s) <small style="color:var(--suave);font-weight:400">(una o varias)</small></label>
+        <select id="iPersonaPick" onchange="incAsigAdd(this.value);this.value=''" style="width:100%"><option value="">➕ Añadir persona…</option>${MANT_STAFF.map(s=>`<option value="${s.id}">${esc(s.nombre)}${s.team?' · '+esc(s.team):''}</option>`).join('')}</select>
+        <div id="iAsigBox" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px">${incAsigBoxHTML()}</div></div>
     </div>
     <div class="inc-final" style="margin-top:12px"><button class="btn-ok" type="submit">Crear incidencia</button><button class="btn-sm ghost" type="button" onclick="incNuevaCancel()">Cancelar</button></div>
   </form></div>`;
 }
-let incUnisSel=[], incUniAvail=[];
+let incUnisSel=[], incUniAvail=[], incAsigSel=[];
+function incAsigBoxHTML(){ return incAsigSel.length? incAsigSel.map(p=>`<span style="display:inline-flex;align-items:center;gap:6px;background:#e7eef8;border:1px solid #cfe0f3;border-radius:16px;padding:4px 6px 4px 12px;font-size:13px;color:#2563aa;font-weight:600">${esc(p.nombre)}<b style="cursor:pointer;color:#c0392b" onclick="incAsigDel('${String(p.id).replace(/'/g,"\\'")}')">✕</b></span>`).join('') : '<span style="color:var(--suave);font-size:12.5px">Sin asignar (cualquiera del equipo puede tomarla)</span>'; }
+function incAsigRender(){ const box=document.getElementById('iAsigBox'); if(box) box.innerHTML=incAsigBoxHTML(); }
+function incAsigAdd(id){ if(!id)return; if(incAsigSel.some(p=>String(p.id)===String(id)))return; const s=MANT_STAFF.find(x=>String(x.id)===String(id)); incAsigSel.push({id,nombre:s?s.nombre:''}); incAsigRender(); }
+function incAsigDel(id){ incAsigSel=incAsigSel.filter(p=>String(p.id)!==String(id)); incAsigRender(); }
+function incIsAssignedToMe(i){ if(String(i.asignado_a)===String(ME.id)) return true; if(Array.isArray(i.asignados)&&i.asignados.some(p=>String(p.id)===String(ME.id))) return true; return false; }
 function incFormEdif(){ const ed=(document.getElementById('iEdif')||{}).value||''; incUniAvail=MANT_UNI.filter(u=>u.edificio===ed).map(u=>u.nombre); incUnisSel=[]; incUniRender(); }
 function incUniRender(){ const box=document.getElementById('iUniBox'); const pick=document.getElementById('iUniPick'); if(!box||!pick)return;
   box.innerHTML = incUnisSel.length? incUnisSel.map(n=>`<span style="display:inline-flex;align-items:center;gap:6px;background:var(--gris);border:1px solid var(--gris2);border-radius:16px;padding:4px 6px 4px 12px;font-size:13px">${esc(n)}<b style="cursor:pointer;color:var(--suave)" onclick="incUniDel('${(''+n).replace(/'/g,"\\'")}')">✕</b></span>`).join('') : '<span style="color:var(--suave);font-size:12.5px">Ninguna unidad añadida</span>';
@@ -5840,21 +5847,20 @@ function incUniRender(){ const box=document.getElementById('iUniBox'); const pic
 }
 function incUniAdd(n){ if(!n)return; if(!incUnisSel.includes(n)) incUnisSel.push(n); incUniRender(); }
 function incUniDel(n){ incUnisSel=incUnisSel.filter(x=>x!==n); incUniRender(); }
-function incFormEquipo(){ const t=(document.getElementById('iEquipo')||{}).value||'*'; const per=document.getElementById('iPersona'); if(!per)return; const list=MANT_STAFF.filter(s=> mantInTeam(s,t)); per.innerHTML=`<option value="">Todo el equipo (que alguien la tome)</option>`+list.map(s=>`<option value="${s.id}">${esc(s.nombre)}</option>`).join(''); }
+function incFormEquipo(){ const t=(document.getElementById('iEquipo')||{}).value||'*'; const per=document.getElementById('iPersonaPick'); incAsigSel=[]; incAsigRender(); if(!per)return; const list=MANT_STAFF.filter(s=> mantInTeam(s,t)); per.innerHTML='<option value="">➕ Añadir persona…</option>'+list.map(s=>`<option value="${s.id}">${esc(s.nombre)}</option>`).join(''); }
 async function incCreate(e){
   e.preventDefault();
   const g=id=>{const el=document.getElementById(id);return el?el.value:'';};
   const desc=(g('iDesc')||'').trim(); if(!desc){alert('Describe la incidencia.');return false;}
-  const personaId=g('iPersona')||null;
-  const persona=personaId?MANT_STAFF.find(s=>String(s.id)===String(personaId)):null;
+  const asignados=incAsigSel.slice();
   const btn=e.target.querySelector('button[type=submit]'); if(btn){btn.disabled=true;btn.textContent='⏳ Guardando…';}
   const afecta=!!(document.getElementById('iAfecta')||{}).checked, fuera=!!(document.getElementById('iFuera')||{}).checked;
   let unis = incUnisSel.slice();
   const unaSola = !!(document.getElementById('iUnaSola')||{}).checked;
   const base={ via:g('iVia'), urgencia:g('iUrg'), categoria:g('iCat')||null, edificio:g('iEdif')||null, descripcion:desc,
     afecta_huesped:afecta, fuera_servicio:fuera,
-    asignado_equipo:g('iEquipo')||'*', asignado_a:personaId||null, asignado_a_nombre:persona?persona.nombre:null,
-    estado: personaId?'asignada':'pendiente', creado_por:ME.id, creado_por_nombre:PROFILE.nombre };
+    asignado_equipo:g('iEquipo')||'*', asignados, asignado_a:(asignados[0]?asignados[0].id:null), asignado_a_nombre:(asignados.length?asignados.map(p=>p.nombre).filter(Boolean).join(', '):null),
+    estado: asignados.length?'asignada':'pendiente', creado_por:ME.id, creado_por_nombre:PROFILE.nombre };
   const mkHist=()=>[{t:new Date().toISOString(),who:PROFILE.nombre,act:'Creada'}];
   // Decidir: una por unidad, o una sola para todas
   let rows;
