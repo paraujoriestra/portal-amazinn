@@ -106,6 +106,12 @@
   .mbub.ot{background:#fff;border:1px solid var(--gris2);align-self:flex-start}
   .mbub .mseen{display:block;font-size:10px;margin-top:3px;text-align:right;letter-spacing:.2px}
   .mbub.me .mseen{color:#5a8a4a}
+  .mbub .mfoot{display:flex;gap:6px;justify-content:flex-end;align-items:center;margin-top:3px}
+  .mbub .mfoot .mseen{margin-top:0;display:inline}
+  .mbub .mtime{font-size:10px;color:#9aa7b2;letter-spacing:.2px}
+  .mbub.me .mtime{color:#6f9a5e}
+  .mday{display:flex;justify-content:center;margin:8px 0}
+  .mday span{background:#dbe4ec;color:#5a6b78;font-size:11px;font-weight:600;padding:3px 11px;border-radius:12px}
   .msg-file{display:inline-flex;align-items:center;gap:6px;margin-top:4px;padding:7px 11px;border-radius:9px;font-size:12.5px;text-decoration:none;background:rgba(0,0,0,.06);border:1px solid rgba(0,0,0,.12);color:inherit}
   .mbub.ot .msg-file{background:var(--gris);border-color:var(--gris2);color:var(--texto)}
   .msg-file:hover{filter:brightness(1.05)}
@@ -5114,7 +5120,7 @@ function msgwRender(){
     const thread=MSG_ALL.filter(m=>(m.de_id===ME.id&&m.para_id===msgwWith)||(m.de_id===msgwWith&&m.para_id===ME.id));
     chatLastId=thread.length?Math.max(...thread.map(m=>m.id)):0;
     b.innerHTML=`<div class="msgw-conv-h"><span class="msgw-back" onclick="msgwBack()">←</span><b>${esc(msgwName)}</b>${c?`<small style="color:${cOn?'#1f9d55':'var(--suave)'};font-weight:${cOn?'700':'400'}">${cOn?'En línea':'últ. '+haceTiempo(c.last_seen)}</small>`:''}</div>
-      <div class="msgw-thread" id="msgwThread">${thread.map(bubbleHTML).join('')||'<div style="color:var(--suave);text-align:center;font-size:13px;padding:18px">Aún no hay mensajes. ¡Escribe el primero!</div>'}</div>
+      <div class="msgw-thread" id="msgwThread">${threadHTML(thread,'<div style="color:var(--suave);text-align:center;font-size:13px;padding:18px">Aún no hay mensajes. ¡Escribe el primero!</div>')}</div>
       <div class="msgw-in"><div class="emoji-wrap"><button type="button" class="emoji-btn" onclick="msgwToggleEmoji(event)" title="Emojis">😊</button><div id="msgwEmojiPanel" class="emoji-panel"></div></div><label class="emoji-btn" style="cursor:pointer" title="Adjuntar archivo">📎<input type="file" id="msgwFile" style="display:none" onchange="msgwAttach(this)"></label><input id="msgwIn" placeholder="Escribe un mensaje…" onkeydown="if(event.key==='Enter')msgwSend()"><button onclick="msgwSend()">➤</button></div>`;
     setTimeout(()=>{const t=document.getElementById('msgwThread');if(t)t.scrollTop=t.scrollHeight;},20);
     MSG_ALL.forEach(m=>{ if(m.de_id===msgwWith&&m.para_id===ME.id) m.leido=true; });
@@ -5262,16 +5268,27 @@ function convHTML(){
   const c=MSG_CONTACTS.find(x=>x.id===chatWithId); const cOn=c&&isOnline(c.last_seen);
   const estado=c?`<small style="color:${cOn?'#1f9d55':'var(--suave)'};font-weight:${cOn?'700':'400'}">${cOn?'En línea':('últ. vez '+haceTiempo(c.last_seen))}</small>`:'';
   return `<div class="msg-conv"><div style="padding:10px 16px;border-bottom:1px solid var(--gris2);display:flex;flex-direction:column;gap:1px"><b>${esc(chatWithName)}</b>${estado}</div>
-      <div class="msg-thread" id="msgThread">${thread.map(bubbleHTML).join('')||'<div id="msgEmpty" style="color:var(--suave);text-align:center;font-size:13px">Aún no hay mensajes. ¡Escribe el primero!</div>'}</div>
+      <div class="msg-thread" id="msgThread">${threadHTML(thread,'<div id="msgEmpty" style="color:var(--suave);text-align:center;font-size:13px">Aún no hay mensajes. ¡Escribe el primero!</div>')}</div>
       <div class="msg-input"><div class="emoji-wrap"><button type="button" class="emoji-btn" onclick="toggleEmoji(event)" title="Emojis">😊</button><div id="emojiPanel" class="emoji-panel"></div></div><label class="emoji-btn" style="cursor:pointer" title="Adjuntar archivo">📎<input type="file" id="msgFile" style="display:none" onchange="enviarAdj(this)"></label><input id="msgIn" placeholder="Escribe un mensaje…" onkeydown="if(event.key==='Enter')sendMsg()"><button class="btn" onclick="sendMsg()">Enviar</button></div></div>`;
 }
 function iconoArch(t){return !t?'📎':(/pdf/.test(t)?'📄':(/image/.test(t)?'🖼️':(/word|document/.test(t)?'📝':(/sheet|excel/.test(t)?'📊':(/zip|compress/.test(t)?'🗜️':'📎')))));}
 function bubbleHTML(m){
   const mine=m.de_id===ME.id;
-  const st=mine?`<span class="mseen" id="mseen_${m.id}">${m.leido?'✓✓ Visto':'✓ Enviado'}</span>`:'';
+  const hora=m.created_at?new Date(m.created_at).toLocaleTimeString('es-ES',{hour:'2-digit',minute:'2-digit'}):'';
+  const seen=mine?`<span class="mseen" id="mseen_${m.id}">${m.leido?'✓✓ Visto':'✓ Enviado'}</span>`:'';
   const txt=m.texto?`<div>${esc(m.texto)}</div>`:'';
   const adj=m.adj_path?`<a class="msg-file" href="#" onclick="descargarAdj('${String(m.adj_path).replace(/'/g,"\\'")}','${String(m.adj_nombre||'archivo').replace(/'/g,"\\'")}');return false">${iconoArch(m.adj_tipo)} ${esc(m.adj_nombre||'archivo')} ⬇</a>`:'';
-  return `<div class="mbub ${mine?'me':'ot'}">${txt}${adj}${st}</div>`;
+  return `<div class="mbub ${mine?'me':'ot'}">${txt}${adj}<div class="mfoot"><span class="mtime">${esc(hora)}</span>${seen}</div></div>`;
+}
+function threadDayLabel(iso){ if(!iso) return ''; const d=new Date(iso); const t=new Date(); const y=new Date(); y.setDate(t.getDate()-1);
+  const same=(a,b)=>a.toDateString()===b.toDateString();
+  if(same(d,t)) return 'Hoy'; if(same(d,y)) return 'Ayer';
+  return d.toLocaleDateString('es-ES',{weekday:'long',day:'2-digit',month:'long',year:'numeric'}); }
+function threadHTML(list,empty){
+  if(!list||!list.length) return empty||'';
+  let out='', lastDay='';
+  for(const m of list){ const day=m.created_at?String(m.created_at).slice(0,10):'x'; if(day!==lastDay){ out+=`<div class="mday"><span>${esc(threadDayLabel(m.created_at))}</span></div>`; lastDay=day; } out+=bubbleHTML(m); }
+  return out;
 }
 function refreshContactList(){const sv=document.getElementById('msgSearch');const cl=document.getElementById('contactList');if(cl)cl.innerHTML=buildContactList(sv?sv.value:'');}
 function appendBubble(m){const t=document.getElementById('msgThread');if(!t)return;const e=document.getElementById('msgEmpty');if(e)e.remove();const tmp=document.createElement('div');tmp.innerHTML=bubbleHTML(m);const node=tmp.firstElementChild;if(node){t.appendChild(node);t.scrollTop=t.scrollHeight;}}
