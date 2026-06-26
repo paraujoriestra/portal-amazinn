@@ -6433,7 +6433,7 @@ function asgWorkersOf(u){ if(Array.isArray(u.trabajadores)&&u.trabajadores.lengt
 function asgComputeResumen(d){ d=d||ASG; const m={};
   const ensure=n=>{ n=(''+n).trim(); m[n]=m[n]||{u:0,c:0,unidades:[],comunes:[]}; return m[n]; };
   (d.unidades||[]).forEach(u=>{ const nom=(u.unidad||'').trim()||'(sin unidad)'; asgWorkersOf(u).forEach(t=>{ if(t&&(''+t).trim()){ const o=ensure(t); o.u++; o.unidades.push(nom); } }); });
-  (d.comunes||[]).forEach(c=>{ const ar=(c.area||'').trim()||'(zona común)'; [c.t1,c.t2].forEach(t=>{ if(t&&(''+t).trim()){ const o=ensure(t); o.c++; o.comunes.push(ar); } }); });
+  (d.comunes||[]).forEach(c=>{ const ar=(c.area||'').trim()||'(zona común)'; asgWorkersOf(c).forEach(t=>{ if(t&&(''+t).trim()){ const o=ensure(t); o.c++; o.comunes.push(ar); } }); });
   return Object.keys(m).sort().map(n=>({nombre:n,u:m[n].u,c:m[n].c,unidades:m[n].unidades,comunes:m[n].comunes})); }
 function asgResumenHTML(){ const r=asgComputeResumen(ASG); if(!r.length) return '<p style="color:var(--suave);margin:0">Aún no hay personal asignado.</p>'; return `<div class="asg-resgrid">${r.map((p,i)=>`<div class="asg-reschip"><b>${i+1}. ${esc(p.nombre)}</b><span>${p.u?p.u+' unidad(es)':''}${p.u&&p.c?' · ':''}${p.c?p.c+' z. común':''}</span><div style="margin-top:6px;font-size:12px;color:#33414f;line-height:1.6">${[...p.unidades.map(u=>'🏠 '+esc(u)),...p.comunes.map(c=>'🧽 '+esc(c))].join('<br>')||'<span style=\"color:var(--suave)\">—</span>'}</div></div>`).join('')}</div><div class="asg-restotal">👥 ${r.length} persona(s) llamada(s) a trabajar</div>`; }
 function asgRefreshResumen(){ const b=document.getElementById('asgResumenBox'); if(b) b.innerHTML=asgResumenHTML(); const bb=document.getElementById('asgBalanceBox'); if(bb) bb.innerHTML=asgBalanceHTML(); }
@@ -6444,7 +6444,9 @@ function asgRenderUTbody(focusLast){ const b=document.getElementById('asgUTbody'
 function asgRenderCTbody(focusLast){ const b=document.getElementById('asgCTbody'); if(b){ b.innerHTML=asgComunRows(); if(focusLast){ const inp=b.querySelector('tr:last-child input'); if(inp) inp.focus(); } } asgRefreshResumen(); }
 function asgAddUnidad(){ ASG.unidades.push(asgNewUnit()); asgRenderUTbody(true); }
 function asgDelUnidad(i){ ASG.unidades.splice(i,1); asgRenderUTbody(false); }
-function asgAddComun(){ ASG.comunes.push({area:'',t1:'',t2:''}); asgRenderCTbody(true); }
+function asgAddComun(){ ASG.comunes.push({area:'',trabajadores:[],nota:''}); asgRenderCTbody(true); }
+function asgComTrabAdd(i){ const el=document.getElementById('asgCWin_'+i); if(!el)return; const v=(el.value||'').trim(); const c=ASG.comunes[i]; if(!c)return; c.trabajadores=Array.isArray(c.trabajadores)?c.trabajadores:asgWorkersOf(c); if(v&&!c.trabajadores.includes(v)) c.trabajadores.push(v); el.value=''; asgRenderCTbody(false); setTimeout(()=>{const e=document.getElementById('asgCWin_'+i); if(e)e.focus();},20); }
+function asgComTrabDel(i,wi){ const c=ASG.comunes[i]; if(!c)return; c.trabajadores=Array.isArray(c.trabajadores)?c.trabajadores:asgWorkersOf(c); c.trabajadores.splice(wi,1); asgRenderCTbody(false); }
 function asgDelComun(i){ ASG.comunes.splice(i,1); asgRenderCTbody(false); }
 function asgNueva(){ ASG={pubId:null,equipo:'',fecha:'',unidades:[asgNewUnit()],comunes:[]}; asgTab='asignaciones'; show('asignaciones'); }
 function asgCancelEdit(){ if(!confirm('¿Cancelar esta asignación? Se perderán los cambios que no hayas publicado.')) return; ASG={pubId:null,equipo:'',fecha:'',unidades:[],comunes:[]}; asgTab='publicadas'; toast('Asignación cancelada'); show('asignaciones'); }
@@ -6463,7 +6465,7 @@ function asgCopyPrev(){
     || mism.sort((a,b)=>(b.fecha||'').localeCompare(a.fecha||''))[0];
   if(!prev){ alert('No hay un plan anterior de este equipo para copiar.'); return; }
   ASG.unidades=(prev.unidades||[]).map(u=>({unidad:u.unidad||'',checkin:u.checkin||'',tipo:u.tipo||'salida_entrada',pax:u.pax||'',extra:u.extra||'',trabajadores:asgWorkersOf(u),supervisora:u.supervisora||'',estado:'pendiente'}));
-  ASG.comunes=(prev.comunes||[]).map(c=>({area:c.area||'',t1:c.t1||'',t2:c.t2||''}));
+  ASG.comunes=(prev.comunes||[]).map(c=>({area:c.area||'',trabajadores:asgWorkersOf(c),nota:c.nota||''}));
   if(!ASG.unidades.length) ASG.unidades=[asgNewUnit()];
   show('asignaciones'); toast('Copiado del plan del '+fechaLarga(prev.fecha));
 }
@@ -6531,14 +6533,14 @@ async function asgPublicar(){
   await sb.from('limpieza_pub_unidades').delete().eq('pub_id',pubId);
   await sb.from('limpieza_pub_comunes').delete().eq('pub_id',pubId);
   const us=ASG.unidades.filter(u=>(u.unidad||asgWorkersOf(u).length||u.supervisora)).map((u,ix)=>{ const ws=asgWorkersOf(u); return {pub_id:pubId,unidad:u.unidad,checkin:u.checkin||'',tipo:u.tipo,pax:u.pax,extra:u.extra,trabajadores:ws,t1:ws[0]||'',t2:ws[1]||'',supervisora:u.supervisora||'',estado:u.estado||'pendiente',orden:ix}; });
-  const cs=ASG.comunes.filter(c=>(c.area||c.t1||c.t2)).map((c,ix)=>({pub_id:pubId,area:c.area,t1:c.t1,t2:c.t2,orden:ix}));
+  const cs=ASG.comunes.filter(c=>(c.area||asgWorkersOf(c).length||c.nota)).map((c,ix)=>{ const ws=asgWorkersOf(c); return {pub_id:pubId,area:c.area,trabajadores:ws,t1:ws[0]||'',t2:ws[1]||'',nota:c.nota||'',orden:ix}; });
   if(us.length){ const {error}=await sb.from('limpieza_pub_unidades').insert(us); if(error){alert('Error: '+error.message);return;} }
   if(cs.length){ const {error}=await sb.from('limpieza_pub_comunes').insert(cs); if(error){alert('Error: '+error.message);return;} }
   await asgSyncCatalogs();
   ASG.pubId=pubId; asgTab='publicadas'; show('asignaciones');
 }
 function asgEditar(id){ const p=asgFind(id); if(!p) return;
-  ASG={pubId:p.id, equipo:p.equipo||'', fecha:p.fecha, unidades:(p.unidades||[]).map(u=>({unidad:u.unidad||'',checkin:u.checkin||'',tipo:u.tipo||'salida_entrada',pax:u.pax||'',extra:u.extra||'',trabajadores:asgWorkersOf(u),supervisora:u.supervisora||'',estado:u.estado||'pendiente'})), comunes:(p.comunes||[]).map(c=>({area:c.area||'',t1:c.t1||'',t2:c.t2||''}))};
+  ASG={pubId:p.id, equipo:p.equipo||'', fecha:p.fecha, unidades:(p.unidades||[]).map(u=>({unidad:u.unidad||'',checkin:u.checkin||'',tipo:u.tipo||'salida_entrada',pax:u.pax||'',extra:u.extra||'',trabajadores:asgWorkersOf(u),supervisora:u.supervisora||'',estado:u.estado||'pendiente'})), comunes:(p.comunes||[]).map(c=>({area:c.area||'',trabajadores:asgWorkersOf(c),nota:c.nota||''}))};
   asgTab='asignaciones'; show('asignaciones'); }
 async function asgEliminar(id){ if(!confirm('¿Eliminar esta asignación publicada del historial?')) return;
   const {error}=await sb.from('limpieza_pub').delete().eq('id',id); if(error){alert('Error: '+error.message);return;}
@@ -6547,13 +6549,13 @@ function asgPDF(id){ const p=asgFind(id); if(p) asgBuildPDF(p); }
 
 function asgPrintHTML(d){
   const filasU=(d.unidades||[]).map(u=>`<tr><td><b>${esc(u.unidad)}</b></td><td>${u.checkin?esc(u.checkin):''}</td><td>${u.tipo==='salida'?'<span class="apz-out">Salida</span>':u.tipo==='entrada'?'<span class="apz-in">Entrada</span>':'<span class="apz-out">Salida</span> + <span class="apz-in">Entrada</span>'}</td><td>${esc(u.pax)}</td><td>${esc(u.extra)}</td><td>${esc(asgWorkersOf(u).join(', '))}</td><td>${esc(u.supervisora)}</td></tr>`).join('');
-  const filasC=(d.comunes||[]).map(c=>`<tr><td><b>${esc(c.area)}</b></td><td>${esc(c.t1)}</td><td>${esc(c.t2)}</td></tr>`).join('');
+  const filasC=(d.comunes||[]).map(c=>`<tr><td><b>${esc(c.area)}</b></td><td>${esc(asgWorkersOf(c).join(', '))}</td><td>${esc(c.nota||'')}</td></tr>`).join('');
   const r=asgComputeResumen(d);
   const resumen=r.length?`<h3 class="apz-h3">Personal llamado a trabajar (${r.length})</h3><div class="apz-res">${r.map((p,i)=>`<div>${i+1}. <b>${esc(p.nombre)}</b> <span style="color:#888">(${[p.u?p.u+' und':'',p.c?p.c+' z.común':''].filter(Boolean).join(' · ')})</span><div style="color:#555;font-size:11px;margin:1px 0 5px 12px">${[...p.unidades,...p.comunes].map(x=>esc(x)).join(' · ')}</div></div>`).join('')}</div>`:'';
   return `<div class="apz-head"><img src="${LOGO}" alt="Amazinn Places" style="height:34px"><div><div class="apz-title">ENTRADAS Y SALIDAS</div><div class="apz-date">${esc(fechaLarga(d.fecha))}${d.equipo?' · Equipo: '+esc(d.equipo):''}</div></div></div>
     <h3 class="apz-h3">Unidades</h3>
     <table class="apz-table"><colgroup><col style="width:15%"><col style="width:9%"><col style="width:13%"><col style="width:7%"><col style="width:16%"><col style="width:26%"><col style="width:14%"></colgroup><thead><tr><th>Unidad</th><th>Check-in</th><th>Tipo</th><th>Nº pax</th><th>Extra</th><th>Trabajadores</th><th>Supervisora</th></tr></thead><tbody>${filasU||'<tr><td colspan="7" style="color:#999">—</td></tr>'}</tbody></table>
-    ${(d.comunes&&d.comunes.length)?`<h3 class="apz-h3">Zonas comunes</h3><table class="apz-table"><colgroup><col style="width:40%"><col style="width:30%"><col style="width:30%"></colgroup><thead><tr><th>Área común</th><th>Trabajador 1</th><th>Trabajador 2</th></tr></thead><tbody>${filasC}</tbody></table>`:''}
+    ${(d.comunes&&d.comunes.length)?`<h3 class="apz-h3">Zonas comunes</h3><table class="apz-table"><colgroup><col style="width:34%"><col style="width:40%"><col style="width:26%"></colgroup><thead><tr><th>Área común</th><th>Trabajadores</th><th>Nota</th></tr></thead><tbody>${filasC}</tbody></table>`:''}
     ${resumen}`;
 }
 function asgBuildPDF(d){
@@ -6729,10 +6731,10 @@ function asgComunRows(){
   const edit=asgCan();
   const rows=ASG.comunes.map((c,i)=> edit ? `<tr>
     <td><input list="asgAreaDL" value="${esc(c.area)}" placeholder="Buscar área común…" oninput="asgUpdC(${i},'area',this.value)" class="asg-cell asg-cell-w"></td>
-    <td><input list="asgTrabDL" value="${esc(c.t1)}" placeholder="Trabajador…" oninput="asgUpdC(${i},'t1',this.value)" class="asg-cell"></td>
-    <td><input list="asgTrabDL" value="${esc(c.t2)}" placeholder="(opcional)" oninput="asgUpdC(${i},'t2',this.value)" class="asg-cell"></td>
+    <td style="min-width:170px">${asgWorkersOf(c).map((w,wi)=>`<span style="display:inline-flex;align-items:center;gap:4px;background:#e7eef7;color:#1b3a5b;padding:2px 7px;border-radius:12px;font-size:11.5px;font-weight:600;margin:0 4px 4px 0">${esc(w)} <span onclick="asgComTrabDel(${i},${wi})" style="cursor:pointer;color:#c0392b">✕</span></span>`).join('')}<input list="asgTrabDL" id="asgCWin_${i}" placeholder="+ trabajador" onkeydown="if(event.key==='Enter'){event.preventDefault();asgComTrabAdd(${i});}" onchange="asgComTrabAdd(${i})" class="asg-cell" style="min-width:120px;margin-top:2px"></td>
+    <td><input value="${esc(c.nota||'')}" placeholder="Nota…" oninput="asgUpdC(${i},'nota',this.value)" class="asg-cell"></td>
     <td class="asg-act"><button onclick="asgDelComun(${i})" title="Quitar fila">🗑</button></td></tr>`
-    : `<tr><td><b>${esc(c.area)}</b></td><td>${esc(c.t1)}</td><td>${esc(c.t2)}</td></tr>`).join('');
+    : `<tr><td><b>${esc(c.area)}</b></td><td>${esc(asgWorkersOf(c).join(', '))}</td><td>${c.nota?esc(c.nota):''}</td></tr>`).join('');
   return rows||`<tr><td colspan="${edit?4:3}" style="color:var(--suave)">Sin zonas comunes. Añade una fila.</td></tr>`;
 }
 function asgRenderEditor(){
@@ -6763,7 +6765,7 @@ function asgRenderEditor(){
       <p style="font-size:12.5px;color:var(--suave);margin:-4px 0 12px">Unidades asignadas por trabajador (incluye 2º trabajador). ⚠ = posible sobrecarga.</p>
       <div id="asgBalanceBox">${asgBalanceHTML()}</div></div>`:''}
     <div class="panel"><h2 style="margin-top:0">🧽 Zonas comunes</h2>
-      <div class="asg-scroll"><table class="asg-table"><thead><tr><th style="min-width:200px">Área común</th><th>Trabajador 1</th><th>Trabajador 2</th>${edit?'<th></th>':''}</tr></thead>
+      <div class="asg-scroll"><table class="asg-table"><thead><tr><th style="min-width:200px">Área común</th><th style="min-width:170px">Trabajadores</th><th>Nota</th>${edit?'<th></th>':''}</tr></thead>
         <tbody id="asgCTbody">${asgComunRows()}</tbody></table></div>
       ${edit?`<button class="btn ghost" style="margin-top:10px" onclick="asgAddComun()">+ Añadir zona común</button>`:''}
     </div>
