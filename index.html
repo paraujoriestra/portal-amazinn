@@ -990,7 +990,7 @@ const CONDUCTOR_NAV_OK=['transfer'];
 // ---- Equipos de una persona (soporta supervisores de varios equipos) ----
 // p.equipos = ['*'] (todos) | ['Equipo A','Equipo B'] | []  (además de su equipo principal)
 function personTeams(p){ p=p||{}; const out=[]; const pri=p.org_equipo||p.equipo; if(pri) out.push(pri); (Array.isArray(p.equipos)?p.equipos:[]).forEach(e=>{ if(e&&e!=='*'&&!out.includes(e)) out.push(e); }); return out; }
-function personAllTeams(p){ return !!(p&&Array.isArray(p.equipos)&&p.equipos.includes('*')); }
+function personAllTeams(p){ if(p&&Array.isArray(p.equipos)&&p.equipos.includes('*')) return true; return personTeams(p).length===0; /* sin equipo asignado = pertenece a todos los equipos */ }
 function personInTeam(p,t){ if(!t||t==='*')return true; if(personAllTeams(p))return true; return personTeams(p).includes(t); }
 function myTeamsList(){ return personTeams(PROFILE); }
 function myAllTeams(){ return personAllTeams(PROFILE); }
@@ -1402,7 +1402,8 @@ async function loadComUnread(){
 }
 async function loadAprobPend(){ if(!CAN_MANAGE.includes(PROFILE.role)){ setBadge('aprobaciones',0); return; }
   try{ const{count}=await sb.from('solicitudes').select('id',{count:'exact',head:true}).eq('estado','Pendiente'); setBadge('aprobaciones',count||0); }catch(e){} }
-async function refreshBadges(){ await Promise.all([loadMsgUnread(),loadPendingCount(),loadComUnread(),loadAprobPend()]); }
+async function loadReclBadge(){ try{ const{count}=await sb.from('reclutamiento').select('id',{count:'exact',head:true}).eq('estado','recibido'); setBadge('reclutamiento',count||0); }catch(e){} }
+async function refreshBadges(){ await Promise.all([loadMsgUnread(),loadPendingCount(),loadComUnread(),loadAprobPend(),loadReclBadge()]); }
 /* ----- Alcance (Área/Departamento/Equipo) reutilizable ----- */
 function scopeSelects(ids,cur){ cur=cur||{};
   return `<div class="row">
@@ -3582,7 +3583,7 @@ async function pageRegistros(){
     </div>`;})()}
     <div class="row">
       <div><label>Posición</label><select id="rgC_${u.id}"><option value="__none__">— Sin posición —</option>${CAT.posiciones.map(p=>`<option>${esc(p)}</option>`).join('')}</select></div>
-      <div><label>Equipo</label><select id="rgE_${u.id}"><option value="__none__">— Ninguno —</option>${CAT.equipos.map(e=>`<option>${esc(e)}</option>`).join('')}</select></div>
+      <div><label>Equipo</label><select id="rgE_${u.id}"><option value="__none__">— Ninguno (todos los equipos) —</option>${CAT.equipos.map(e=>`<option>${esc(e)}</option>`).join('')}</select></div>
     </div>
     <div class="row">
       <div><label>Rol / permisos</label><select id="rgR_${u.id}">${ROLES.filter(r=>r[0]!=='propietario').map(r=>`<option value="${r[0]}">${esc(r[1])}</option>`).join('')}</select></div><div></div>
@@ -3718,7 +3719,7 @@ function userForm(){const u=userDraft;const colores=['#1F4E79','#16a085','#8e44a
     <div class="row"><div><label>Posición</label>
         <select id="uPos" onchange="if(this.value==='__new__')crearCatInline('posicion')"><option value="__none__" ${!u.posicion?'selected':''}>— Sin posición —</option>${CAT.posiciones.map(p=>`<option ${u.posicion===p?'selected':''}>${esc(p)}</option>`).join('')}<option value="__new__">+ Crear nueva…</option></select></div>
       <div><label>Equipo</label>
-        <select id="uEquipo" onchange="if(this.value==='__new__')crearCatInline('equipo')"><option value="__none__" ${!u.equipo?'selected':''}>— Ninguno —</option>${CAT.equipos.map(eq=>`<option ${u.equipo===eq?'selected':''}>${esc(eq)}</option>`).join('')}<option value="__new__">+ Crear nuevo…</option></select></div></div>
+        <select id="uEquipo" onchange="if(this.value==='__new__')crearCatInline('equipo')"><option value="__none__" ${!u.equipo?'selected':''}>— Ninguno (todos los equipos) —</option>${CAT.equipos.map(eq=>`<option ${u.equipo===eq?'selected':''}>${esc(eq)}</option>`).join('')}<option value="__new__">+ Crear nuevo…</option></select></div></div>
     <div style="margin:2px 0 8px">
       <label>Supervisa varios equipos <small style="color:var(--suave);font-weight:400">— para un supervisor que cubre más de un equipo</small></label>
       <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:4px">
@@ -3920,6 +3921,7 @@ async function pageReclutamiento(){
     <div class="panel"><div style="font-size:11px;font-weight:800;letter-spacing:.5px;color:var(--suave);margin-bottom:8px">FASE</div><div style="display:flex;gap:8px;flex-wrap:wrap">${stagePills}</div>
       <div style="font-size:11px;font-weight:800;letter-spacing:.5px;color:var(--suave);margin:15px 0 8px">FILTRAR POR ÁREA</div><div style="display:flex;gap:7px;flex-wrap:wrap">${areaBtns}</div></div>
     ${list}`;
+  try{loadReclBadge();}catch(_){}
 }
 function reclCard(r){
   const st=RECL_STAGES.find(s=>s[0]===(r.estado||'recibido'))||RECL_STAGES[0];
