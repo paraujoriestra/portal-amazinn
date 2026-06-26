@@ -1334,6 +1334,7 @@ function visNotifs(){return NOTIFS.filter(n=>{
   if(n.user_id) return String(n.user_id)===String(ME.id);   // dirigida a una persona concreta
   if(isAdmin()) return true;
   if(!n.dept||n.dept==='*') return true;
+  if(!PROFILE.dept) return true;   // sin departamento = recibe los avisos de cualquier departamento
   return String(n.dept).split('|').map(s=>s.trim()).includes(PROFILE.dept);
 });}
 function refreshBell(){const d=document.getElementById('bellDot');if(!d)return;const n=visNotifs().filter(x=>!NOTIF_READ.has(x.id)).length;d.textContent=n;d.style.display=n?'block':'none';}
@@ -1413,7 +1414,9 @@ function scopeSelects(ids,cur){ cur=cur||{};
 }
 function scopeMatch(stored,val){ if(stored==null||stored===''||stored==='*') return true; const arr=String(stored).split('|').map(s=>s.trim()).filter(Boolean); return arr.length? arr.includes(val||'') : true; }
 function inScopeFor(o,u){ const dept=(o.dirigido!==undefined&&o.dirigido!==null)?o.dirigido:o.dept; const ueq=(u.org_equipo||u.equipo||'');
-  return scopeMatch(o.area,u.area)&&scopeMatch(dept,u.dept)&&scopeMatch(o.equipo,ueq); }
+  const deptOk = (!u.dept) ? true : scopeMatch(dept,u.dept);   // sin departamento = pertenece a todos
+  const eqOk   = (!ueq)    ? true : scopeMatch(o.equipo,ueq);  // sin equipo = pertenece a todos
+  return scopeMatch(o.area,u.area)&&deptOk&&eqOk; }
 function inScope(o){ return isAdmin()||inScopeFor(o,PROFILE); }
 function scopeFmt(v){ return String(v).split('|').map(s=>s.trim()).filter(Boolean).join(', '); }
 function scopeLabel(o){ const dept=(o.dirigido!==undefined&&o.dirigido!==null)?o.dirigido:o.dept; const p=[];
