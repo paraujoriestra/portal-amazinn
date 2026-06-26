@@ -5449,7 +5449,7 @@ async function createKudo(e){e.preventDefault();const para=document.getElementBy
 /* ---------------- INCIDENCIAS ---------------- */
 /* ================= MANTENIMIENTO · INCIDENCIAS (v2) ================= */
 let incFormOpen=false, incTab='bandeja', incSel=null, incTimerInt=null, incEditOpen=false, incNew=false;
-let incFilters={ambito:'',edificio:'',unidad:'',urgencia:'',estado:'',q:'',categoria:'',afecta:''}; let incFiltersOpen=false; let incOrden='';
+let incFilters={ambito:'',edificio:'',unidad:'',urgencia:'',estado:'',q:'',categoria:'',afecta:''}; let incFiltersOpen=false; let incOrden='prioridad';
 const INC_STATS_EXCLUDE=new Set(['Aurelio Núñez','Oscar Naranjo Monroy','Deibis Palacio Melendez','Carlos Gabriel González']);
 function incToggleFilters(){ incFiltersOpen=!incFiltersOpen; show('incidencias'); }
 function incSetOrden(v){ incOrden=v; show('incidencias'); }
