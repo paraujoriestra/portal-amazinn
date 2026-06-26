@@ -5480,7 +5480,7 @@ function incFiltersPanelHTML(){ const f=incFilters;
     ${anyF?`<button class="inc-clear" onclick="incClearFilters()">✕ Limpiar</button>`:''}
   </div>`; }
 let MANT_EDIF=[], MANT_UNI=[], MANT_STAFF=[], MANT_TEAMS=[], MANT_PREV=[], PREV_INC=[], INC=[], INC_FOTOS={};
-let prevFormOpen=false, prevEditId=null, prevSel=null, prevTab='lista', prevCalRef=null, prevFilterCat='';
+let prevFormOpen=false, prevEditId=null, prevSel=null, prevTab='lista', prevCalRef=null, prevFilterCat='', prevAsignSel=[], prevUniSel=[];
 const INC_URG={alta:['Alta','b-red','🔴'],media:['Media','b-amber','🟠'],baja:['Baja','b-grey','🟢']};
 const INC_EST={pendiente:['Pendiente','b-grey'],asignada:['Asignada','b-blue'],en_curso:['En curso','b-amber'],pausada:['Pausada','b-amber'],a_medias:['A medias','b-amber'],terminada:['Terminada','b-green'],cancelada:['Cancelada','b-grey']};
 const INC_VIA={cliente_ota:'🌐 Cliente (OTA)',limpieza:'🧹 Limpieza',personal:'👤 Personal interno'};
@@ -6169,7 +6169,7 @@ function prevPreview(id){
     ${calRow('🏠','Ubicación',(t.edificio||'Cualquiera')+(t.unidad?' · '+t.unidad:''))}
     ${calRow('🏷️','Categoría',incCatLabel(t.categoria))}
     ${calRow('📅','Próximo',prox?prox.toLocaleDateString('es-ES'):'—')}
-    ${calRow('🔁','Frecuencia',t.frecuencia_dias?('cada '+t.frecuencia_dias+' días'):'')}
+    ${calRow('🔁','Frecuencia',t.recurrente===false?'Una sola vez':(t.frecuencia_dias?('cada '+t.frecuencia_dias+' días'):''))}
     ${calRow('👤','Asignada a',asg)}
     ${t.ultima?calRow('✓','Última vez',new Date(t.ultima+'T00:00:00').toLocaleDateString('es-ES')):''}
     ${t.notas?`<div style="font-size:12.5px;margin-top:8px;color:#3a4654;background:var(--gris);padding:7px 10px;border-radius:8px">📝 ${esc(t.notas)}</div>`:''}`;
@@ -6228,7 +6228,7 @@ function renderPrevDetail(id){
   const puedeTomar = incEsMant() && !t.asignado_a && t.activo!==false;
   return `<button class="btn-sm ghost" onclick="prevBack()">← Volver</button>
   <div class="panel" style="margin-top:12px">
-    <div class="inc-card-top">${estado}<span class="badge b-grey">cada ${t.frecuencia_dias} días</span></div>
+    <div class="inc-card-top">${estado}<span class="badge b-grey">${t.recurrente===false?'Una sola vez':'cada '+(t.frecuencia_dias||30)+' días'}</span></div>
     <h2 style="margin:8px 0 2px">🗓️ ${esc(t.titulo)}</h2>
     <div class="inc-kv"><b>Ubicación:</b> ${esc(t.edificio||'Cualquiera')}${t.unidad?' · '+esc(t.unidad):''}</div>
     <div class="inc-kv"><b>Categoría:</b> ${incCatLabel(t.categoria)}</div>
@@ -6272,7 +6272,7 @@ function prevCardHTML(t){
   const asg = t.asignado_a_nombre? ('→ '+esc(t.asignado_a_nombre)) : (t.asignado_equipo? ('→ '+esc(t.asignado_equipo)) : '→ Sin asignar');
   const puedeTomar = incEsMant() && !t.asignado_a && t.activo!==false;
   return `<div class="inc-card${t.activo===false?' done':''}${overdue?' prev-due':''}">
-    <div class="inc-card-top">${estado}<span class="badge b-grey">cada ${t.frecuencia_dias} días</span></div>
+    <div class="inc-card-top">${estado}<span class="badge b-grey">${t.recurrente===false?'Una sola vez':'cada '+(t.frecuencia_dias||30)+' días'}</span></div>
     <div class="inc-card-loc">🗓️ ${esc(t.titulo)}</div>
     <div class="inc-card-desc">🏠 ${esc(t.edificio||'Cualquiera')}${t.unidad?' · '+esc(t.unidad):''}${t.categoria?' · '+incCatLabel(t.categoria):''}</div>
     <div class="inc-card-meta">Próximo: <b>${prox?prox.toLocaleDateString('es-ES'):'—'}</b> · ${asg}</div>
@@ -6290,29 +6290,44 @@ async function prevTomar(id){
 function prevFormHTML(){
   const t = prevEditId? (MANT_PREV.find(x=>String(x.id)===String(prevEditId))||{}) : {};
   const edOpts=`<option value="">— Cualquiera —</option>`+MANT_EDIF.map(e=>`<option ${t.edificio===e.nombre?'selected':''}>${esc(e.nombre)}</option>`).join('');
-  const uniList=MANT_UNI.filter(u=>u.edificio===t.edificio);
-  const unOpts=`<option value="">— Cualquiera —</option>`+uniList.map(u=>`<option ${t.unidad===u.nombre?'selected':''}>${esc(u.nombre)}</option>`).join('');
+  const units=MANT_UNI.filter(u=>u.edificio===t.edificio);
+  const uniPickOpts = t.edificio ? (`<option value="">— elige una unidad —</option>`+units.map(u=>`<option value="${esc(u.nombre)}">${esc(u.nombre)}${u.tipo==='comun'?' (zona común)':''}</option>`).join('')) : `<option value="">Elige primero un edificio</option>`;
   const defCat=(!prevEditId && isProvider())? provEsp() : (t.categoria||'');
   const catOpts=`<option value="">— Sin categoría —</option>`+INC_CAT.map(([v,l])=>`<option value="${v}" ${defCat===v?'selected':''}>${l}</option>`).join('');
   const teamOpts=`<option value="">— Sin equipo —</option>`+MANT_TEAMS.map(tm=>`<option ${t.asignado_equipo===tm?'selected':''}>${esc(tm)}</option>`).join('');
-  const perOpts=`<option value="">— Nadie en concreto —</option>`+MANT_STAFF.map(s=>`<option value="${s.id}" ${String(t.asignado_a)===String(s.id)?'selected':''}>${esc(s.nombre)}</option>`).join('');
+  const persPickOpts=`<option value="">— elige una persona —</option>`+MANT_STAFF.map(s=>`<option value="${s.id}">${esc(s.nombre)}</option>`).join('');
+  const recurrente=(t.recurrente!==false);
   return `<div class="panel" style="max-width:680px"><form class="box" style="max-width:none" onsubmit="return prevSave(event)">
     <label>Título de la tarea</label><input id="pTit" required value="${esc(t.titulo||'')}" placeholder="Ej: Limpieza de filtros de piscina">
     <div class="row"><div><label>Edificio</label><select id="pEdif" onchange="prevFormEdif()">${edOpts}</select></div>
-    <div><label>Unidad / zona</label><select id="pUni">${unOpts}</select></div></div>
-    <div class="row"><div><label>Categoría</label><select id="pCat">${catOpts}</select></div>
-    <div><label>Cada cuántos días</label><input id="pFreq" type="number" min="1" value="${t.frecuencia_dias||30}"></div></div>
+    <div><label>Categoría</label><select id="pCat">${catOpts}</select></div></div>
+    <label>Unidades / zonas <small style="color:var(--suave);font-weight:400">(deja vacío = cualquiera; puedes añadir varias)</small></label>
+    <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap"><select id="pUniPick" ${t.edificio?'':'disabled'} style="flex:1;min-width:160px">${uniPickOpts}</select><button class="btn-sm" type="button" onclick="prevUniAdd()" style="white-space:nowrap">+ Añadir</button></div>
+    <div id="pUniChips" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">${prevUniSel.map(prevUniChip).join('')}</div>
+    <div class="row" style="margin-top:10px"><div><label>¿Es recurrente?</label><select id="pRec" onchange="prevRecToggle()"><option value="si" ${recurrente?'selected':''}>Sí, se repite cada cierto tiempo</option><option value="no" ${!recurrente?'selected':''}>No, una sola vez</option></select></div>
+    <div id="pFreqWrap" style="${recurrente?'':'display:none'}"><label>Cada cuántos días</label><input id="pFreq" type="number" min="1" value="${t.frecuencia_dias||30}"></div></div>
     <div class="row"><div><label>Próxima fecha</label><input id="pProx" type="date" value="${t.proximo||''}"></div>
-    <div><label>Equipo</label><select id="pEquipo">${teamOpts}</select></div></div>
-    <label>Persona (opcional)</label><select id="pPersona">${perOpts}</select>
-    <label>Checklist · un paso por línea (opcional)</label><textarea id="pChk" class="inc-note" placeholder="Revisar presión&#10;Limpiar prefiltro&#10;Comprobar fugas">${(t.checklist||[]).map(c=>esc(c.txt)).join('\n')}</textarea>
+    <div><label>Equipo (opcional)</label><select id="pEquipo">${teamOpts}</select></div></div>
+    <label>Personas asignadas <small style="color:var(--suave);font-weight:400">(puedes añadir varias)</small></label>
+    <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap"><select id="pPersonaPick" style="flex:1;min-width:160px">${persPickOpts}</select><button class="btn-sm" type="button" onclick="prevPersonaAdd()" style="white-space:nowrap">+ Añadir</button></div>
+    <div id="pPersonaChips" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">${prevAsignSel.map(prevPersonaChip).join('')}</div>
+    <label style="margin-top:10px">Checklist · un paso por línea (opcional)</label><textarea id="pChk" class="inc-note" placeholder="Revisar presión&#10;Limpiar prefiltro&#10;Comprobar fugas">${(t.checklist||[]).map(c=>esc(c.txt)).join('\n')}</textarea>
     <label>Notas (opcional)</label><textarea id="pNotas" class="inc-note">${esc(t.notas||'')}</textarea>
     <div class="inc-final" style="margin-top:12px"><button class="btn-ok" type="submit">${prevEditId?'Guardar':'Crear tarea'}</button><button class="btn-sm ghost" type="button" onclick="prevCancel()">Cancelar</button></div>
   </form></div>`;
 }
-function prevFormEdif(){ const ed=(document.getElementById('pEdif')||{}).value||''; const uni=document.getElementById('pUni'); if(!uni)return; const list=MANT_UNI.filter(u=>u.edificio===ed); uni.innerHTML=`<option value="">— Cualquiera —</option>`+list.map(u=>`<option>${esc(u.nombre)}${u.tipo==='comun'?' (zona común)':''}</option>`).join(''); }
-function prevNew(){ prevEditId=null; prevFormOpen=true; prevSel=null; prevTab='lista'; show('preventivo'); }
-function prevEdit(id){ prevEditId=id; prevFormOpen=true; prevSel=null; prevTab='lista'; show('preventivo'); }
+function prevFormEdif(){ const ed=(document.getElementById('pEdif')||{}).value||''; const pick=document.getElementById('pUniPick'); prevUniSel=[]; const ch=document.getElementById('pUniChips'); if(ch)ch.innerHTML=''; if(!pick)return; const list=MANT_UNI.filter(u=>u.edificio===ed); if(!ed){ pick.disabled=true; pick.innerHTML='<option value="">Elige primero un edificio</option>'; } else { pick.disabled=false; pick.innerHTML='<option value="">— elige una unidad —</option>'+list.map(u=>`<option value="${esc(u.nombre)}">${esc(u.nombre)}${u.tipo==='comun'?' (zona común)':''}</option>`).join(''); } }
+function prevUniChip(n){ return `<span style="display:inline-flex;align-items:center;gap:6px;background:#eef2f7;color:#34557a;padding:4px 10px;border-radius:16px;font-size:12.5px;font-weight:600">${esc(n)} <span onclick="prevUniDel('${String(n).replace(/'/g,"\\'")}')" style="cursor:pointer;color:#c0392b;font-weight:700">✕</span></span>`; }
+function prevUniRenderChips(){ const b=document.getElementById('pUniChips'); if(b) b.innerHTML=prevUniSel.map(prevUniChip).join(''); }
+function prevUniAdd(){ const s=document.getElementById('pUniPick'); if(!s||!s.value)return; if(!prevUniSel.includes(s.value)) prevUniSel.push(s.value); s.value=''; prevUniRenderChips(); }
+function prevUniDel(n){ prevUniSel=prevUniSel.filter(x=>x!==n); prevUniRenderChips(); }
+function prevPersonaChip(p){ return `<span style="display:inline-flex;align-items:center;gap:6px;background:#e7eff8;color:#2563aa;padding:4px 10px;border-radius:16px;font-size:12.5px;font-weight:600">${esc(p.nombre||'')} <span onclick="prevPersonaDel('${String(p.id).replace(/'/g,"\\'")}')" style="cursor:pointer;color:#c0392b;font-weight:700">✕</span></span>`; }
+function prevPersonaRenderChips(){ const b=document.getElementById('pPersonaChips'); if(b) b.innerHTML=prevAsignSel.map(prevPersonaChip).join(''); }
+function prevPersonaAdd(){ const s=document.getElementById('pPersonaPick'); if(!s||!s.value)return; const id=s.value; if(!prevAsignSel.some(p=>String(p.id)===String(id))){ const st=MANT_STAFF.find(x=>String(x.id)===String(id)); prevAsignSel.push({id,nombre:st?st.nombre:''}); } s.value=''; prevPersonaRenderChips(); }
+function prevPersonaDel(id){ prevAsignSel=prevAsignSel.filter(p=>String(p.id)!==String(id)); prevPersonaRenderChips(); }
+function prevRecToggle(){ const v=(document.getElementById('pRec')||{}).value; const w=document.getElementById('pFreqWrap'); if(w) w.style.display=(v==='no')?'none':''; }
+function prevNew(){ prevEditId=null; prevAsignSel=[]; prevUniSel=[]; prevFormOpen=true; prevSel=null; prevTab='lista'; show('preventivo'); }
+function prevEdit(id){ prevEditId=id; const t=MANT_PREV.find(x=>String(x.id)===String(id))||{}; prevUniSel = (Array.isArray(t.unidades)&&t.unidades.length)? t.unidades.slice() : (t.unidad? String(t.unidad).split(',').map(s=>s.trim()).filter(Boolean):[]); prevAsignSel = (Array.isArray(t.asignados)&&t.asignados.length)? t.asignados.slice() : (t.asignado_a? [{id:t.asignado_a,nombre:t.asignado_a_nombre||''}]:[]); prevFormOpen=true; prevSel=null; prevTab='lista'; show('preventivo'); }
 function prevCancel(){ prevFormOpen=false; prevEditId=null; show('preventivo'); }
 async function prevSave(e){
   e.preventDefault();
@@ -6322,9 +6337,19 @@ async function prevSave(e){
   const existing=prevEditId?MANT_PREV.find(x=>String(x.id)===String(prevEditId)):null;
   const prevChk=(existing&&Array.isArray(existing.checklist))?existing.checklist:[];
   const checklist=(g('pChk')||'').split('\n').map(s=>s.trim()).filter(Boolean).map(txt=>{const ex=prevChk.find(c=>c.txt===txt);return {txt,done:ex?!!ex.done:false};});
-  const row={ titulo:tit, edificio:g('pEdif')||null, unidad:g('pUni')||null, categoria:g('pCat')||null,
-    frecuencia_dias:Math.max(1,parseInt(g('pFreq'),10)||30), proximo:g('pProx')||null,
-    asignado_equipo:g('pEquipo')||null, asignado_a:personaId||null, asignado_a_nombre:persona?persona.nombre:null, notas:(g('pNotas')||'').trim()||null, checklist };
+  const recurrente=(g('pRec')!=='no');
+  const unidades=prevUniSel.slice();
+  const asignados=prevAsignSel.slice();
+  const row={ titulo:tit, edificio:g('pEdif')||null,
+    unidad: unidades.length?unidades.join(', '):null, unidades,
+    categoria:g('pCat')||null,
+    recurrente, frecuencia_dias: recurrente? Math.max(1,parseInt(g('pFreq'),10)||30) : null,
+    proximo:g('pProx')||null,
+    asignado_equipo:g('pEquipo')||null,
+    asignados,
+    asignado_a: asignados.length?asignados[0].id:null,
+    asignado_a_nombre: asignados.length?asignados.map(p=>p.nombre).filter(Boolean).join(', '):null,
+    notas:(g('pNotas')||'').trim()||null, checklist };
   let err;
   if(prevEditId){ const r=await sb.from('mant_preventivo').update(row).eq('id',prevEditId); err=r.error; }
   else { row.activo=true; row.creado_por=ME.id; row.creado_por_nombre=PROFILE.nombre; row.created_at=new Date().toISOString(); const r=await sb.from('mant_preventivo').insert(row); err=r.error; }
@@ -6333,9 +6358,14 @@ async function prevSave(e){
 }
 async function prevDone(id){
   const t=MANT_PREV.find(x=>String(x.id)===String(id)); if(!t)return;
-  const today=new Date(); const next=new Date(); next.setDate(next.getDate()+(t.frecuencia_dias||30));
+  const today=new Date();
   const hist=(Array.isArray(t.historial)?t.historial.slice():[]); hist.push({t:prevLocalIso(today),who:PROFILE.nombre});
   const checklist=(t.checklist||[]).map(c=>({txt:c.txt,done:false}));
+  if(t.recurrente===false){
+    await sb.from('mant_preventivo').update({ultima:prevLocalIso(today),activo:false,historial:hist,checklist}).eq('id',id);
+    toast('✓ Tarea completada'); show('preventivo'); return;
+  }
+  const next=new Date(); next.setDate(next.getDate()+(t.frecuencia_dias||30));
   await sb.from('mant_preventivo').update({ultima:prevLocalIso(today),proximo:prevLocalIso(next),historial:hist,checklist}).eq('id',id);
   toast('✓ Hecho · reprogramada para '+next.toLocaleDateString('es-ES')); show('preventivo');
 }
@@ -6391,7 +6421,7 @@ function pageOnboarding(){const h=ONB.filter(o=>o.done).length,pct=Math.round(h/
 /* ===================== LIMPIEZA · ASIGNACIONES ===================== */
 const ASG_TIPO=[['salida','🔴 Salida'],['salida_entrada','🟠 Salida y entrada'],['entrada','🟢 Entrada'],['retoque','🔵 Retoque']];
 const EQUIPOS=['Oficina Central','El Valle','Playa Escondida'];
-let asgTab='asignaciones';
+let asgTab='asignaciones', asgTrabEditId=null;
 let ASG={pubId:null,equipo:'',fecha:'',unidades:[],comunes:[]};
 let ASG_TRAB=[], ASG_TRAB_FULL=[], ASG_UNI=[], ASG_AREA=[], ASG_PUBS=[];
 function asgCan(){ return CAN_MANAGE.includes(PROFILE.role); }
@@ -6416,6 +6446,7 @@ function asgDelUnidad(i){ ASG.unidades.splice(i,1); asgRenderUTbody(false); }
 function asgAddComun(){ ASG.comunes.push({area:'',t1:'',t2:''}); asgRenderCTbody(true); }
 function asgDelComun(i){ ASG.comunes.splice(i,1); asgRenderCTbody(false); }
 function asgNueva(){ ASG={pubId:null,equipo:'',fecha:'',unidades:[asgNewUnit()],comunes:[]}; asgTab='asignaciones'; show('asignaciones'); }
+function asgCancelEdit(){ if(!confirm('¿Cancelar esta asignación? Se perderán los cambios que no hayas publicado.')) return; ASG={pubId:null,equipo:'',fecha:'',unidades:[],comunes:[]}; asgTab='publicadas'; toast('Asignación cancelada'); show('asignaciones'); }
 function setAsgTab(t){ asgTab=t; show('asignaciones'); }
 function asgFind(id){ return ASG_PUBS.find(p=>p.id===id); }
 let asgOpenPub=null;
@@ -6476,6 +6507,9 @@ async function asgAddTrab(){ const g=document.getElementById('asgTrabN'); const 
 async function asgDelTrab(id){ if(!confirm('¿Borrar este trabajador del listado? (sus asignaciones publicadas no se borran)')) return;
   const {error}=await sb.from('limpieza_trabajadores').delete().eq('id',id);
   if(error){ alert('Error: '+error.message); return; } show('asignaciones'); }
+function asgEditTrab(id){ asgTrabEditId=id; show('asignaciones'); }
+function asgCancelTrab(){ asgTrabEditId=null; show('asignaciones'); }
+async function asgSaveTrab(id){ const n=(val('asgTE_'+id)||'').trim(); if(!n){ alert('Pon un nombre.'); return; } const eqEl=document.getElementById('asgTEq_'+id); const eq=eqEl?eqEl.value:''; const {error}=await sb.from('limpieza_trabajadores').update({nombre:n,equipo:eq||null}).eq('id',id); if(error){ alert('Error: '+error.message); return; } asgTrabEditId=null; toast('✓ Guardado'); show('asignaciones'); }
 
 async function asgSyncCatalogs(){
   const uni=[...new Set(ASG.unidades.map(u=>(u.unidad||'').trim()).filter(Boolean))].filter(n=>!ASG_UNI.includes(n));
@@ -6716,7 +6750,7 @@ function asgRenderEditor(){
       ${edit?`<input type="date" value="${esc(ASG.fecha)}" onchange="asgUpdFecha(this.value)" style="padding:8px 11px;border:1px solid var(--gris2);border-radius:8px;font-family:inherit">`:`<b>${esc(fechaLarga(ASG.fecha))}</b>`}
       ${ASG.pubId!=null?`<span class="asg-pill">Editando publicación</span>`:''}
       ${edit?`<button class="btn ghost" onclick="asgCopyPrev()" title="Copiar el plan anterior de este equipo">📋 Copiar día anterior</button>`:''}
-      ${edit?`<button class="btn" style="margin-left:auto" onclick="asgPublicar()">${ASG.pubId!=null?'💾 Actualizar publicación':'✓ Publicar'}</button>`:''}
+      ${edit?`<button class="btn ghost" style="margin-left:auto" onclick="asgCancelEdit()">✕ Cancelar</button><button class="btn" onclick="asgPublicar()">${ASG.pubId!=null?'💾 Actualizar publicación':'✓ Publicar'}</button>`:''}
     </div>
     <div class="panel"><h2 style="margin-top:0">🏠 Unidades</h2>
       <div class="asg-scroll"><table class="asg-table"><thead><tr><th style="min-width:150px">Unidad</th><th>🕐 Check-in</th><th style="min-width:155px">Tipo</th><th>Nº pax</th><th>Extra / nota</th><th>Trabajador 1</th><th>Trabajador 2</th><th>Supervisora</th>${edit?'<th></th>':''}</tr></thead>
@@ -6738,7 +6772,16 @@ function asgRenderEditor(){
 }
 function asgRenderListado(){
   const edit=asgCan();
-  const filas=ASG_TRAB_FULL.map((t,i)=>`<tr><td style="width:34px;color:var(--suave)">${i+1}</td><td><b>${esc(t.nombre)}</b></td><td>${t.equipo?`<span class="asg-pill" style="background:#e7eef7;color:#1b3a5b">${esc(t.equipo)}</span>`:'<span style="color:var(--suave)">—</span>'}</td>${edit?`<td class="asg-act"><button onclick="asgDelTrab(${t.id})" title="Borrar trabajador">🗑</button></td>`:''}</tr>`).join('');
+  const filas=ASG_TRAB_FULL.map((t,i)=>{
+    if(edit && asgTrabEditId===t.id){
+      const eqOpts=`<option value="">Equipo…</option>`+EQUIPOS.map(e=>`<option value="${esc(e)}" ${t.equipo===e?'selected':''}>${esc(e)}</option>`).join('');
+      return `<tr><td style="width:34px;color:var(--suave)">${i+1}</td>
+        <td><input id="asgTE_${t.id}" value="${esc(t.nombre)}" onkeydown="if(event.key==='Enter')asgSaveTrab(${t.id})" style="width:100%;padding:7px 10px;border:1px solid var(--gris2);border-radius:7px;font-family:inherit;font-size:14px"></td>
+        <td><select id="asgTEq_${t.id}" style="padding:7px 10px;border:1px solid var(--gris2);border-radius:7px;font-family:inherit;font-size:14px">${eqOpts}</select></td>
+        <td class="asg-act" style="white-space:nowrap"><button onclick="asgSaveTrab(${t.id})" title="Guardar" style="color:#1e8a5a">✓</button> <button onclick="asgCancelTrab()" title="Cancelar">✕</button></td></tr>`;
+    }
+    return `<tr><td style="width:34px;color:var(--suave)">${i+1}</td><td><b>${esc(t.nombre)}</b></td><td>${t.equipo?`<span class="asg-pill" style="background:#e7eef7;color:#1b3a5b">${esc(t.equipo)}</span>`:'<span style="color:var(--suave)">—</span>'}</td>${edit?`<td class="asg-act"><details class="asg-kebab"><summary>⋮</summary><div class="asg-kebab-menu"><button onclick="asgEditTrab(${t.id})">✏️ Editar</button><button onclick="asgDelTrab(${t.id})" style="color:#c0392b">🗑 Eliminar</button></div></details></td>`:''}</tr>`;
+  }).join('');
   return `<div class="page-sub">Personal de limpieza disponible y su equipo. Estos nombres alimentan los desplegables de Trabajador 1 y 2 (filtrados por el equipo de la asignación).</div>
     ${edit?`<div class="panel" style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
       <input id="asgTrabN" placeholder="Nombre y apellido del trabajador…" onkeydown="if(event.key==='Enter')asgAddTrab()" style="flex:1;min-width:220px;padding:9px 12px;border:1px solid var(--gris2);border-radius:8px;font-family:inherit;font-size:14px">
@@ -6765,8 +6808,10 @@ async function pageAsignaciones(){
   const t0=await sb.from('limpieza_trabajadores').select('*').order('nombre');
   if(t0.error){ document.getElementById('main').innerHTML=`<div class="page-title">Limpieza · Asignaciones</div><div class="panel">No se pudo cargar. ¿Ejecutaste <b>supabase_limpieza.sql</b> en Supabase?<br><small style="color:var(--suave)">${esc(t0.error.message)}</small></div>`; return; }
   ASG_TRAB_FULL=t0.data||[]; ASG_TRAB=ASG_TRAB_FULL.map(x=>x.nombre);
-  const [uc,ac]=await Promise.all([ sb.from('limpieza_unidades_cat').select('*').order('nombre'), sb.from('limpieza_areas_cat').select('*').order('nombre') ]);
-  ASG_UNI=(uc.data||[]).map(x=>x.nombre); ASG_AREA=(ac.data||[]).map(x=>x.nombre);
+  const [edC,unC,ac]=await Promise.all([ sb.from('mant_edificios').select('nombre').order('nombre'), sb.from('mant_unidades').select('edificio,nombre,tipo,orden'), sb.from('limpieza_areas_cat').select('*').order('nombre') ]);
+  const _eds=edC.data||[], _uns=unC.data||[]; const _opts=[];
+  _eds.forEach(e=>{ const ap=_uns.filter(u=>u.edificio===e.nombre).sort((a,b)=>(a.orden||0)-(b.orden||0)||String(a.nombre).localeCompare(String(b.nombre))); if(ap.length){ ap.forEach(u=>_opts.push(e.nombre+' · '+u.nombre)); } else { _opts.push(e.nombre); } });
+  ASG_UNI=_opts; ASG_AREA=(ac.data||[]).map(x=>x.nombre);
   const [pubs,us,cs]=await Promise.all([ sb.from('limpieza_pub').select('*').order('fecha',{ascending:false}), sb.from('limpieza_pub_unidades').select('*').order('orden'), sb.from('limpieza_pub_comunes').select('*').order('orden') ]);
   ASG_PUBS=(pubs.data||[]).map(p=>({...p, unidades:(us.data||[]).filter(u=>u.pub_id===p.id), comunes:(cs.data||[]).filter(c=>c.pub_id===p.id)}));
   if(!canEdit) asgTab='publicadas';
