@@ -6526,8 +6526,8 @@ async function asgPublicar(){
   const sinAsig=(ASG.unidades||[]).filter(u=>(u.unidad||'').trim() && !asgWorkersOf(u).length).length;
   if(sinAsig && !confirm('Hay '+sinAsig+' unidad(es) con nombre pero sin trabajador asignado. ¿Publicar igualmente?')) return;
   let pubId=ASG.pubId;
-  if(pubId==null){ const {data,error}=await sb.from('limpieza_pub').insert({fecha:ASG.fecha,equipo:ASG.equipo,created_by:ME.id}).select().single(); if(error){alert('Error: '+error.message);return;} pubId=data.id; }
-  else { const {error}=await sb.from('limpieza_pub').update({fecha:ASG.fecha,equipo:ASG.equipo}).eq('id',pubId); if(error){alert('Error: '+error.message);return;} }
+  if(pubId==null){ const hist=[{t:new Date().toISOString(),who:PROFILE.nombre,act:'Creada'}]; const {data,error}=await sb.from('limpieza_pub').insert({fecha:ASG.fecha,equipo:ASG.equipo,created_by:ME.id,historial:hist}).select().single(); if(error){alert('Error: '+error.message);return;} pubId=data.id; }
+  else { const cur=asgFind(pubId); const hist=Array.isArray(cur&&cur.historial)?cur.historial.slice():[]; hist.push({t:new Date().toISOString(),who:PROFILE.nombre,act:'Editada'}); const {error}=await sb.from('limpieza_pub').update({fecha:ASG.fecha,equipo:ASG.equipo,historial:hist}).eq('id',pubId); if(error){alert('Error: '+error.message);return;} }
   await sb.from('limpieza_pub_unidades').delete().eq('pub_id',pubId);
   await sb.from('limpieza_pub_comunes').delete().eq('pub_id',pubId);
   const us=ASG.unidades.filter(u=>(u.unidad||asgWorkersOf(u).length||u.supervisora)).map((u,ix)=>{ const ws=asgWorkersOf(u); return {pub_id:pubId,unidad:u.unidad,checkin:u.checkin||'',tipo:u.tipo,pax:u.pax,extra:u.extra,trabajadores:ws,t1:ws[0]||'',t2:ws[1]||'',supervisora:u.supervisora||'',estado:u.estado||'pendiente',orden:ix}; });
@@ -6801,7 +6801,8 @@ function asgRenderPublicadas(){
     return `<div class="pubwrap"><div class="pubcard" style="margin-bottom:0;border-radius:12px 12px 0 0"><div class="pi"><b>📅 ${esc(fechaLarga(e.fecha))}${e.equipo?` <span class="asg-pill" style="background:#e7eef7;color:#1b3a5b;font-size:10.5px">${esc(e.equipo)}</span>`:''}</b><span>${us.length} unidad(es) · ${(e.comunes||[]).length} zona(s) común · ${r.length} personal${us.length?` · ${done}/${us.length} terminadas`:''}</span></div>
       <div class="pa"><button class="btn ghost" onclick="asgPDF(${e.id})">📥 PDF</button>
         ${edit?`<details class="asg-kebab"><summary>⋮</summary><div class="asg-kebab-menu"><button onclick="asgEditar(${e.id})">✏️ Editar</button><button onclick="asgEliminar(${e.id})">🗑 Eliminar</button></div></details>`:''}</div></div>
-      <details class="asg-track" ${e.id===asgOpenPub?'open':''} ontoggle="asgTrackToggle(${e.id},this.open)"><summary>🧹 Seguimiento del día · ${done}/${us.length} terminadas</summary>${asgPubUnitsHTML(e)}</details></div>`; }).join('');
+      <details class="asg-track" ${e.id===asgOpenPub?'open':''} ontoggle="asgTrackToggle(${e.id},this.open)"><summary>🧹 Seguimiento del día · ${done}/${us.length} terminadas</summary>${asgPubUnitsHTML(e)}</details>
+      ${(e.historial&&e.historial.length)?`<details class="asg-track"><summary>🕒 Historial de cambios (${e.historial.length})</summary><div style="padding:8px 14px">${e.historial.slice().reverse().map(h=>`<div style="font-size:12.5px;padding:4px 0;border-bottom:1px solid var(--gris)">${h.act==='Creada'?'🆕':'✏️'} <b>${esc(h.act||'Editada')}</b> · ${esc(h.who||'—')} <span style="color:var(--suave)">· ${h.t?new Date(h.t).toLocaleString('es-ES'):''}</span></div>`).join('')}</div></details>`:''}</div>`; }).join('');
   return sub+`${edit?`<button class="btn ghost" style="margin-bottom:14px" onclick="asgNueva()">+ Nueva asignación</button>`:''}${items}`;
 }
 async function pageAsignaciones(){
@@ -6813,7 +6814,9 @@ async function pageAsignaciones(){
   const [edC,unC,ac]=await Promise.all([ sb.from('mant_edificios').select('nombre').order('nombre'), sb.from('mant_unidades').select('edificio,nombre,tipo,orden'), sb.from('limpieza_areas_cat').select('*').order('nombre') ]);
   const _eds=edC.data||[], _uns=unC.data||[]; const _opts=[];
   _eds.forEach(e=>{ const ap=_uns.filter(u=>u.edificio===e.nombre).sort((a,b)=>(a.orden||0)-(b.orden||0)||String(a.nombre).localeCompare(String(b.nombre))); if(ap.length){ ap.forEach(u=>_opts.push(e.nombre+' · '+u.nombre)); } else { _opts.push(e.nombre); } });
-  ASG_UNI=_opts; ASG_AREA=(ac.data||[]).map(x=>x.nombre);
+  ASG_UNI=_opts;
+  const _com=_uns.filter(u=>u.tipo==='comun').sort((a,b)=>String(a.edificio).localeCompare(String(b.edificio))).map(u=>u.edificio+' · '+u.nombre);
+  ASG_AREA = _com.length ? _com : (ac.data||[]).map(x=>x.nombre);
   const [pubs,us,cs]=await Promise.all([ sb.from('limpieza_pub').select('*').order('fecha',{ascending:false}), sb.from('limpieza_pub_unidades').select('*').order('orden'), sb.from('limpieza_pub_comunes').select('*').order('orden') ]);
   ASG_PUBS=(pubs.data||[]).map(p=>({...p, unidades:(us.data||[]).filter(u=>u.pub_id===p.id), comunes:(cs.data||[]).filter(c=>c.pub_id===p.id)}));
   if(!canEdit) asgTab='publicadas';
