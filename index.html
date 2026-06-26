@@ -4814,15 +4814,49 @@ function trfCalendar(cond){
   let cells='';
   for(let i=0;i<firstDow;i++) cells+=`<div style="background:#fafafa;border:1px solid var(--gris);border-radius:8px;min-height:80px"></div>`;
   for(let dn=1;dn<=daysIn;dn++){ const k=y+'-'+pad(m+1)+'-'+pad(dn); const items=(byDay[k]||[]).slice().sort((a,b)=>(a.llegada||'').localeCompare(b.llegada||'')); const isToday=k===todayK;
-    const chips=items.slice(0,3).map(t=>{const o=TRF_EST[t.estado]||TRF_EST.pendiente; const hora=(t.llegada||'').slice(11,16); return `<div title="${esc((hora?hora+' · ':'')+(t.cliente||'')+(t.destino?' · '+t.destino:''))}" style="font-size:10.5px;background:${o.b};color:${o.c};border-radius:5px;padding:2px 5px;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:600">${hora?hora+' ':''}${esc(t.cliente||'')}</div>`;}).join('');
+    const chips=items.slice(0,3).map(t=>{const o=TRF_EST[t.estado]||TRF_EST.pendiente; const hora=(t.llegada||'').slice(11,16); return `<div onclick="trfPreview(${t.id})" title="Ver traslado de ${esc(t.cliente||'')}" style="cursor:pointer;font-size:10.5px;background:${o.b};color:${o.c};border-radius:5px;padding:2px 5px;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:600">${hora?hora+' ':''}${esc(t.cliente||'')}</div>`;}).join('');
     const more=items.length>3?`<div style="font-size:10px;color:var(--suave);margin-top:2px">+${items.length-3} más</div>`:'';
     cells+=`<div style="background:#fff;border:1px solid ${isToday?'var(--azul)':'var(--gris2)'};border-radius:8px;min-height:80px;padding:4px 5px"><div style="font-size:11px;font-weight:700;color:${isToday?'var(--azul)':'var(--suave)'}">${dn}</div>${chips}${more}</div>`;
   }
   const dowH=['L','M','X','J','V','S','D'].map(d=>`<div style="text-align:center;font-size:11px;font-weight:700;color:var(--suave);padding:4px 0">${d}</div>`).join('');
   const head=`<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap"><button class="btn ghost" style="padding:6px 13px" onclick="trfCalShift(-1)">‹</button><b style="font-size:16px;min-width:150px;text-align:center;text-transform:capitalize">${MS[m]} ${y}</b><button class="btn ghost" style="padding:6px 13px" onclick="trfCalShift(1)">›</button><span style="margin-left:auto;font-size:12.5px;color:var(--suave)">${monthN} traslado(s) este mes</span></div>`;
   const legend=`<div style="display:flex;gap:14px;flex-wrap:wrap;margin-top:10px;font-size:11.5px;color:var(--suave)"><span>🟠 Pendiente</span><span>🔵 Asignado</span><span>🟢 Realizado</span></div>`;
-  return `<div class="panel">${head}<div style="overflow-x:auto"><div style="display:grid;grid-template-columns:repeat(7,minmax(74px,1fr));gap:5px;min-width:560px">${dowH}${cells}</div></div>${legend}${cond?'<div style="font-size:12px;color:var(--suave);margin-top:8px">Aquí ves los traslados que tienes asignados, ordenados por la fecha de llegada del vuelo.</div>':''}</div>`;
+  return `<div class="panel">${head}<div style="overflow-x:auto"><div style="display:grid;grid-template-columns:repeat(7,minmax(74px,1fr));gap:5px;min-width:560px">${dowH}${cells}</div></div>${legend}<div style="font-size:12px;color:var(--suave);margin-top:8px">💡 Toca un traslado para ver sus detalles${cond?'. Aquí ves los que tienes asignados.':' o abrirlo para editar/reasignar.'}</div></div>`;
 }
+function trfPreview(id){
+  const t=TRF.find(x=>String(x.id)===String(id)); if(!t)return;
+  const o=TRF_EST[t.estado]||TRF_EST.pendiente;
+  const esLlegada=(t.sentido||'llegada')==='llegada';
+  const fechaTxt=t.fecha?new Date(t.fecha+'T00:00:00').toLocaleDateString('es-ES',{weekday:'long',day:'2-digit',month:'long',year:'numeric'}):(t.llegada?trfFechaHora(t.llegada):'—');
+  const horaVuelo=(t.llegada||'').slice(11,16);
+  const row=(ic,lbl,v)=> (v==null||v==='')?'':`<div style="display:flex;gap:8px;font-size:13.5px;padding:4px 0;border-bottom:1px solid var(--gris)"><span style="color:var(--suave);min-width:120px">${ic} ${lbl}</span><b>${esc(''+v)}</b></div>`;
+  const cond = t.conductor_id? (t.conductor_nombre||trfCondName(t.conductor_id)) : '';
+  const body=`
+    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px"><span style="background:${o.b};color:${o.c};font-weight:700;font-size:12px;padding:3px 10px;border-radius:20px">${o.lbl}</span>${cond?`<span style="font-size:12px;font-weight:700;color:#2563aa">🧑‍✈️ ${esc(cond)}</span>`:'<span style="font-size:12px;font-weight:700;color:#b9770e">⚠ Sin asignar</span>'}${(t.comision!=null&&t.conductor_id)?`<span style="font-size:12px;color:var(--suave);margin-left:auto">Comisión ${trfMoney(t.comision)}</span>`:''}</div>
+    <div style="font-size:13px;color:var(--suave);margin-bottom:8px">${esLlegada?'🛬 Aeropuerto → propiedad':'🛫 Propiedad → aeropuerto'}</div>
+    ${row('📍','Recogida',t.aeropuerto)}
+    ${row('🏠','Destino',t.destino)}
+    ${esLlegada?row('✈️','Vuelo',t.aerolinea_vuelo):''}
+    ${row('📅','Fecha',fechaTxt)}
+    ${esLlegada?row('🛬','Llegada vuelo',horaVuelo):''}
+    ${row('🕐','Hora recogida',t.recogida)}
+    ${row('👤','Pax',t.pax)}
+    ${row('🧳','Equipaje',t.equipaje)}
+    ${row('📱','WhatsApp',t.whatsapp)}
+    ${t.notas?`<div style="font-size:12.5px;margin-top:8px;color:#3a4654;background:var(--gris);padding:7px 10px;border-radius:8px">📝 ${esc(t.notas)}</div>`:''}`;
+  const canEdit = (typeof isConductor!=='function') || !isConductor();
+  const ov=document.createElement('div'); ov.id='trfPrevOv';
+  ov.style.cssText='position:fixed;inset:0;background:rgba(15,23,32,.6);z-index:99999;display:flex;align-items:center;justify-content:center;padding:18px';
+  ov.innerHTML=`<div style="background:#fff;border-radius:14px;max-width:440px;width:100%;padding:20px;max-height:88vh;overflow:auto"><div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px"><h2 style="margin:0;font-size:18px">🚐 ${esc(t.cliente||'(sin nombre)')}</h2><button onclick="trfClosePreview()" style="border:none;background:none;font-size:20px;cursor:pointer;color:var(--suave)">✕</button></div>
+    <div style="margin-top:10px">${body}</div>
+    <div style="display:flex;gap:8px;margin-top:18px;flex-wrap:wrap">${canEdit?`<button class="btn" onclick="trfPreviewOpen(${t.id})">✏️ Abrir / editar</button>`:''}<button class="btn ghost" onclick="trfClosePreview()">Cerrar</button></div></div>`;
+  ov.onclick=(e)=>{ if(e.target===ov) trfClosePreview(); };
+  document.addEventListener('keydown',trfPrevEsc);
+  document.body.appendChild(ov);
+}
+function trfPrevEsc(e){ if(e.key==='Escape') trfClosePreview(); }
+function trfClosePreview(){ const o=document.getElementById('trfPrevOv'); if(o)o.remove(); document.removeEventListener('keydown',trfPrevEsc); }
+function trfPreviewOpen(id){ trfClosePreview(); trfTab='solicitudes'; trfEditar(id); }
 function trfPanel(){
   const pad=n=>(''+n).padStart(2,'0');
   const dkey=d=>d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());
