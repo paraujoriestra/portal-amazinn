@@ -2737,6 +2737,7 @@ function pagRender(){
       <button onclick="pagMatchGo(-1)" class="cc-filt-btn" style="padding:6px 11px" title="Coincidencia anterior">▲</button>
       <button onclick="pagMatchGo(1)" class="cc-filt-btn" style="padding:6px 11px" title="Coincidencia siguiente">▼</button>
       ${canImp?`<label class="btn ghost" style="cursor:pointer">📥 Importar Excel<input type="file" accept=".xlsx,.xls" style="display:none" onchange="pagosImport(this)"></label>`:''}
+      ${canImp?`<button class="btn ghost" onclick="pagosSync(this)">🔄 Sincronizar Google</button>`:''}
       <span style="font-size:12px;color:var(--suave)">${PAGOS.length} pago(s)</span>
     </div>`;
   m.innerHTML=head+'<div id="pagBody"></div>';
@@ -2856,6 +2857,7 @@ function pagResumen(){
   const sel=`<div style="margin-bottom:12px;display:flex;gap:6px;flex-wrap:wrap">${RESUMENES.map((r,i)=>`<button class="cc-filt-btn ${r.nombre===cur.nombre?'on':''}" onclick="pagSetRes(${i})">${esc(r.nombre)}</button>`).join('')}</div>`;
   return sel+`<div class="panel"><h2 style="margin-top:0">${esc(cur.nombre)}</h2><p style="font-size:12px;color:var(--suave);margin:-4px 0 10px">Espejo de la hoja del Excel. Se actualiza al volver a importar.</p>${pagGridHTML(cur.grid,pagSearch)}</div>`;
 }
+async function pagosSync(btn){ if(!pagosCan()){ alert('Sin permiso.'); return; } const old=btn?btn.textContent:''; if(btn){ btn.disabled=true; btn.textContent='⏳ Sincronizando…'; } try{ const r=await sb.functions.invoke('sync-pagos'); if(r.error) throw r.error; const data=r.data; if(data && data.ok===false) throw new Error(data.error||'error'); toast('✓ Sincronizado con Google'); alert('Sincronización completada:\n'+((data&&data.resumen)?data.resumen.join('\n'):'')); show('pagos'); }catch(e){ alert('No se pudo sincronizar: '+(e&&e.message?e.message:e)); } if(btn){ btn.disabled=false; btn.textContent=old||'🔄 Sincronizar Google'; } }
 async function pagosImport(input){
   if(!pagosCan()){ alert('No tienes permiso para importar.'); return; }
   const f=input.files[0]; input.value=''; if(!f) return;
