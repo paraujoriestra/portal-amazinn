@@ -2645,10 +2645,15 @@ async function saveProv(e){e.preventDefault();
 
 /* ---------------- PROPIETARIOS ---------------- */
 let propFormOpen=false, propEditId=null, propDraft={}, PROP_DATA=[];
+let propTab='directorio', CONTRATOS=[], contFormOpen=false, contEditId=null, contDraft=null;
+function propSetTab(t){ propTab=t; contFormOpen=false; show('propietarios'); }
 function propNew(){ if(propFormOpen){propFormOpen=false;} else {propEditId=null;propDraft={};propFormOpen=true;} show('propietarios'); }
 function editProp(id){ propEditId=id; propDraft=PROP_DATA.find(x=>x.id===id)||{}; propFormOpen=true; show('propietarios'); }
 async function pagePropietarios(){
   const canEdit=CAN_MANAGE.includes(PROFILE.role);
+  asgEnsureStyle();
+  const propTabs=`<div class="asg-tabs"><button class="asg-tab ${propTab!=='contratos'?'on':''}" onclick="propSetTab('directorio')">🏠 Directorio</button><button class="asg-tab ${propTab==='contratos'?'on':''}" onclick="propSetTab('contratos')">📄 Contratos</button></div>`;
+  if(propTab==='contratos'){ await contratosLoad(); document.getElementById('main').innerHTML=`<div class="page-title">Propietarios</div>${propTabs}${contratosHTML(isDireccion())}`; return; }
   const{data,error}=await sb.from('propietarios').select('*').order('nombre');
   if(error){document.getElementById('main').innerHTML='<div class="panel">Error (¿ejecutaste supabase_propietarios.sql?): '+esc(error.message)+'</div>';return;}
   PROP_DATA=data||[];
@@ -2666,7 +2671,7 @@ async function pagePropietarios(){
     <td>${esc(p.num_cuenta||'')}</td>
     ${canEdit?`<td><button class="kebab" onclick="proRowMenu(event,'propietarios',${p.id})" title="Opciones">⋮</button></td>`:''}</tr>`).join('');
   document.getElementById('main').innerHTML=`
-    <div class="page-title">Propietarios</div><div class="page-sub">Directorio de propietarios${canEdit?' · puedes añadir':''}</div>
+    <div class="page-title">Propietarios</div><div class="page-sub">Directorio de propietarios${canEdit?' · puedes añadir':''}</div>${propTabs}
     ${canEdit?`<div style="margin-bottom:14px;display:flex;gap:8px;flex-wrap:wrap;align-items:center"><button class="btn" onclick="propNew()">${propFormOpen?'✕ Cerrar':'+ Nuevo propietario'}</button>${importBtn('propietarios')}</div>`:''}
     ${canEdit&&propFormOpen?`<div class="panel" style="max-width:720px"><h2>${propEditId?'✏️ Editar propietario':'+ Nuevo propietario'}</h2><form class="box" onsubmit="return saveProp(event)" style="max-width:none">
       <div class="row"><div><label>Nombre propietario</label><input id="oN" required value="${esc(propDraft.nombre||'')}"></div><div><label>Propiedad</label><input id="oProp" value="${esc(propDraft.propiedad||'')}"></div></div>
@@ -2685,6 +2690,89 @@ async function saveProp(e){e.preventDefault();
   const{error}=propEditId?await sb.from('propietarios').update(row).eq('id',propEditId):await sb.from('propietarios').insert(row);
   if(error){alert('Error: '+error.message);return false;}
   propFormOpen=false;propEditId=null;propDraft={};show('propietarios');return false;
+}
+
+/* ---------------- CONTRATOS (propietarios) ---------------- */
+async function contratosLoad(){ const r=await sb.from('contratos').select('*').order('propiedad',{ascending:true}).order('id'); CONTRATOS=r.data||[]; }
+function contTipoLabel(t){ return t==='comision'?'💼 Comisión':'🏠 Renta fija'; }
+function contMoney(n){ return '$'+((parseFloat(n)||0).toLocaleString('es-PA',{minimumFractionDigits:2,maximumFractionDigits:2})); }
+function contMontoActual(c){ if(c.tipo==='comision') return (c.comision_pct!=null&&c.comision_pct!==''?(parseFloat(c.comision_pct)||0)+'%':'—'); const y=new Date().getFullYear(); const arr=Array.isArray(c.anios)?c.anios:[]; let row=arr.find(a=>parseInt(a.anio)===y); if(!row){ const pasados=arr.filter(a=>parseInt(a.anio)<=y).sort((a,b)=>b.anio-a.anio); row=pasados[0]||arr.slice().sort((a,b)=>a.anio-b.anio)[0]; } return row?contMoney(row.monto):(c.cuota!=null?contMoney(c.cuota):'—'); }
+function contNew(){ if(!isDireccion())return; contEditId=null; contDraft={tipo:'renta_fija',itbms:true,anios:[{anio:new Date().getFullYear(),monto:''}]}; contFormOpen=true; show('propietarios'); }
+function contEdit(id){ if(!isDireccion())return; const c=CONTRATOS.find(x=>String(x.id)===String(id)); if(!c)return; contEditId=id; contDraft=JSON.parse(JSON.stringify(c)); if(!Array.isArray(contDraft.anios))contDraft.anios=[]; if(contDraft.itbms==null)contDraft.itbms=true; contFormOpen=true; show('propietarios'); }
+function contCancel(){ contFormOpen=false; contEditId=null; contDraft=null; show('propietarios'); }
+function contSetTipo(v){ contSyncDraft(); contDraft.tipo=v; if(v==='renta_fija'&&(!contDraft.anios||!contDraft.anios.length))contDraft.anios=[{anio:new Date().getFullYear(),monto:''}]; show('propietarios'); }
+function contSyncDraft(){ if(!contDraft)return; const g=id=>{const e=document.getElementById(id);return e?e.value:undefined;}; const map={cN:'propiedad',cEmp:'empresa',cCont:'contacto',cIni:'fecha_inicio',cFin:'fecha_fin',cPct:'comision_pct',cNota:'nota'}; Object.keys(map).forEach(id=>{ const v=g(id); if(v!==undefined)contDraft[map[id]]=v; }); const it=document.getElementById('cItbms'); if(it)contDraft.itbms=it.checked; contSyncAnios(); }
+function contSyncAnios(){ if(!contDraft||!Array.isArray(contDraft.anios))return; contDraft.anios.forEach((a,i)=>{ const ya=document.getElementById('cAnio_'+i); const mo=document.getElementById('cMonto_'+i); if(ya)a.anio=ya.value; if(mo)a.monto=mo.value; }); }
+function contAddAnio(){ contSyncDraft(); const arr=contDraft.anios; const last=arr[arr.length-1]; const ny=last&&last.anio?(parseInt(last.anio)+1):new Date().getFullYear(); arr.push({anio:ny,monto:''}); show('propietarios'); }
+function contDelAnio(i){ contSyncDraft(); contDraft.anios.splice(i,1); show('propietarios'); }
+function contAutoAnio(){ contSyncDraft(); const pct=parseFloat((document.getElementById('cPctSubida')||{}).value)||0; const arr=contDraft.anios; const last=arr[arr.length-1]; if(!last){ arr.push({anio:new Date().getFullYear(),monto:''}); show('propietarios'); return; } const ny=last.anio?(parseInt(last.anio)+1):new Date().getFullYear(); const base=parseFloat(last.monto)||0; const nm=Math.round(base*(1+pct/100)*100)/100; arr.push({anio:ny,monto:nm}); show('propietarios'); }
+async function contAbrir(path){ if(!path)return; try{ const{data,error}=await sb.storage.from('contratos').createSignedUrl(path,3600); if(error||!data)throw(error||new Error('sin url')); window.open(data.signedUrl,'_blank'); }catch(e){ alert('No se pudo abrir el archivo: '+(e.message||e)); } }
+async function contDel(id){ if(!isDireccion())return; if(!confirm('¿Eliminar este contrato? Esta acción no se puede deshacer.'))return; const c=CONTRATOS.find(x=>String(x.id)===String(id)); if(c&&c.archivo_path){ try{await sb.storage.from('contratos').remove([c.archivo_path]);}catch(e){} } const{error}=await sb.from('contratos').delete().eq('id',id); if(error){alert(error.message);return;} toast('✓ Contrato eliminado'); show('propietarios'); }
+async function contSave(e){ if(e)e.preventDefault(); if(!isDireccion())return false; contSyncDraft(); const d=contDraft||{}; if(!d.propiedad){ alert('Indica la propiedad.'); return false; }
+  const anios=(d.tipo==='renta_fija'?(d.anios||[]):[]).map(a=>({anio:parseInt(a.anio)||null,monto:(a.monto===''||a.monto==null)?null:(parseFloat(a.monto)||0)})).filter(a=>a.anio);
+  const row={ propiedad:d.propiedad, tipo:d.tipo||'renta_fija', empresa:d.empresa||null, contacto:d.contacto||null, fecha_inicio:d.fecha_inicio||null, fecha_fin:d.fecha_fin||null, itbms:!!d.itbms, comision_pct:(d.tipo==='comision'&&d.comision_pct!==''&&d.comision_pct!=null)?(parseFloat(d.comision_pct)||0):null, anios:anios, nota:d.nota||null };
+  const fi=document.getElementById('cFile'); const f=fi&&fi.files&&fi.files[0];
+  if(f){ try{ const path=Date.now()+'_'+f.name.replace(/[^\w.\-]/g,'_'); const up=await sb.storage.from('contratos').upload(path,f,{upsert:false}); if(up.error)throw up.error; row.archivo_nombre=f.name; row.archivo_path=path; }catch(err){ alert('No se pudo subir el archivo: '+(err.message||err)); return false; } }
+  let error;
+  if(contEditId){ const r=await sb.from('contratos').update(row).eq('id',contEditId); error=r.error; }
+  else { const r=await sb.from('contratos').insert(row); error=r.error; }
+  if(error){ alert('Error: '+error.message); return false; }
+  contFormOpen=false; contEditId=null; contDraft=null; toast('✓ Contrato guardado'); show('propietarios'); return false;
+}
+function contratosHTML(can){
+  const ss='width:100%;padding:9px 11px;border:1px solid var(--gris2);border-radius:8px;font-family:inherit;font-size:14px';
+  const addBtn=can?`<div style="margin:4px 0 14px"><button class="btn" onclick="${contFormOpen?'contCancel()':'contNew()'}">${contFormOpen?'✕ Cerrar':'+ Nuevo contrato'}</button></div>`:'';
+  const form=(can&&contFormOpen)?contForm(ss):'';
+  const rows=CONTRATOS.map(c=>{
+    const itb=c.itbms?' <span style="color:var(--suave);font-size:11px">+ ITBMS</span>':'';
+    const anios=(c.tipo==='renta_fija'&&Array.isArray(c.anios)&&c.anios.length)?`<div style="font-size:11px;color:var(--suave);margin-top:2px">${c.anios.slice().sort((a,b)=>a.anio-b.anio).map(a=>esc(a.anio)+': '+contMoney(a.monto)).join(' · ')}</div>`:'';
+    const arch=c.archivo_path?`<button class="btn ghost" style="padding:4px 9px;font-size:12px" onclick="contAbrir('${esc(c.archivo_path)}')">📎 ${esc((c.archivo_nombre||'Ver').slice(0,18))}</button>`:'<span style="color:var(--suave);font-size:12px">—</span>';
+    return `<tr>
+      <td><b>${esc(c.propiedad||'')}</b></td>
+      <td style="white-space:nowrap">${contTipoLabel(c.tipo)}</td>
+      <td>${esc(c.empresa||'')}</td>
+      <td style="white-space:pre-wrap;font-size:12.5px">${esc(c.contacto||'')}</td>
+      <td style="white-space:nowrap">${esc(c.fecha_inicio||'')}</td>
+      <td style="white-space:nowrap">${esc(c.fecha_fin||'')}</td>
+      <td><b>${contMontoActual(c)}</b>${itb}${anios}</td>
+      <td style="white-space:pre-wrap;font-size:12.5px">${esc(c.nota||'')}</td>
+      <td>${arch}</td>
+      ${can?`<td style="white-space:nowrap"><button class="btn ghost" style="padding:4px 8px;font-size:12px" onclick="contEdit(${c.id})">✏️</button> <button class="btn ghost" style="padding:4px 8px;font-size:12px;color:#c0392b" onclick="contDel(${c.id})">🗑️</button></td>`:''}
+    </tr>`;
+  }).join('')||`<tr><td colspan="${can?10:9}" style="color:var(--suave)">Aún no hay contratos.</td></tr>`;
+  return `<div class="page-sub">Contratos por propiedad${can?' · puedes añadir':''}</div>${addBtn}${form}
+    <div class="panel"><div style="overflow-x:auto"><table class="tbl-compact"><thead><tr><th>Propiedad</th><th>Tipo</th><th>Empresa</th><th>Contacto</th><th>Inicio</th><th>Fin</th><th>Importe actual</th><th>Nota</th><th>Contrato</th>${can?'<th></th>':''}</tr></thead><tbody>${rows}</tbody></table></div></div>`;
+}
+function contForm(ss){
+  const d=contDraft||{};
+  const isCom=d.tipo==='comision';
+  const aniosRows=(Array.isArray(d.anios)?d.anios:[]).map((a,i)=>`<div class="row" style="gap:8px;align-items:center;margin-bottom:6px"><div style="max-width:120px"><input id="cAnio_${i}" type="number" placeholder="Año" value="${esc(a.anio!=null?a.anio:'')}" style="${ss}"></div><div><input id="cMonto_${i}" type="number" step="0.01" placeholder="Monto $" value="${esc(a.monto!=null?a.monto:'')}" style="${ss}"></div><button type="button" class="btn ghost" style="padding:6px 10px" onclick="contDelAnio(${i})">✕</button></div>`).join('');
+  const bloqueRenta=`<div style="border:1px solid var(--gris2);border-radius:8px;padding:10px;margin:6px 0">
+      <label style="font-weight:600;font-size:13px">Precio por año (escalado del alquiler)</label>
+      <div style="margin-top:8px">${aniosRows}</div>
+      <div class="row" style="gap:8px;align-items:center;margin-top:4px;flex-wrap:wrap">
+        <button type="button" class="btn ghost" onclick="contAddAnio()">+ Añadir año</button>
+        <span style="font-size:12px;color:var(--suave)">o autorrellenar con subida</span>
+        <div style="max-width:90px"><input id="cPctSubida" type="number" step="0.1" placeholder="%" style="${ss}"></div>
+        <button type="button" class="btn ghost" onclick="contAutoAnio()">↧ Añadir año +%</button>
+      </div></div>`;
+  const bloqueCom=`<div class="row"><div><label>% de comisión</label><input id="cPct" type="number" step="0.01" value="${esc(d.comision_pct!=null?d.comision_pct:'')}" placeholder="Ej. 20" style="${ss}"></div><div></div></div>`;
+  return `<div class="panel" style="max-width:820px"><h2>${contEditId?'✏️ Editar contrato':'+ Nuevo contrato'}</h2>
+    <form class="box" onsubmit="return contSave(event)" style="max-width:none">
+      <div class="row"><div><label>Propiedad</label><input id="cN" required value="${esc(d.propiedad||'')}" placeholder="Ej. Casa Arias" style="${ss}"></div>
+        <div><label>Tipo de contrato</label><select id="cTipo" onchange="contSetTipo(this.value)" style="${ss}"><option value="renta_fija" ${!isCom?'selected':''}>🏠 Renta fija</option><option value="comision" ${isCom?'selected':''}>💼 Comisión</option></select></div></div>
+      <div class="row"><div><label>Empresa / propietario</label><input id="cEmp" value="${esc(d.empresa||'')}" style="${ss}"></div>
+        <div><label>Datos de contacto</label><input id="cCont" value="${esc(d.contacto||'')}" placeholder="Tel / email / persona" style="${ss}"></div></div>
+      <div class="row"><div><label>Fecha inicio</label><input id="cIni" type="date" value="${esc(d.fecha_inicio||'')}" style="${ss}"></div>
+        <div><label>Fecha fin (vencimiento)</label><input id="cFin" type="date" value="${esc(d.fecha_fin||'')}" style="${ss}"></div></div>
+      ${isCom?bloqueCom:bloqueRenta}
+      <label style="display:flex;align-items:center;gap:8px;margin:8px 0"><input id="cItbms" type="checkbox" ${d.itbms?'checked':''}> Lleva ITBMS (+ ITBMS)</label>
+      <label>Nota / particularidades</label><textarea id="cNota" rows="2" style="${ss}" placeholder="Cualquier particularidad…">${esc(d.nota||'')}</textarea>
+      <label style="margin-top:10px;display:block">Contrato adjunto (PDF/imagen)</label>
+      <input id="cFile" type="file" accept=".pdf,image/*" style="${ss}">
+      ${d.archivo_nombre?`<div style="font-size:12px;color:var(--suave);margin-top:4px">Actual: ${esc(d.archivo_nombre)} (sube otro para reemplazarlo)</div>`:''}
+      <div style="margin-top:12px"><button class="btn" type="submit">Guardar contrato</button> <button class="btn ghost" type="button" onclick="contCancel()">Cancelar</button></div>
+    </form></div>`;
 }
 
 /* ---------------- SUMINISTROS ---------------- */
@@ -4983,7 +5071,7 @@ function trfLiquidaciones(){
       const trips=r.viajes.slice().sort((a,b)=>(a.realizado_at||a.created_at||'').localeCompare(b.realizado_at||b.created_at||'')).map(v=>{
         const fch=(v.realizado_at||v.fecha||v.created_at||'').slice(0,10).split('-').reverse().join('/');
         const paid=!!v.comision_pagada;
-        return `<tr><td>#${v.id}</td><td>${esc(fch)}</td><td>${esc(v.cliente||'')}</td><td style="text-align:right">${trfMoney(v.comision)}</td><td style="text-align:center">${paid?`<span style="color:#1e8a5a;font-weight:700">✓ Cobrado${v.comision_pagada_por?' · '+esc(v.comision_pagada_por):''}</span>`:`<span style="color:#c0392b">Pendiente</span>`}</td><td style="text-align:center"><button class="btn ghost" style="padding:4px 9px;font-size:12px" onclick="trfPagarToggle(${v.id})">${paid?'↩ Pendiente':'✓ Cobrado'}</button></td></tr>`;
+        return `<tr><td>#${v.id}</td><td>${esc(fch)}</td><td>${esc(v.cliente||'')}</td><td style="text-align:right">${isDireccion()?`<input type="number" min="0" step="0.01" value="${(parseFloat(v.comision)||0).toFixed(2)}" onchange="trfSetComision(${v.id},this.value)" title="Editar comisión" style="width:84px;text-align:right;padding:5px 7px;border:1px solid var(--gris2);border-radius:7px;font-family:inherit;font-size:13px">`:trfMoney(v.comision)}</td><td style="text-align:center">${paid?`<span style="color:#1e8a5a;font-weight:700">✓ Cobrado${v.comision_pagada_por?' · '+esc(v.comision_pagada_por):''}</span>`:`<span style="color:#c0392b">Pendiente</span>`}</td><td style="text-align:center"><button class="btn ghost" style="padding:4px 9px;font-size:12px" onclick="trfPagarToggle(${v.id})">${paid?'↩ Pendiente':'✓ Cobrado'}</button></td></tr>`;
       }).join('');
       detail=`<div style="padding:10px 14px;border-top:1px solid var(--gris2);background:#fafbfc">
         <div style="display:flex;justify-content:flex-end;margin-bottom:8px">${allPaid?`<button class="btn ghost" onclick="trfPagarTodos('${r.id}',false)">↩ Marcar todo pendiente</button>`:`<button class="btn" onclick="trfPagarTodos('${r.id}',true)">✓ Marcar todo como cobrado</button>`}</div>
@@ -4995,6 +5083,7 @@ function trfLiquidaciones(){
     <p style="font-size:12.5px;color:var(--suave);margin:-4px 0 10px">Comisión que cada conductor debe pagar a Amazinn por los viajes realizados. Pulsa un conductor para ver el detalle y marcar lo cobrado.</p>
     ${body}</div>`;
 }
+async function trfSetComision(id,val){ if(!isDireccion()){ alert('Solo Dirección/Admin/Propietario puede editar comisiones.'); return; } const n=parseFloat(val); const com=isNaN(n)?0:Math.round(n*100)/100; const t=TRF.find(x=>String(x.id)===String(id)); if(!t)return; const{error}=await sb.from('transfers').update({comision:com}).eq('id',id); if(error){alert(error.message);return;} t.comision=com; show('transfer'); }
 function trfLiqToggle(cid){ trfLiqOpen=(String(trfLiqOpen)===String(cid))?null:cid; show('transfer'); }
 async function trfPagarToggle(id){ const t=TRF.find(x=>String(x.id)===String(id)); if(!t)return; const nuevo=!t.comision_pagada; const upd=nuevo?{comision_pagada:true,comision_pagada_at:new Date().toISOString(),comision_pagada_por:PROFILE.nombre}:{comision_pagada:false,comision_pagada_at:null,comision_pagada_por:null}; const{error}=await sb.from('transfers').update(upd).eq('id',id); if(error){alert(error.message);return;} Object.assign(t,upd); show('transfer'); }
 async function trfPagarTodos(cid,val){ const within=t=>{ const d=(t.realizado_at||t.created_at||'').slice(0,10); if(trfFrom&&d<trfFrom)return false; if(trfTo&&d>trfTo)return false; return true; }; const ids=TRF.filter(t=>t.estado==='realizado'&&String(t.conductor_id||'')===String(cid)&&within(t)).map(t=>t.id); if(!ids.length)return; if(val&&!confirm('¿Marcar como COBRADOS todos los viajes mostrados de este conductor?'))return; const upd=val?{comision_pagada:true,comision_pagada_at:new Date().toISOString(),comision_pagada_por:PROFILE.nombre}:{comision_pagada:false,comision_pagada_at:null,comision_pagada_por:null}; const{error}=await sb.from('transfers').update(upd).in('id',ids); if(error){alert(error.message);return;} show('transfer'); }
