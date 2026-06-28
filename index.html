@@ -2733,6 +2733,9 @@ function pagRender(){
     <div class="cc-seg">${tab('panel','📊 Dashboard')}${tab('detalle','📋 Detalle')}${tab('resumen','📑 Resúmenes')}</div>
     <div style="margin:4px 0 12px;display:flex;gap:10px;flex-wrap:wrap;align-items:center">
       <input id="pagSearch" type="search" value="${esc(pagSearch)}" oninput="pagSearchInput(this.value)" placeholder="🔎 Buscar (categoría, propiedad, empresa, importe…)" style="flex:1 1 280px;min-width:220px;padding:9px 12px;border:1px solid var(--gris2);border-radius:9px;font-family:inherit;font-size:14px">
+      <span id="pagMatchInfo" style="font-size:12px;color:var(--suave);min-width:78px;text-align:center"></span>
+      <button onclick="pagMatchGo(-1)" class="cc-filt-btn" style="padding:6px 11px" title="Coincidencia anterior">▲</button>
+      <button onclick="pagMatchGo(1)" class="cc-filt-btn" style="padding:6px 11px" title="Coincidencia siguiente">▼</button>
       ${canImp?`<label class="btn ghost" style="cursor:pointer">📥 Importar Excel<input type="file" accept=".xlsx,.xls" style="display:none" onchange="pagosImport(this)"></label>`:''}
       <span style="font-size:12px;color:var(--suave)">${PAGOS.length} pago(s)</span>
     </div>`;
@@ -2743,10 +2746,15 @@ function pagRenderBody(){
   const b=document.getElementById('pagBody'); if(!b) return;
   const body= pagView==='resumen' ? pagResumen() : (pagView==='detalle' ? pagDetalle() : pagDashboard());
   b.innerHTML=(pagView==='resumen'?'':pagFiltros())+body;
+  pagUpdateMatches();
 }
 function pagSearchInput(v){ pagSearch=v; pagRenderBody(); }
 function pagHi(text,q){ const s=(text==null?'':''+text); if(!q) return esc(s); const lo=s.toLowerCase(); let out='',i=0; while(true){ const j=lo.indexOf(q,i); if(j<0){ out+=esc(s.slice(i)); break; } out+=esc(s.slice(i,j))+'<mark style="background:#ffe680;color:inherit;padding:0 1px;border-radius:2px">'+esc(s.slice(j,j+q.length))+'</mark>'; i=j+q.length; } return out; }
 function pagTxt(v){ const q=(pagSearch||'').trim().toLowerCase(); return q?pagHi(v,q):esc(v==null?'':''+v); }
+let pagMatchEls=[], pagMatchIdx=-1;
+function pagUpdateMatches(){ const b=document.getElementById('pagBody'); pagMatchEls=b?Array.prototype.slice.call(b.querySelectorAll('mark')):[]; pagMatchIdx=pagMatchEls.length?0:-1; pagMatchPaint(false); }
+function pagMatchPaint(scroll){ for(let i=0;i<pagMatchEls.length;i++){ const m=pagMatchEls[i]; m.style.background=(i===pagMatchIdx)?'#ff9f1c':'#ffe680'; m.style.color=(i===pagMatchIdx)?'#fff':'inherit'; } const info=document.getElementById('pagMatchInfo'); const q=(pagSearch||'').trim(); if(info) info.textContent = q ? (pagMatchEls.length ? ((pagMatchIdx+1)+' / '+pagMatchEls.length) : 'sin resultados') : ''; if(scroll){ const cur=pagMatchEls[pagMatchIdx]; if(cur&&cur.scrollIntoView) cur.scrollIntoView({block:'center',inline:'center'}); } }
+function pagMatchGo(dir){ if(!pagMatchEls.length) return; pagMatchIdx=(pagMatchIdx+dir+pagMatchEls.length)%pagMatchEls.length; pagMatchPaint(true); }
 function pagFiltros(){
   const cats=[...new Set(PAGOS.map(p=>p.categoria).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
   const props=[...new Set(PAGOS.map(p=>p.propiedad).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
@@ -2802,22 +2810,27 @@ function pagGridHTML(grid,q){
   const MES=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
   const clean=v=>{ let s=(v==null?'':(''+v)).trim(); if(/^#/.test(s)) s=''; return s; };
   const isNum=s=>!!s && /\d/.test(s) && !/[a-zA-ZáéíóúñÁÉÍÓÚ]/.test(s);
+  const isMonth=v=>MES.some(mm=>v===mm||v.indexOf(mm)===0);
   const TOT=/^\s*(ganancia|%\s*ganancia|total|gran total|saldo|resultado|utilidad|balance)/i;
   const ncols=Math.max.apply(null,grid.map(r=>(r||[]).length));
   const keep=[]; for(let c=0;c<ncols;c++){ for(const r of grid){ if(clean((r||[])[c])!==''){ keep.push(c); break; } } }
   if(!keep.length) return '<div style="color:var(--suave)">Sin datos.</div>';
   const G=grid.map(r=>keep.map(c=>clean((r||[])[c])));
-  let body='';
+  let html=''; let open=false;
+  const closeTb=()=>{ if(open){ html+='</tbody>'; open=false; } };
+  const openTb=()=>{ closeTb(); html+='<tbody>'; open=true; };
   for(const row of G){
     if(row.every(v=>v==='')) continue;
     const label=row[0]||''; const vals=row.slice(1);
-    const hasMonth=row.some(v=>MES.includes(v));
+    const hdr=row.some(v=>isMonth(v));
     const valsEmpty=vals.every(v=>v==='');
-    let cls=''; if(hasMonth) cls='hdr'; else if(label && valsEmpty) cls='sub'; else if(TOT.test(label)) cls='tot';
+    let cls=''; if(hdr) cls='hdr'; else if(label && valsEmpty) cls='sub'; else if(TOT.test(label)) cls='tot';
+    if(hdr || !open) openTb();
     const rowMatch = q && cls!=='hdr' && row.some(v=>v.toLowerCase().indexOf(q)>-1);
     const tds=row.map((v,ci)=>{ const disp=(q && v.toLowerCase().indexOf(q)>-1)?pagHi(v,q):esc(v); if(ci===0) return `<td class="lbl">${disp}</td>`; const num=isNum(v); const neg=num&&(v.charAt(0)==='('||v.charAt(0)==='-'); return `<td class="${num?'num':''}${neg?' neg':''}">${disp}</td>`; }).join('');
-    body+=`<tr class="${cls}${rowMatch?' match':''}">${tds}</tr>`;
+    html+=`<tr class="${cls}${rowMatch?' match':''}">${tds}</tr>`;
   }
+  closeTb();
   return `<style>
     .pgr-wrap{overflow:auto;border:1px solid var(--gris2);border-radius:10px;max-height:72vh}
     .pgr{border-collapse:separate;border-spacing:0;font-size:12.5px;white-space:nowrap;min-width:100%}
@@ -2825,17 +2838,17 @@ function pagGridHTML(grid,q){
     .pgr td.lbl{position:sticky;left:0;background:#fff;font-weight:600;color:#243b53;border-right:1px solid var(--gris2);z-index:2;max-width:300px;overflow:hidden;text-overflow:ellipsis}
     .pgr td.num{text-align:right;font-variant-numeric:tabular-nums;color:#243b53}
     .pgr td.neg{color:#c0392b}
-    .pgr tr:nth-child(even) td{background:#fafbfc}
-    .pgr tr:nth-child(even) td.lbl{background:#fafbfc}
-    .pgr tr.hdr td{background:#1f4e79;color:#fff;font-weight:700;border-bottom:none}
-    .pgr tr.hdr td.lbl{background:#1f4e79;color:#fff}
+    .pgr tbody tr:nth-child(even) td{background:#fafbfc}
+    .pgr tbody tr:nth-child(even) td.lbl{background:#fafbfc}
+    .pgr tr.hdr td{background:#1f4e79;color:#fff;font-weight:700;border-bottom:none;position:sticky;top:0;z-index:3}
+    .pgr tr.hdr td.lbl{background:#1f4e79;color:#fff;top:0;z-index:4}
     .pgr tr.sub td{background:#eef2f7;font-weight:700;color:#34557a}
     .pgr tr.sub td.lbl{background:#eef2f7;color:#34557a}
     .pgr tr.tot td{font-weight:800;background:#f3f7ec;border-top:2px solid #cdd7e2;border-bottom:2px solid #cdd7e2}
     .pgr tr.tot td.lbl{background:#f3f7ec}
     .pgr tr.match td{background:#fff7d6}
     .pgr tr.match td.lbl{background:#fff7d6}
-  </style><div class="pgr-wrap"><table class="pgr"><tbody>${body}</tbody></table></div>`;
+  </style><div class="pgr-wrap"><table class="pgr">${html}</table></div>`;
 }
 function pagResumen(){
   if(!RESUMENES.length) return `<div class="panel" style="color:var(--suave)">No hay resúmenes importados todavía. Pulsa “Importar Excel” y se cargarán las hojas de resumen.</div>`;
