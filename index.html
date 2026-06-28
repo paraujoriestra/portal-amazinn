@@ -1076,9 +1076,9 @@ async function enterApp(user){
   buildNav();
   document.getElementById('chatFab').style.display = isConductor()?'none':'flex';
   loadNotifs();
-  refreshBadges(); ping(); refreshIncBell(); loadCambBadge();
+  refreshBadges(); ping(); refreshIncBell(); loadCambBadge(); loadContratoAlertas();
   if(window._msgPoll) clearInterval(window._msgPoll);
-  window._msgPoll = setInterval(()=>{refreshBadges();ping();refreshIncBell();loadCambBadge();}, 20000);
+  window._msgPoll = setInterval(()=>{refreshBadges();ping();refreshIncBell();loadCambBadge();loadContratoAlertas();}, 20000);
   chatMsgs=[{from:'bot',msg:`¡Hola, ${(PROFILE.nombre||'').split(' ')[0]||''}! 🤖 Soy <b>Wally</b>, el asistente de Amazinn Places. Pregúntame cómo encontrar algo.`}];
   const h=(location.hash||'').replace(/^#/,'');
   const start=(h==='inicio'||h==='perfil'||NAV.some(n=>n.id===h))?h:'inicio';
@@ -1337,21 +1337,29 @@ function visNotifs(){return NOTIFS.filter(n=>{
   if(!PROFILE.dept) return true;   // sin departamento = recibe los avisos de cualquier departamento
   return String(n.dept).split('|').map(s=>s.trim()).includes(PROFILE.dept);
 });}
-function refreshBell(){const d=document.getElementById('bellDot');if(!d)return;const n=visNotifs().filter(x=>!NOTIF_READ.has(x.id)).length;d.textContent=n;d.style.display=n?'block':'none';}
+function refreshBell(){const d=document.getElementById('bellDot');if(!d)return;const n=visNotifs().filter(x=>!NOTIF_READ.has(x.id)).length+contratosUnseenCount();d.textContent=n;d.style.display=n?'block':'none';}
 function toggleBell(e){
   if(e)e.stopPropagation();
   const ip=document.getElementById('incNotifPanel'); if(ip)ip.style.display='none';
   const p=document.getElementById('notifPanel');
   if(p.style.display==='block'){p.style.display='none';return;}
   const items=visNotifs();
-  p.innerHTML=`<div class="nh">Notificaciones</div>`+(items.length?items.map(n=>`<div class="ni ${NOTIF_READ.has(n.id)?'':'unread'}" onclick="goNotif('${n.sec||''}',event)"><span class="ic">${n.icon||'🔔'}</span><div>${esc(n.texto||'')}<small>${new Date(n.created_at).toLocaleString('es-ES')}${n.sec?' · pulsa para ver':''}</small></div>${n.sec?'<span class="go">→</span>':''}</div>`).join(''):`<div class="empty">No tienes notificaciones</div>`);
+  const cals=contratoAlertItems();
+  const calsHTML=cals.map(c=>`<div class="ni unread" onclick="goContrato(event)"><span class="ic">📄</span><div>Contrato de <b>${esc(c.prop)}</b> ${c.dias<0?`<span style='color:#c0392b'>vencido hace ${Math.abs(c.dias)} día(s)</span>`:`vence en <b>${c.dias}</b> día(s)`} (${esc((c.fin||'').split('-').reverse().join('/'))})<small>Contratos · pulsa para ver</small></div><span class="go">→</span></div>`).join('');
+  p.innerHTML=`<div class="nh">Notificaciones</div>`+calsHTML+(items.length?items.map(n=>`<div class="ni ${NOTIF_READ.has(n.id)?'':'unread'}" onclick="goNotif('${n.sec||''}',event)"><span class="ic">${n.icon||'🔔'}</span><div>${esc(n.texto||'')}<small>${new Date(n.created_at).toLocaleString('es-ES')}${n.sec?' · pulsa para ver':''}</small></div>${n.sec?'<span class="go">→</span>':''}</div>`).join(''):(cals.length?'':`<div class="empty">No tienes notificaciones</div>`));
   p.style.display='block';
+  try{ localStorage.setItem('contratosBellSeen', hoyISO()); }catch(e){}
   const unread=items.filter(n=>!NOTIF_READ.has(n.id));
   unread.forEach(n=>NOTIF_READ.add(n.id));
   if(unread.length){ sb.from('notif_leidas').insert(unread.map(n=>({notif_id:n.id,user_id:ME.id}))).then(()=>{}); }
   refreshBell();
 }
 function goNotif(sec,e){if(e)e.stopPropagation();const p=document.getElementById('notifPanel');if(p)p.style.display='none';if(sec)show(sec);}
+let CONTRATOS_ALERTAS=[];
+async function loadContratoAlertas(){ CONTRATOS_ALERTAS=[]; try{ if(typeof isDireccion==='function'&&isDireccion()){ const r=await sb.from('contratos').select('id,propiedad,fecha_fin'); CONTRATOS_ALERTAS=r.data||[]; } }catch(e){} refreshBell(); }
+function contratoAlertItems(){ const hoy=new Date(new Date().toISOString().slice(0,10)+'T00:00:00'); const items=(CONTRATOS_ALERTAS||[]).map(c=>{ if(!c.fecha_fin) return null; const fin=new Date(c.fecha_fin+'T00:00:00'); const dias=Math.round((fin-hoy)/86400000); return {id:c.id,prop:c.propiedad||'(sin propiedad)',fin:c.fecha_fin,dias}; }).filter(x=>x&&x.dias<=180); items.sort((a,b)=>a.dias-b.dias); return items; }
+function contratosUnseenCount(){ const items=contratoAlertItems(); if(!items.length) return 0; try{ if(localStorage.getItem('contratosBellSeen')===hoyISO()) return 0; }catch(e){} return items.length; }
+function goContrato(e){ if(e)e.stopPropagation(); const p=document.getElementById('notifPanel'); if(p)p.style.display='none'; propTab='contratos'; show('propietarios'); }
 document.addEventListener('click',(e)=>{const p=document.getElementById('notifPanel');if(!p||p.style.display!=='block')return;if(e.target.closest('#notifPanel')||e.target.closest('#bell'))return;p.style.display='none';});
 /* --- Indicador aparte: Incidencias terminadas (responsables hacia arriba) --- */
 function incNotifCan(){ return CAN_MANAGE.includes(PROFILE.role); }
@@ -2696,20 +2704,24 @@ async function saveProp(e){e.preventDefault();
 async function contratosLoad(){ const r=await sb.from('contratos').select('*').order('propiedad',{ascending:true}).order('id'); CONTRATOS=r.data||[]; }
 function contTipoLabel(t){ return t==='comision'?'💼 Comisión':'🏠 Renta fija'; }
 function contMoney(n){ return '$'+((parseFloat(n)||0).toLocaleString('es-PA',{minimumFractionDigits:2,maximumFractionDigits:2})); }
-function contMontoActual(c){ if(c.tipo==='comision') return (c.comision_pct!=null&&c.comision_pct!==''?(parseFloat(c.comision_pct)||0)+'%':'—'); const y=new Date().getFullYear(); const arr=Array.isArray(c.anios)?c.anios:[]; let row=arr.find(a=>parseInt(a.anio)===y); if(!row){ const pasados=arr.filter(a=>parseInt(a.anio)<=y).sort((a,b)=>b.anio-a.anio); row=pasados[0]||arr.slice().sort((a,b)=>a.anio-b.anio)[0]; } return row?contMoney(row.monto):(c.cuota!=null?contMoney(c.cuota):'—'); }
-function contNew(){ if(!isDireccion())return; contEditId=null; contDraft={tipo:'renta_fija',itbms:true,anios:[{anio:new Date().getFullYear(),monto:''}]}; contFormOpen=true; show('propietarios'); }
+function contPerDesde(a){ if(a.desde) return a.desde; if(a.anio) return a.anio+'-01-01'; return ''; }
+function contPerHasta(a){ if(a.hasta) return a.hasta; if(a.anio) return a.anio+'-12-31'; return ''; }
+function contFechaCorta(s){ if(!s) return '—'; const p=(''+s).split('-'); return p.length>=2?(p[1]+'/'+p[0]):(''+s); }
+function contNextRange(last){ let d='',h=''; if(last&&contPerHasta(last)){ const dt=new Date(contPerHasta(last)+'T00:00:00'); dt.setDate(dt.getDate()+1); d=dt.toISOString().slice(0,10); const dh=new Date(dt); dh.setFullYear(dh.getFullYear()+1); dh.setDate(dh.getDate()-1); h=dh.toISOString().slice(0,10); } return {desde:d,hasta:h}; }
+function contMontoActual(c){ if(c.tipo==='comision') return (c.comision_pct!=null&&c.comision_pct!==''?(parseFloat(c.comision_pct)||0)+'%':'—'); const arr=Array.isArray(c.anios)?c.anios:[]; const hoy=new Date().toISOString().slice(0,10); let row=arr.find(a=>{ const d=contPerDesde(a),h=contPerHasta(a); return (!d||d<=hoy)&&(!h||h>=hoy); }); if(!row){ const pasados=arr.filter(a=>contPerDesde(a)&&contPerDesde(a)<=hoy).sort((a,b)=>contPerDesde(b).localeCompare(contPerDesde(a))); row=pasados[0]||arr.slice().sort((a,b)=>contPerDesde(a).localeCompare(contPerDesde(b)))[0]; } return row?contMoney(row.monto):(c.cuota!=null?contMoney(c.cuota):'—'); }
+function contNew(){ if(!isDireccion())return; contEditId=null; contDraft={tipo:'renta_fija',itbms:true,anios:[{desde:'',hasta:'',monto:''}]}; contFormOpen=true; show('propietarios'); }
 function contEdit(id){ if(!isDireccion())return; const c=CONTRATOS.find(x=>String(x.id)===String(id)); if(!c)return; contEditId=id; contDraft=JSON.parse(JSON.stringify(c)); if(!Array.isArray(contDraft.anios))contDraft.anios=[]; if(contDraft.itbms==null)contDraft.itbms=true; contFormOpen=true; show('propietarios'); }
 function contCancel(){ contFormOpen=false; contEditId=null; contDraft=null; show('propietarios'); }
-function contSetTipo(v){ contSyncDraft(); contDraft.tipo=v; if(v==='renta_fija'&&(!contDraft.anios||!contDraft.anios.length))contDraft.anios=[{anio:new Date().getFullYear(),monto:''}]; show('propietarios'); }
+function contSetTipo(v){ contSyncDraft(); contDraft.tipo=v; if(v==='renta_fija'&&(!contDraft.anios||!contDraft.anios.length))contDraft.anios=[{desde:'',hasta:'',monto:''}]; show('propietarios'); }
 function contSyncDraft(){ if(!contDraft)return; const g=id=>{const e=document.getElementById(id);return e?e.value:undefined;}; const map={cN:'propiedad',cEmp:'empresa',cCont:'contacto',cIni:'fecha_inicio',cFin:'fecha_fin',cPct:'comision_pct',cNota:'nota'}; Object.keys(map).forEach(id=>{ const v=g(id); if(v!==undefined)contDraft[map[id]]=v; }); const it=document.getElementById('cItbms'); if(it)contDraft.itbms=it.checked; contSyncAnios(); }
-function contSyncAnios(){ if(!contDraft||!Array.isArray(contDraft.anios))return; contDraft.anios.forEach((a,i)=>{ const ya=document.getElementById('cAnio_'+i); const mo=document.getElementById('cMonto_'+i); if(ya)a.anio=ya.value; if(mo)a.monto=mo.value; }); }
-function contAddAnio(){ contSyncDraft(); const arr=contDraft.anios; const last=arr[arr.length-1]; const ny=last&&last.anio?(parseInt(last.anio)+1):new Date().getFullYear(); arr.push({anio:ny,monto:''}); show('propietarios'); }
+function contSyncAnios(){ if(!contDraft||!Array.isArray(contDraft.anios))return; contDraft.anios.forEach((a,i)=>{ const de=document.getElementById('cDesde_'+i); const ha=document.getElementById('cHasta_'+i); const mo=document.getElementById('cMonto_'+i); if(de)a.desde=de.value; if(ha)a.hasta=ha.value; if(mo)a.monto=mo.value; if(a.desde||a.hasta)delete a.anio; }); }
+function contAddAnio(){ contSyncDraft(); const arr=contDraft.anios; const last=arr[arr.length-1]; const r=contNextRange(last); arr.push({desde:r.desde,hasta:r.hasta,monto:''}); show('propietarios'); }
 function contDelAnio(i){ contSyncDraft(); contDraft.anios.splice(i,1); show('propietarios'); }
-function contAutoAnio(){ contSyncDraft(); const pct=parseFloat((document.getElementById('cPctSubida')||{}).value)||0; const arr=contDraft.anios; const last=arr[arr.length-1]; if(!last){ arr.push({anio:new Date().getFullYear(),monto:''}); show('propietarios'); return; } const ny=last.anio?(parseInt(last.anio)+1):new Date().getFullYear(); const base=parseFloat(last.monto)||0; const nm=Math.round(base*(1+pct/100)*100)/100; arr.push({anio:ny,monto:nm}); show('propietarios'); }
+function contAutoAnio(){ contSyncDraft(); const pct=parseFloat((document.getElementById('cPctSubida')||{}).value)||0; const arr=contDraft.anios; const last=arr[arr.length-1]; if(!last){ arr.push({desde:'',hasta:'',monto:''}); show('propietarios'); return; } const r=contNextRange(last); const base=parseFloat(last.monto)||0; const nm=Math.round(base*(1+pct/100)*100)/100; arr.push({desde:r.desde,hasta:r.hasta,monto:nm}); show('propietarios'); }
 async function contAbrir(path){ if(!path)return; try{ const{data,error}=await sb.storage.from('contratos').createSignedUrl(path,3600); if(error||!data)throw(error||new Error('sin url')); window.open(data.signedUrl,'_blank'); }catch(e){ alert('No se pudo abrir el archivo: '+(e.message||e)); } }
 async function contDel(id){ if(!isDireccion())return; if(!confirm('¿Eliminar este contrato? Esta acción no se puede deshacer.'))return; const c=CONTRATOS.find(x=>String(x.id)===String(id)); if(c&&c.archivo_path){ try{await sb.storage.from('contratos').remove([c.archivo_path]);}catch(e){} } const{error}=await sb.from('contratos').delete().eq('id',id); if(error){alert(error.message);return;} toast('✓ Contrato eliminado'); show('propietarios'); }
 async function contSave(e){ if(e)e.preventDefault(); if(!isDireccion())return false; contSyncDraft(); const d=contDraft||{}; if(!d.propiedad){ alert('Indica la propiedad.'); return false; }
-  const anios=(d.tipo==='renta_fija'?(d.anios||[]):[]).map(a=>({anio:parseInt(a.anio)||null,monto:(a.monto===''||a.monto==null)?null:(parseFloat(a.monto)||0)})).filter(a=>a.anio);
+  const anios=(d.tipo==='renta_fija'?(d.anios||[]):[]).map(a=>({desde:a.desde||null,hasta:a.hasta||null,monto:(a.monto===''||a.monto==null)?null:(parseFloat(a.monto)||0)})).filter(a=>a.desde||a.hasta||a.monto!=null);
   const row={ propiedad:d.propiedad, tipo:d.tipo||'renta_fija', empresa:d.empresa||null, contacto:d.contacto||null, fecha_inicio:d.fecha_inicio||null, fecha_fin:d.fecha_fin||null, itbms:!!d.itbms, comision_pct:(d.tipo==='comision'&&d.comision_pct!==''&&d.comision_pct!=null)?(parseFloat(d.comision_pct)||0):null, anios:anios, nota:d.nota||null };
   const fi=document.getElementById('cFile'); const f=fi&&fi.files&&fi.files[0];
   if(f){ try{ const path=Date.now()+'_'+f.name.replace(/[^\w.\-]/g,'_'); const up=await sb.storage.from('contratos').upload(path,f,{upsert:false}); if(up.error)throw up.error; row.archivo_nombre=f.name; row.archivo_path=path; }catch(err){ alert('No se pudo subir el archivo: '+(err.message||err)); return false; } }
@@ -2719,13 +2731,16 @@ async function contSave(e){ if(e)e.preventDefault(); if(!isDireccion())return fa
   if(error){ alert('Error: '+error.message); return false; }
   contFormOpen=false; contEditId=null; contDraft=null; toast('✓ Contrato guardado'); show('propietarios'); return false;
 }
+function contDiasFin(c){ if(!c.fecha_fin) return null; const fin=new Date(c.fecha_fin+'T00:00:00'); const hoy=new Date(new Date().toISOString().slice(0,10)+'T00:00:00'); return Math.round((fin-hoy)/86400000); }
+function contFinBadge(c){ const d=contDiasFin(c); if(d==null) return ''; if(d<0) return `<div style="font-size:11px;font-weight:700;color:#c0392b">⚠ Vencido hace ${Math.abs(d)}d</div>`; if(d<=60) return `<div style="font-size:11px;font-weight:700;color:#c0392b">⚠ Vence en ${d}d</div>`; if(d<=180) return `<div style="font-size:11px;font-weight:700;color:#b9770e">⏳ Vence en ${d}d</div>`; return ''; }
+function contBanner(list){ const al=(list||[]).filter(c=>{ const d=contDiasFin(c); return d!=null&&d<=180; }).sort((a,b)=>contDiasFin(a)-contDiasFin(b)); if(!al.length) return ''; return `<div class="panel" style="border-left:5px solid #e0a020;background:#fffdf7;margin-bottom:12px"><b style="color:#b9770e">⏳ ${al.length} contrato(s) próximos a vencer o vencidos</b><div style="margin-top:6px;font-size:13px">${al.map(c=>{ const d=contDiasFin(c); return `<div style="padding:2px 0">• <b>${esc(c.propiedad||'')}</b> — ${d<0?`vencido hace ${Math.abs(d)}d`:`vence en ${d}d`} (${esc(contFechaCorta(c.fecha_fin))})</div>`; }).join('')}</div></div>`; }
 function contratosHTML(can){
   const ss='width:100%;padding:9px 11px;border:1px solid var(--gris2);border-radius:8px;font-family:inherit;font-size:14px';
   const addBtn=can?`<div style="margin:4px 0 14px"><button class="btn" onclick="${contFormOpen?'contCancel()':'contNew()'}">${contFormOpen?'✕ Cerrar':'+ Nuevo contrato'}</button></div>`:'';
   const form=(can&&contFormOpen)?contForm(ss):'';
   const rows=CONTRATOS.map(c=>{
     const itb=c.itbms?' <span style="color:var(--suave);font-size:11px">+ ITBMS</span>':'';
-    const anios=(c.tipo==='renta_fija'&&Array.isArray(c.anios)&&c.anios.length)?`<div style="font-size:11px;color:var(--suave);margin-top:2px">${c.anios.slice().sort((a,b)=>a.anio-b.anio).map(a=>esc(a.anio)+': '+contMoney(a.monto)).join(' · ')}</div>`:'';
+    const anios=(c.tipo==='renta_fija'&&Array.isArray(c.anios)&&c.anios.length)?`<div style="font-size:11px;color:var(--suave);margin-top:2px">${c.anios.slice().sort((a,b)=>contPerDesde(a).localeCompare(contPerDesde(b))).map(a=>esc(contFechaCorta(contPerDesde(a)))+'–'+esc(contFechaCorta(contPerHasta(a)))+': '+contMoney(a.monto)).join('<br>')}</div>`:'';
     const arch=c.archivo_path?`<button class="btn ghost" style="padding:4px 9px;font-size:12px" onclick="contAbrir('${esc(c.archivo_path)}')">📎 ${esc((c.archivo_nombre||'Ver').slice(0,18))}</button>`:'<span style="color:var(--suave);font-size:12px">—</span>';
     return `<tr>
       <td><b>${esc(c.propiedad||'')}</b></td>
@@ -2733,28 +2748,29 @@ function contratosHTML(can){
       <td>${esc(c.empresa||'')}</td>
       <td style="white-space:pre-wrap;font-size:12.5px">${esc(c.contacto||'')}</td>
       <td style="white-space:nowrap">${esc(c.fecha_inicio||'')}</td>
-      <td style="white-space:nowrap">${esc(c.fecha_fin||'')}</td>
+      <td style="white-space:nowrap">${esc(c.fecha_fin||'')}${contFinBadge(c)}</td>
       <td><b>${contMontoActual(c)}</b>${itb}${anios}</td>
       <td style="white-space:pre-wrap;font-size:12.5px">${esc(c.nota||'')}</td>
       <td>${arch}</td>
       ${can?`<td style="white-space:nowrap"><button class="btn ghost" style="padding:4px 8px;font-size:12px" onclick="contEdit(${c.id})">✏️</button> <button class="btn ghost" style="padding:4px 8px;font-size:12px;color:#c0392b" onclick="contDel(${c.id})">🗑️</button></td>`:''}
     </tr>`;
   }).join('')||`<tr><td colspan="${can?10:9}" style="color:var(--suave)">Aún no hay contratos.</td></tr>`;
-  return `<div class="page-sub">Contratos por propiedad${can?' · puedes añadir':''}</div>${addBtn}${form}
+  return `<div class="page-sub">Contratos por propiedad${can?' · puedes añadir':''}</div>${addBtn}${form}${contBanner(CONTRATOS)}
     <div class="panel"><div style="overflow-x:auto"><table class="tbl-compact"><thead><tr><th>Propiedad</th><th>Tipo</th><th>Empresa</th><th>Contacto</th><th>Inicio</th><th>Fin</th><th>Importe actual</th><th>Nota</th><th>Contrato</th>${can?'<th></th>':''}</tr></thead><tbody>${rows}</tbody></table></div></div>`;
 }
 function contForm(ss){
   const d=contDraft||{};
   const isCom=d.tipo==='comision';
-  const aniosRows=(Array.isArray(d.anios)?d.anios:[]).map((a,i)=>`<div class="row" style="gap:8px;align-items:center;margin-bottom:6px"><div style="max-width:120px"><input id="cAnio_${i}" type="number" placeholder="Año" value="${esc(a.anio!=null?a.anio:'')}" style="${ss}"></div><div><input id="cMonto_${i}" type="number" step="0.01" placeholder="Monto $" value="${esc(a.monto!=null?a.monto:'')}" style="${ss}"></div><button type="button" class="btn ghost" style="padding:6px 10px" onclick="contDelAnio(${i})">✕</button></div>`).join('');
+  const aniosRows=(Array.isArray(d.anios)?d.anios:[]).map((a,i)=>`<div class="row" style="gap:8px;align-items:flex-end;margin-bottom:6px;flex-wrap:wrap"><div><label style="font-size:11px;color:var(--suave)">Desde</label><input id="cDesde_${i}" type="date" value="${esc(a.desde||(a.anio?a.anio+'-01-01':''))}" style="${ss}"></div><div><label style="font-size:11px;color:var(--suave)">Hasta</label><input id="cHasta_${i}" type="date" value="${esc(a.hasta||(a.anio?a.anio+'-12-31':''))}" style="${ss}"></div><div><label style="font-size:11px;color:var(--suave)">Monto $</label><input id="cMonto_${i}" type="number" step="0.01" placeholder="0.00" value="${esc(a.monto!=null?a.monto:'')}" style="${ss}"></div><button type="button" class="btn ghost" style="padding:6px 10px" onclick="contDelAnio(${i})">✕</button></div>`).join('');
   const bloqueRenta=`<div style="border:1px solid var(--gris2);border-radius:8px;padding:10px;margin:6px 0">
-      <label style="font-weight:600;font-size:13px">Precio por año (escalado del alquiler)</label>
+      <label style="font-weight:600;font-size:13px">Precio por periodo (escalado del alquiler)</label>
+      <div style="font-size:11.5px;color:var(--suave);margin-top:2px">Cada periodo va de fecha a fecha (p. ej. jul 2026 → jun 2027); no tiene que coincidir con el año natural.</div>
       <div style="margin-top:8px">${aniosRows}</div>
       <div class="row" style="gap:8px;align-items:center;margin-top:4px;flex-wrap:wrap">
-        <button type="button" class="btn ghost" onclick="contAddAnio()">+ Añadir año</button>
-        <span style="font-size:12px;color:var(--suave)">o autorrellenar con subida</span>
+        <button type="button" class="btn ghost" onclick="contAddAnio()">+ Añadir periodo</button>
+        <span style="font-size:12px;color:var(--suave)">o autorrellenar el siguiente periodo con subida</span>
         <div style="max-width:90px"><input id="cPctSubida" type="number" step="0.1" placeholder="%" style="${ss}"></div>
-        <button type="button" class="btn ghost" onclick="contAutoAnio()">↧ Añadir año +%</button>
+        <button type="button" class="btn ghost" onclick="contAutoAnio()">↧ Añadir periodo +%</button>
       </div></div>`;
   const bloqueCom=`<div class="row"><div><label>% de comisión</label><input id="cPct" type="number" step="0.01" value="${esc(d.comision_pct!=null?d.comision_pct:'')}" placeholder="Ej. 20" style="${ss}"></div><div></div></div>`;
   return `<div class="panel" style="max-width:820px"><h2>${contEditId?'✏️ Editar contrato':'+ Nuevo contrato'}</h2>
