@@ -2730,7 +2730,7 @@ function pagRender(){
   const canImp=pagosCan();
   const tab=(k,l)=>`<button class="cc-seg-btn ${pagView===k?'on':''}" onclick="pagSetView('${k}')">${l}</button>`;
   const head=`<div class="page-title">💵 Pagos</div><div class="page-sub">Pagos diarios y dashboard · P&L</div>
-    <div class="cc-seg">${tab('panel','📊 Dashboard')}${tab('detalle','📋 Detalle')}${RESUMENES.length?tab('resumen','📑 Resúmenes'):''}</div>
+    <div class="cc-seg">${tab('panel','📊 Dashboard')}${tab('detalle','📋 Detalle')}${tab('resumen','📑 Resúmenes')}</div>
     <div style="margin:4px 0 12px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">${canImp?`<label class="btn ghost" style="cursor:pointer">📥 Importar Excel<input type="file" accept=".xlsx,.xls" style="display:none" onchange="pagosImport(this)"></label>`:''}<span style="font-size:12px;color:var(--suave)">${PAGOS.length} pago(s) cargados</span></div>`;
   const body= pagView==='resumen' ? pagResumen() : (pagView==='detalle' ? pagDetalle() : pagDashboard());
   m.innerHTML=head+(pagView==='resumen'?'':pagFiltros())+body;
@@ -2787,13 +2787,39 @@ function pagSetRes(i){ pagResSel=(RESUMENES[i]||{}).nombre||''; pagRender(); }
 function pagGridHTML(grid){
   if(!Array.isArray(grid)||!grid.length) return '<div style="color:var(--suave)">Sin datos.</div>';
   const MES=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
-  const isNum=v=>{ const s=(''+v).trim(); if(!s) return false; return /\d/.test(s) && !/[a-zA-ZáéíóúñÁÉÍÓÚ]/.test(s); };
-  const rowsH=grid.map(row=>{
-    const hdr=Array.isArray(row)&&row.some(c=>MES.includes((''+(c==null?'':c)).trim()));
-    const tds=(row||[]).map((c,ci)=>{ let v=(c==null?'':(''+c)); if(/^#/.test(v.trim())) v=''; const al=(ci>0&&isNum(v))?'right':'left'; const st=`padding:4px 8px;border-bottom:1px solid var(--gris);text-align:${al};white-space:nowrap${ci===0?';font-weight:600':''}`; return `<td style="${st}">${esc(v)}</td>`; }).join('');
-    return `<tr${hdr?' style="background:#eef2f7;font-weight:700"':''}>${tds}</tr>`;
-  }).join('');
-  return `<div style="overflow-x:auto"><table style="border-collapse:collapse;font-size:12.5px;width:100%">${rowsH}</table></div>`;
+  const clean=v=>{ let s=(v==null?'':(''+v)).trim(); if(/^#/.test(s)) s=''; return s; };
+  const isNum=s=>!!s && /\d/.test(s) && !/[a-zA-ZáéíóúñÁÉÍÓÚ]/.test(s);
+  const TOT=/^\s*(ganancia|%\s*ganancia|total|gran total|saldo|resultado|utilidad|balance)/i;
+  const ncols=Math.max.apply(null,grid.map(r=>(r||[]).length));
+  const keep=[]; for(let c=0;c<ncols;c++){ for(const r of grid){ if(clean((r||[])[c])!==''){ keep.push(c); break; } } }
+  if(!keep.length) return '<div style="color:var(--suave)">Sin datos.</div>';
+  const G=grid.map(r=>keep.map(c=>clean((r||[])[c])));
+  let body='';
+  for(const row of G){
+    if(row.every(v=>v==='')) continue;
+    const label=row[0]||''; const vals=row.slice(1);
+    const hasMonth=row.some(v=>MES.includes(v));
+    const valsEmpty=vals.every(v=>v==='');
+    let cls=''; if(hasMonth) cls='hdr'; else if(label && valsEmpty) cls='sub'; else if(TOT.test(label)) cls='tot';
+    const tds=row.map((v,ci)=>{ if(ci===0) return `<td class="lbl">${esc(v)}</td>`; const num=isNum(v); const neg=num&&(v.charAt(0)==='('||v.charAt(0)==='-'); return `<td class="${num?'num':''}${neg?' neg':''}">${esc(v)}</td>`; }).join('');
+    body+=`<tr class="${cls}">${tds}</tr>`;
+  }
+  return `<style>
+    .pgr-wrap{overflow:auto;border:1px solid var(--gris2);border-radius:10px;max-height:72vh}
+    .pgr{border-collapse:separate;border-spacing:0;font-size:12.5px;white-space:nowrap;min-width:100%}
+    .pgr td{padding:6px 11px;border-bottom:1px solid #eef1f5}
+    .pgr td.lbl{position:sticky;left:0;background:#fff;font-weight:600;color:#243b53;border-right:1px solid var(--gris2);z-index:2;max-width:300px;overflow:hidden;text-overflow:ellipsis}
+    .pgr td.num{text-align:right;font-variant-numeric:tabular-nums;color:#243b53}
+    .pgr td.neg{color:#c0392b}
+    .pgr tr:nth-child(even) td{background:#fafbfc}
+    .pgr tr:nth-child(even) td.lbl{background:#fafbfc}
+    .pgr tr.hdr td{background:#1f4e79;color:#fff;font-weight:700;border-bottom:none}
+    .pgr tr.hdr td.lbl{background:#1f4e79;color:#fff}
+    .pgr tr.sub td{background:#eef2f7;font-weight:700;color:#34557a}
+    .pgr tr.sub td.lbl{background:#eef2f7;color:#34557a}
+    .pgr tr.tot td{font-weight:800;background:#f3f7ec;border-top:2px solid #cdd7e2;border-bottom:2px solid #cdd7e2}
+    .pgr tr.tot td.lbl{background:#f3f7ec}
+  </style><div class="pgr-wrap"><table class="pgr"><tbody>${body}</tbody></table></div>`;
 }
 function pagResumen(){
   if(!RESUMENES.length) return `<div class="panel" style="color:var(--suave)">No hay resúmenes importados todavía. Pulsa “Importar Excel” y se cargarán las hojas de resumen.</div>`;
@@ -2833,7 +2859,7 @@ async function pagosImport(input){
       for(let i=0;i<mapped.length;i+=500){ const chunk=mapped.slice(i,i+500); const{error}=await sb.from('pagos').insert(chunk); if(error){ alert('Error al importar '+sheet+': '+error.message); return; } }
       totalIns+=mapped.length; resumen.push(`${sheet}: ${mapped.length}`);
     }
-    for(const sn of PAG_RESUMEN_SHEETS){ const wsr=wb.Sheets[sn]; if(!wsr) continue; let grid=XLSX.utils.sheet_to_json(wsr,{header:1,raw:false,defval:''}); let maxc=0; grid.forEach(row=>{ for(let i=row.length-1;i>=0;i--){ if((''+(row[i]==null?'':row[i])).trim()!==''){ if(i+1>maxc)maxc=i+1; break; } } }); grid=grid.map(row=>{ const a=(row||[]).slice(0,maxc); while(a.length<maxc)a.push(''); return a.map(x=>x==null?'':(''+x)); }); while(grid.length && grid[grid.length-1].every(x=>(''+x).trim()==='')) grid.pop(); try{ await sb.from('paneles_resumen').delete().eq('nombre',sn); const ri=await sb.from('paneles_resumen').insert({nombre:sn,grid}); resumen.push(sn+(ri.error?': (resumen no guardado — ejecuta supabase_paneles_resumen.sql)':': resumen ✓')); }catch(e){ resumen.push(sn+': error resumen'); } }
+    for(const sn of PAG_RESUMEN_SHEETS){ const wsr=wb.Sheets[sn]; if(!wsr) continue; let grid=[]; { const ref=wsr['!ref']; if(ref){ const rng=XLSX.utils.decode_range(ref); for(let R=rng.s.r;R<=rng.e.r;R++){ const arow=[]; for(let C=rng.s.c;C<=rng.e.c;C++){ const cell=wsr[XLSX.utils.encode_cell({r:R,c:C})]; let val=''; if(cell){ if(cell.w!=null && (''+cell.w).trim()!=='') val=''+cell.w; else if(cell.v!=null) val=''+cell.v; } arow.push(val); } grid.push(arow); } } } let maxc=0; grid.forEach(row=>{ for(let i=row.length-1;i>=0;i--){ if((''+(row[i]==null?'':row[i])).trim()!==''){ if(i+1>maxc)maxc=i+1; break; } } }); grid=grid.map(row=>{ const a=(row||[]).slice(0,maxc); while(a.length<maxc)a.push(''); return a.map(x=>x==null?'':(''+x)); }); while(grid.length && grid[grid.length-1].every(x=>(''+x).trim()==='')) grid.pop(); try{ await sb.from('paneles_resumen').delete().eq('nombre',sn); const ri=await sb.from('paneles_resumen').insert({nombre:sn,grid}); resumen.push(sn+(ri.error?': (resumen no guardado — ejecuta supabase_paneles_resumen.sql)':': resumen ✓')); }catch(e){ resumen.push(sn+': error resumen'); } }
     toast('✓ Importados '+totalIns+' pagos');
     alert('Importación completada:\n'+resumen.join('\n'));
     show('pagos');
