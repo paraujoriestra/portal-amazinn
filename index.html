@@ -2706,7 +2706,7 @@ async function saveProp(e){e.preventDefault();
 }
 
 /* ---------------- PAGOS (P&L · finanzas) ---------------- */
-let PAGOS=[], pagMes='', pagCat='', pagProp='', pagEstado='', pagFrom='', pagTo='', pagView='panel';
+let PAGOS=[], pagMes='', pagCat='', pagProp='', pagEstado='', pagFrom='', pagTo='', pagView='panel', pagSearch='';
 const PAG_MESES=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
 let RESUMENES=[], pagResSel='';
 const PAG_RESUMEN_SHEETS=['Flujo Real Banco','Ganancia por propiedad','Flujo Mes'];
@@ -2715,7 +2715,7 @@ function pagMoney(n){ const x=parseFloat(n)||0; return '$'+x.toLocaleString('es-
 function pagSetView(v){ pagView=v; pagRender(); }
 function pagSet(k,v){ if(k==='mes')pagMes=v; else if(k==='cat')pagCat=v; else if(k==='prop')pagProp=v; else if(k==='estado')pagEstado=v; else if(k==='from')pagFrom=v; else if(k==='to')pagTo=v; pagRender(); }
 function pagClear(){ pagMes=pagCat=pagProp=pagEstado=pagFrom=pagTo=''; pagRender(); }
-function pagFiltered(){ return PAGOS.filter(p=>{ if(pagMes&&p.mes!==pagMes) return false; if(pagCat&&p.categoria!==pagCat) return false; if(pagProp&&p.propiedad!==pagProp) return false; if(pagEstado&&(p.estado||'')!==pagEstado) return false; const f=(p.fecha||''); if(pagFrom&&f&&f<pagFrom) return false; if(pagTo&&f&&f>pagTo) return false; return true; }); }
+function pagFiltered(){ const q=(pagSearch||'').trim().toLowerCase(); return PAGOS.filter(p=>{ if(pagMes&&p.mes!==pagMes) return false; if(pagCat&&p.categoria!==pagCat) return false; if(pagProp&&p.propiedad!==pagProp) return false; if(pagEstado&&(p.estado||'')!==pagEstado) return false; const f=(p.fecha||''); if(pagFrom&&f&&f<pagFrom) return false; if(pagTo&&f&&f>pagTo) return false; if(q){ const hay=[p.fecha,p.mes,p.categoria,p.subcategoria,p.propiedad,p.empresa,p.metodo,p.estado,p.consecutivo,p.monto_total].map(x=>(''+(x==null?'':x)).toLowerCase()).join(' '); if(hay.indexOf(q)<0) return false; } return true; }); }
 async function pagePagos(){
   if(!pagosCan()){ document.getElementById('main').innerHTML='<div class="page-title">💵 Pagos</div><div class="panel" style="color:var(--suave)">No tienes acceso a esta sección.</div>'; return; }
   asgEnsureStyle();
@@ -2731,10 +2731,22 @@ function pagRender(){
   const tab=(k,l)=>`<button class="cc-seg-btn ${pagView===k?'on':''}" onclick="pagSetView('${k}')">${l}</button>`;
   const head=`<div class="page-title">💵 Pagos</div><div class="page-sub">Pagos diarios y dashboard · P&L</div>
     <div class="cc-seg">${tab('panel','📊 Dashboard')}${tab('detalle','📋 Detalle')}${tab('resumen','📑 Resúmenes')}</div>
-    <div style="margin:4px 0 12px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">${canImp?`<label class="btn ghost" style="cursor:pointer">📥 Importar Excel<input type="file" accept=".xlsx,.xls" style="display:none" onchange="pagosImport(this)"></label>`:''}<span style="font-size:12px;color:var(--suave)">${PAGOS.length} pago(s) cargados</span></div>`;
-  const body= pagView==='resumen' ? pagResumen() : (pagView==='detalle' ? pagDetalle() : pagDashboard());
-  m.innerHTML=head+(pagView==='resumen'?'':pagFiltros())+body;
+    <div style="margin:4px 0 12px;display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+      <input id="pagSearch" type="search" value="${esc(pagSearch)}" oninput="pagSearchInput(this.value)" placeholder="🔎 Buscar (categoría, propiedad, empresa, importe…)" style="flex:1 1 280px;min-width:220px;padding:9px 12px;border:1px solid var(--gris2);border-radius:9px;font-family:inherit;font-size:14px">
+      ${canImp?`<label class="btn ghost" style="cursor:pointer">📥 Importar Excel<input type="file" accept=".xlsx,.xls" style="display:none" onchange="pagosImport(this)"></label>`:''}
+      <span style="font-size:12px;color:var(--suave)">${PAGOS.length} pago(s)</span>
+    </div>`;
+  m.innerHTML=head+'<div id="pagBody"></div>';
+  pagRenderBody();
 }
+function pagRenderBody(){
+  const b=document.getElementById('pagBody'); if(!b) return;
+  const body= pagView==='resumen' ? pagResumen() : (pagView==='detalle' ? pagDetalle() : pagDashboard());
+  b.innerHTML=(pagView==='resumen'?'':pagFiltros())+body;
+}
+function pagSearchInput(v){ pagSearch=v; pagRenderBody(); }
+function pagHi(text,q){ const s=(text==null?'':''+text); if(!q) return esc(s); const lo=s.toLowerCase(); let out='',i=0; while(true){ const j=lo.indexOf(q,i); if(j<0){ out+=esc(s.slice(i)); break; } out+=esc(s.slice(i,j))+'<mark style="background:#ffe680;color:inherit;padding:0 1px;border-radius:2px">'+esc(s.slice(j,j+q.length))+'</mark>'; i=j+q.length; } return out; }
+function pagTxt(v){ const q=(pagSearch||'').trim().toLowerCase(); return q?pagHi(v,q):esc(v==null?'':''+v); }
 function pagFiltros(){
   const cats=[...new Set(PAGOS.map(p=>p.categoria).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
   const props=[...new Set(PAGOS.map(p=>p.propiedad).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
@@ -2780,12 +2792,13 @@ function pagDetalle(){
   const all=pagFiltered();
   const L=all.slice(0,500);
   const tot=all.reduce((s,p)=>s+(parseFloat(p.monto_total)||0),0);
-  const rows=L.map(p=>`<tr><td style="white-space:nowrap">${esc(p.fecha||'')}</td><td>${esc(p.mes||'')}</td><td>${esc(p.categoria||'')}</td><td>${esc(p.propiedad||'')}</td><td>${esc(p.empresa||'')}</td><td style="text-align:right;white-space:nowrap">${pagMoney(p.monto_total)}</td><td>${(p.estado||'')==='Por Pagar'?`<span style="color:#c0392b;font-weight:700">Por pagar</span>`:'Pagado'}</td><td>${esc(p.metodo||'')}</td></tr>`).join('')||`<tr><td colspan="8" style="color:var(--suave)">Sin pagos con estos filtros.</td></tr>`;
+  const rows=L.map(p=>`<tr><td style="white-space:nowrap">${pagTxt(p.fecha)}</td><td>${pagTxt(p.mes)}</td><td>${pagTxt(p.categoria)}</td><td>${pagTxt(p.propiedad)}</td><td>${pagTxt(p.empresa)}</td><td style="text-align:right;white-space:nowrap">${pagMoney(p.monto_total)}</td><td>${(p.estado||'')==='Por Pagar'?`<span style="color:#c0392b;font-weight:700">Por pagar</span>`:'Pagado'}</td><td>${pagTxt(p.metodo)}</td></tr>`).join('')||`<tr><td colspan="8" style="color:var(--suave)">Sin pagos con estos filtros.</td></tr>`;
   return `<div class="panel"><div style="display:flex;justify-content:space-between;margin-bottom:8px;font-size:13px"><b>${all.length} movimiento(s)</b><b>Total: ${pagMoney(tot)}</b></div><div class="asg-scroll"><table class="asg-table"><thead><tr><th>Fecha</th><th>Mes</th><th>Categoría</th><th>Propiedad</th><th>Empresa</th><th style="text-align:right">Monto</th><th>Estado</th><th>Método</th></tr></thead><tbody>${rows}</tbody></table></div>${all.length>500?`<div style="font-size:12px;color:var(--suave);margin-top:6px">Mostrando 500 de ${all.length}. Usa los filtros para acotar.</div>`:''}</div>`;
 }
 function pagSetRes(i){ pagResSel=(RESUMENES[i]||{}).nombre||''; pagRender(); }
-function pagGridHTML(grid){
+function pagGridHTML(grid,q){
   if(!Array.isArray(grid)||!grid.length) return '<div style="color:var(--suave)">Sin datos.</div>';
+  q=(q||'').trim().toLowerCase();
   const MES=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
   const clean=v=>{ let s=(v==null?'':(''+v)).trim(); if(/^#/.test(s)) s=''; return s; };
   const isNum=s=>!!s && /\d/.test(s) && !/[a-zA-ZáéíóúñÁÉÍÓÚ]/.test(s);
@@ -2801,8 +2814,9 @@ function pagGridHTML(grid){
     const hasMonth=row.some(v=>MES.includes(v));
     const valsEmpty=vals.every(v=>v==='');
     let cls=''; if(hasMonth) cls='hdr'; else if(label && valsEmpty) cls='sub'; else if(TOT.test(label)) cls='tot';
-    const tds=row.map((v,ci)=>{ if(ci===0) return `<td class="lbl">${esc(v)}</td>`; const num=isNum(v); const neg=num&&(v.charAt(0)==='('||v.charAt(0)==='-'); return `<td class="${num?'num':''}${neg?' neg':''}">${esc(v)}</td>`; }).join('');
-    body+=`<tr class="${cls}">${tds}</tr>`;
+    const rowMatch = q && cls!=='hdr' && row.some(v=>v.toLowerCase().indexOf(q)>-1);
+    const tds=row.map((v,ci)=>{ const disp=(q && v.toLowerCase().indexOf(q)>-1)?pagHi(v,q):esc(v); if(ci===0) return `<td class="lbl">${disp}</td>`; const num=isNum(v); const neg=num&&(v.charAt(0)==='('||v.charAt(0)==='-'); return `<td class="${num?'num':''}${neg?' neg':''}">${disp}</td>`; }).join('');
+    body+=`<tr class="${cls}${rowMatch?' match':''}">${tds}</tr>`;
   }
   return `<style>
     .pgr-wrap{overflow:auto;border:1px solid var(--gris2);border-radius:10px;max-height:72vh}
@@ -2819,13 +2833,15 @@ function pagGridHTML(grid){
     .pgr tr.sub td.lbl{background:#eef2f7;color:#34557a}
     .pgr tr.tot td{font-weight:800;background:#f3f7ec;border-top:2px solid #cdd7e2;border-bottom:2px solid #cdd7e2}
     .pgr tr.tot td.lbl{background:#f3f7ec}
+    .pgr tr.match td{background:#fff7d6}
+    .pgr tr.match td.lbl{background:#fff7d6}
   </style><div class="pgr-wrap"><table class="pgr"><tbody>${body}</tbody></table></div>`;
 }
 function pagResumen(){
   if(!RESUMENES.length) return `<div class="panel" style="color:var(--suave)">No hay resúmenes importados todavía. Pulsa “Importar Excel” y se cargarán las hojas de resumen.</div>`;
   const cur=RESUMENES.find(r=>r.nombre===pagResSel)||RESUMENES[0];
   const sel=`<div style="margin-bottom:12px;display:flex;gap:6px;flex-wrap:wrap">${RESUMENES.map((r,i)=>`<button class="cc-filt-btn ${r.nombre===cur.nombre?'on':''}" onclick="pagSetRes(${i})">${esc(r.nombre)}</button>`).join('')}</div>`;
-  return sel+`<div class="panel"><h2 style="margin-top:0">${esc(cur.nombre)}</h2><p style="font-size:12px;color:var(--suave);margin:-4px 0 10px">Espejo de la hoja del Excel. Se actualiza al volver a importar.</p>${pagGridHTML(cur.grid)}</div>`;
+  return sel+`<div class="panel"><h2 style="margin-top:0">${esc(cur.nombre)}</h2><p style="font-size:12px;color:var(--suave);margin:-4px 0 10px">Espejo de la hoja del Excel. Se actualiza al volver a importar.</p>${pagGridHTML(cur.grid,pagSearch)}</div>`;
 }
 async function pagosImport(input){
   if(!pagosCan()){ alert('No tienes permiso para importar.'); return; }
