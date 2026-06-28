@@ -4018,6 +4018,7 @@ function ccFiltBar(){ const anyF=ccFrom||ccTo; const inp='padding:7px 10px;borde
 }
 async function pageCierres(){
   if(!ccAllowedNow()){ document.getElementById('main').innerHTML='<div class="page-title">🧾 Cierres de caja</div><div class="panel" style="color:var(--suave)">🧾 Sección disponible <b>muy pronto</b>.</div>'; return; }
+  asgEnsureStyle();
   const r=await sb.from('cierres_caja').select('*').order('fecha',{ascending:false}).order('id',{ascending:false});
   CCAJA=r.data||[];
   const tab=(k,l)=>`<button class="cc-seg-btn ${ccTab===k&&ccView==null?'on':''}" onclick="ccSetTab('${k}')">${l}</button>`;
