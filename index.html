@@ -1214,6 +1214,8 @@ const NAV=[
   {id:'formacion',ic:'📚',t:'Formaciones', lockRoles:['empleado','responsable']},
   {grp:'Mi departamento'},
   {id:'depto',ic:'🗂️',t:'Área de equipo', lockRoles:['empleado','responsable']},
+  {grp:'Finanzas'},
+  {id:'pagos',ic:'💵',t:'Pagos'},
   {grp:'Dirección', roles:['direccion','admin']},
   {id:'kpis',ic:'📊',t:'Tablero de KPIs', roles:['direccion','admin']},
   {id:'auditoria',ic:'🔒',t:'Auditoría', roles:['admin']},
@@ -1257,6 +1259,7 @@ function navGroups(){
     if(it.owner && !isOwner()) return;
     if(isProvider() && it.id && !PROV_NAV_OK.includes(it.id)) return;   // proveedor: solo incidencias/preventivo
     if(isConductor() && it.id && !CONDUCTOR_NAV_OK.includes(it.id)) return;   // conductor: solo transfer
+    if(it.id==='pagos' && typeof pagosCan==='function' && !pagosCan()) return;   // pagos: finanzas/operaciones/admin
     const er = PROFILE.role==='propietario' ? 'admin' : PROFILE.role;
     if(it.roles && !it.roles.includes(er)) return;
     if(it.depts && !it.depts.includes(PROFILE.dept) && !isAdmin() && !isProvider() && !isConductor() && !(it.seeRoles && it.seeRoles.includes(PROFILE.role))) return;
@@ -1298,6 +1301,7 @@ const ICONS={
   depto:'<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
   kpis:'<path d="M3 21h18M6 21V11M11 21V5M16 21v-8M21 21v-5"/>',
   auditoria:'<rect x="5" y="11" width="14" height="9" rx="1"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>',
+  pagos:'<rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/><path d="M6 9v6M18 9v6"/>',
   aprobaciones:'<circle cx="12" cy="12" r="9"/><path d="M8 12l3 3 5-6"/>',
   admin:'<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2"/>',
   perfil:'<circle cx="12" cy="8" r="4"/><path d="M5 21a7 7 0 0 1 14 0"/>',
@@ -1471,7 +1475,7 @@ function haceTiempo(iso){ if(!iso) return 'nunca conectado'; const s=Math.floor(
   if(s<60) return 'hace un momento'; const m=Math.floor(s/60); if(m<60) return 'hace '+m+' min';
   const h=Math.floor(m/60); if(h<24) return 'hace '+h+' h'; const d=Math.floor(h/24); if(d<30) return 'hace '+d+' día'+(d>1?'s':'');
   return 'el '+new Date(iso).toLocaleDateString('es-ES'); }
-const GRP_ICON={'General':'🏠','RRHH':'👥','Recursos':'📦','Mantenimiento':'🛠️','Limpieza':'🧹','Atención al cliente':'💬','Marketing':'🎨','Formación':'🎓','Mi departamento':'🗂️','Dirección':'📊','Gestión':'⚙️'};
+const GRP_ICON={'General':'🏠','Finanzas':'💰','RRHH':'👥','Recursos':'📦','Mantenimiento':'🛠️','Limpieza':'🧹','Atención al cliente':'💬','Marketing':'🎨','Formación':'🎓','Mi departamento':'🗂️','Dirección':'📊','Gestión':'⚙️'};
 function buildNav(){
   const nav=document.getElementById('nav');
   const groups=navGroups();
@@ -1541,6 +1545,7 @@ function show(id){
   else if(id==='backup'){ ld('<div class="page-title">Copia de seguridad</div><div class="page-sub">Cargando…</div>'); pageBackup(); }
   else if(id==='bitacora'){ ld('<div class="page-title">Bitácora</div><div class="page-sub">Cargando…</div>'); pageBitacora(); }
   else if(id==='cierres'){ ld('<div class="page-title">Cierres de caja</div><div class="page-sub">Cargando…</div>'); pageCierres(); }
+  else if(id==='pagos'){ ld('<div class="page-title">💵 Pagos</div><div class="page-sub">Cargando…</div>'); pagePagos(); }
   else if(id==='glosario'){ pageGlosario(); }
   else if(id==='reclutamiento'){ ld('<div class="page-title">Reclutamiento</div><div class="page-sub">Cargando…</div>'); pageReclutamiento(); }
   else if(id==='formacion'){ ld('<div class="page-title">Formaciones</div><div class="page-sub">Cargando…</div>'); pageFormacion(); }
@@ -2698,6 +2703,119 @@ async function saveProp(e){e.preventDefault();
   const{error}=propEditId?await sb.from('propietarios').update(row).eq('id',propEditId):await sb.from('propietarios').insert(row);
   if(error){alert('Error: '+error.message);return false;}
   propFormOpen=false;propEditId=null;propDraft={};show('propietarios');return false;
+}
+
+/* ---------------- PAGOS (P&L · finanzas) ---------------- */
+let PAGOS=[], pagMes='', pagCat='', pagProp='', pagEstado='', pagFrom='', pagTo='', pagView='panel';
+const PAG_MESES=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+function pagosCan(){ if(isAdmin()) return true; const a=(PROFILE.area||''),d=(PROFILE.dept||''); if(a==='Finanzas'||d==='Finanzas') return true; if(PROFILE.role==='direccion'&&(a==='Operaciones'||d==='Operaciones')) return true; return false; }
+function pagMoney(n){ const x=parseFloat(n)||0; return '$'+x.toLocaleString('es-PA',{minimumFractionDigits:2,maximumFractionDigits:2}); }
+function pagSetView(v){ pagView=v; pagRender(); }
+function pagSet(k,v){ if(k==='mes')pagMes=v; else if(k==='cat')pagCat=v; else if(k==='prop')pagProp=v; else if(k==='estado')pagEstado=v; else if(k==='from')pagFrom=v; else if(k==='to')pagTo=v; pagRender(); }
+function pagClear(){ pagMes=pagCat=pagProp=pagEstado=pagFrom=pagTo=''; pagRender(); }
+function pagFiltered(){ return PAGOS.filter(p=>{ if(pagMes&&p.mes!==pagMes) return false; if(pagCat&&p.categoria!==pagCat) return false; if(pagProp&&p.propiedad!==pagProp) return false; if(pagEstado&&(p.estado||'')!==pagEstado) return false; const f=(p.fecha||''); if(pagFrom&&f&&f<pagFrom) return false; if(pagTo&&f&&f>pagTo) return false; return true; }); }
+async function pagePagos(){
+  if(!pagosCan()){ document.getElementById('main').innerHTML='<div class="page-title">💵 Pagos</div><div class="panel" style="color:var(--suave)">No tienes acceso a esta sección.</div>'; return; }
+  asgEnsureStyle();
+  const r=await sb.from('pagos').select('*').order('fecha',{ascending:false}).limit(20000);
+  if(r.error){ document.getElementById('main').innerHTML='<div class="page-title">💵 Pagos</div><div class="panel">No se pudo cargar (¿ejecutaste <b>supabase_pagos.sql</b>?):<br><small style="color:var(--suave)">'+esc(r.error.message)+'</small></div>'; return; }
+  PAGOS=r.data||[];
+  pagRender();
+}
+function pagRender(){
+  const m=document.getElementById('main'); if(!m) return;
+  const canImp=pagosCan();
+  const tab=(k,l)=>`<button class="cc-seg-btn ${pagView===k?'on':''}" onclick="pagSetView('${k}')">${l}</button>`;
+  const head=`<div class="page-title">💵 Pagos</div><div class="page-sub">Pagos diarios y dashboard · P&L</div>
+    <div class="cc-seg">${tab('panel','📊 Dashboard')}${tab('detalle','📋 Detalle')}</div>
+    <div style="margin:4px 0 12px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">${canImp?`<label class="btn ghost" style="cursor:pointer">📥 Importar Excel<input type="file" accept=".xlsx,.xls" style="display:none" onchange="pagosImport(this)"></label>`:''}<span style="font-size:12px;color:var(--suave)">${PAGOS.length} pago(s) cargados</span></div>`;
+  const body= pagView==='detalle' ? pagDetalle() : pagDashboard();
+  m.innerHTML=head+pagFiltros()+body;
+}
+function pagFiltros(){
+  const cats=[...new Set(PAGOS.map(p=>p.categoria).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
+  const props=[...new Set(PAGOS.map(p=>p.propiedad).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
+  const meses=[...new Set(PAGOS.map(p=>p.mes).filter(Boolean))].sort((a,b)=>PAG_MESES.indexOf(a)-PAG_MESES.indexOf(b));
+  const inp='padding:7px 10px;border:1px solid var(--gris2);border-radius:8px;font-size:13px;font-family:inherit;background:#fff';
+  const sel=(id,val,opts,ph)=>`<select onchange="pagSet('${id}',this.value)" style="${inp}"><option value="">${ph}</option>${opts.map(o=>`<option ${val===o?'selected':''}>${esc(o)}</option>`).join('')}</select>`;
+  const any=(pagMes||pagCat||pagProp||pagEstado||pagFrom||pagTo);
+  return `<div class="panel" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:14px">
+    ${sel('mes',pagMes,meses,'Todos los meses')}
+    ${sel('cat',pagCat,cats,'Todas las categorías')}
+    ${sel('prop',pagProp,props,'Todas las propiedades')}
+    ${sel('estado',pagEstado,['Pagado','Por Pagar'],'Todos los estados')}
+    <label style="font-size:12px;color:var(--suave);display:flex;gap:5px;align-items:center">Desde<input type="date" value="${esc(pagFrom)}" onchange="pagSet('from',this.value)" style="${inp}"></label>
+    <label style="font-size:12px;color:var(--suave);display:flex;gap:5px;align-items:center">Hasta<input type="date" value="${esc(pagTo)}" onchange="pagSet('to',this.value)" style="${inp}"></label>
+    ${any?`<button class="cc-filt-btn on" onclick="pagClear()">✕ Limpiar</button>`:''}
+  </div>`;
+}
+function pagDashboard(){
+  const L=pagFiltered();
+  const sum=arr=>arr.reduce((s,p)=>s+(parseFloat(p.monto_total)||0),0);
+  const pagado=L.filter(p=>(p.estado||'')==='Pagado'), porpag=L.filter(p=>(p.estado||'')==='Por Pagar');
+  const totPag=sum(pagado), totPorPag=sum(porpag), totAll=sum(L);
+  const base=L.filter(p=>(p.estado||'')!=='Por Pagar');
+  const porMes={}; base.forEach(p=>{ const mm=p.mes||'—'; porMes[mm]=(porMes[mm]||0)+(parseFloat(p.monto_total)||0); });
+  const mesesOrd=PAG_MESES.filter(mm=>porMes[mm]!=null);
+  const maxMes=Math.max(1,...mesesOrd.map(mm=>porMes[mm]));
+  let acc=0;
+  const mesRows=mesesOrd.map(mm=>{ acc+=porMes[mm]; return `<div class="kp-row"><span class="kp-k">${esc(mm)}</span><span class="kp-bar"><i style="width:${Math.round(porMes[mm]/maxMes*100)}%"></i></span><b class="kp-v">${pagMoney(porMes[mm])}</b></div>`; }).join('')||'<div style="color:var(--suave);font-size:13px">Sin datos</div>';
+  const rank=(key,top)=>{ const o={}; base.forEach(p=>{ const k=p[key]||'—'; o[k]=(o[k]||0)+(parseFloat(p.monto_total)||0); }); const arr=Object.entries(o).sort((a,b)=>b[1]-a[1]).slice(0,top); const mx=Math.max(1,...arr.map(x=>x[1])); return arr.length?arr.map(([k,v])=>`<div class="kp-row"><span class="kp-k">${esc(k)}</span><span class="kp-bar"><i style="width:${Math.round(v/mx*100)}%"></i></span><b class="kp-v">${pagMoney(v)}</b></div>`).join(''):'<div style="color:var(--suave);font-size:13px">Sin datos</div>'; };
+  return `<div class="kpi-cards">
+      <div class="kpi"><div class="kpi-n">${pagMoney(totPag)}</div><div class="kpi-l">Total pagado</div></div>
+      <div class="kpi"><div class="kpi-n" style="color:#c0392b">${pagMoney(totPorPag)}</div><div class="kpi-l">Por pagar</div></div>
+      <div class="kpi"><div class="kpi-n">${pagMoney(totAll)}</div><div class="kpi-l">Total (todo)</div></div>
+      <div class="kpi"><div class="kpi-n">${L.length}</div><div class="kpi-l">Movimientos</div></div>
+    </div>
+    <div class="panel"><h2 style="margin-top:0">📅 Pagado por mes</h2>${mesRows}<div style="margin-top:8px;padding-top:8px;border-top:1px dashed var(--gris2);display:flex;justify-content:space-between;font-weight:700"><span>Acumulado</span><span>${pagMoney(acc)}</span></div></div>
+    <div class="kp-grid2">
+      <div class="panel"><h2 style="margin-top:0">🏷️ Por categoría</h2>${rank('categoria',14)}</div>
+      <div class="panel"><h2 style="margin-top:0">🏠 Por propiedad (top)</h2>${rank('propiedad',14)}</div>
+    </div>`;
+}
+function pagDetalle(){
+  const all=pagFiltered();
+  const L=all.slice(0,500);
+  const tot=all.reduce((s,p)=>s+(parseFloat(p.monto_total)||0),0);
+  const rows=L.map(p=>`<tr><td style="white-space:nowrap">${esc(p.fecha||'')}</td><td>${esc(p.mes||'')}</td><td>${esc(p.categoria||'')}</td><td>${esc(p.propiedad||'')}</td><td>${esc(p.empresa||'')}</td><td style="text-align:right;white-space:nowrap">${pagMoney(p.monto_total)}</td><td>${(p.estado||'')==='Por Pagar'?`<span style="color:#c0392b;font-weight:700">Por pagar</span>`:'Pagado'}</td><td>${esc(p.metodo||'')}</td></tr>`).join('')||`<tr><td colspan="8" style="color:var(--suave)">Sin pagos con estos filtros.</td></tr>`;
+  return `<div class="panel"><div style="display:flex;justify-content:space-between;margin-bottom:8px;font-size:13px"><b>${all.length} movimiento(s)</b><b>Total: ${pagMoney(tot)}</b></div><div class="asg-scroll"><table class="asg-table"><thead><tr><th>Fecha</th><th>Mes</th><th>Categoría</th><th>Propiedad</th><th>Empresa</th><th style="text-align:right">Monto</th><th>Estado</th><th>Método</th></tr></thead><tbody>${rows}</tbody></table></div>${all.length>500?`<div style="font-size:12px;color:var(--suave);margin-top:6px">Mostrando 500 de ${all.length}. Usa los filtros para acotar.</div>`:''}</div>`;
+}
+async function pagosImport(input){
+  if(!pagosCan()){ alert('No tienes permiso para importar.'); return; }
+  const f=input.files[0]; input.value=''; if(!f) return;
+  if(typeof XLSX==='undefined'){ alert('No se pudo cargar el lector de Excel. Revisa tu conexión.'); return; }
+  if(!confirm('Se importará el archivo y se REEMPLAZARÁN los meses que contenga. ¿Continuar?')) return;
+  try{
+    const buf=await f.arrayBuffer();
+    const wb=XLSX.read(buf,{type:'array',cellDates:true});
+    const norm=k=>(k==null?'':''+k).trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'');
+    const mesSheets=wb.SheetNames.filter(n=>PAG_MESES.includes((''+n).trim()));
+    if(!mesSheets.length){ alert('No encontré pestañas de mes (Enero, Febrero, …) en el archivo.'); return; }
+    const fechaToISO=v=>{ if(v===''||v==null) return null; if(v instanceof Date && !isNaN(v)) return new Date(v.getTime()-v.getTimezoneOffset()*60000).toISOString().slice(0,10); const s=(''+v).trim(); const mm=s.match(/(\d{4})-(\d{2})-(\d{2})/); if(mm) return mm[0]; const d=new Date(s); return isNaN(d)?null:new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().slice(0,10); };
+    const num=v=>{ if(v===''||v==null) return null; const n=parseFloat((''+v).replace(/[^0-9.\-]/g,'')); return isNaN(n)?null:n; };
+    let totalIns=0; const resumen=[];
+    for(const sheet of mesSheets){
+      const ws=wb.Sheets[sheet];
+      const rows=XLSX.utils.sheet_to_json(ws,{defval:''});
+      const mapped=rows.map(r=>{ const m={}; Object.keys(r).forEach(k=>m[norm(k)]=r[k]);
+        const get=(...names)=>{ for(const n of names){ const v=m[norm(n)]; if(v!==undefined&&v!=='') return (''+v).trim(); } return ''; };
+        const cat=get('categoria'); const emp=get('empresa');
+        const mtRaw=(m[norm('monto total')]!==undefined&&m[norm('monto total')]!=='')?m[norm('monto total')]:m[norm('monto')];
+        const mt=num(mtRaw);
+        if(!cat && !emp) return null;
+        return { mes:(''+sheet).trim(), consecutivo:get('consecutivo'), cuenta:get('cuenta'), factura:get('factura'), fecha:fechaToISO(m[norm('fecha')]), estado:get('estado'), categoria:cat, subcategoria:get('subcategoria'), propiedad:get('edificio','propiedad'), monto_total:mt, base:num(m[norm('base')]), itbms:num(m[norm('itbms')]), empresa:emp, metodo:get('metodo de pago','metodo') };
+      }).filter(Boolean);
+      if(!mapped.length){ resumen.push(`${sheet}: 0`); continue; }
+      let anio=null; for(const x of mapped){ if(x.fecha){ anio=parseInt(x.fecha.slice(0,4)); break; } } if(!anio) anio=new Date().getFullYear();
+      mapped.forEach(x=>x.anio=anio);
+      await sb.from('pagos').delete().eq('mes',(''+sheet).trim()).eq('anio',anio);
+      for(let i=0;i<mapped.length;i+=500){ const chunk=mapped.slice(i,i+500); const{error}=await sb.from('pagos').insert(chunk); if(error){ alert('Error al importar '+sheet+': '+error.message); return; } }
+      totalIns+=mapped.length; resumen.push(`${sheet}: ${mapped.length}`);
+    }
+    toast('✓ Importados '+totalIns+' pagos');
+    alert('Importación completada:\n'+resumen.join('\n'));
+    show('pagos');
+  }catch(e){ alert('No se pudo leer el Excel: '+(e&&e.message?e.message:e)); }
 }
 
 /* ---------------- CONTRATOS (propietarios) ---------------- */
