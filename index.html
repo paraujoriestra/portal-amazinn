@@ -4604,7 +4604,7 @@ async function doBackup(){
 
 /* ---------------- TRANSFER (transporte aeropuerto) ---------------- */
 let trfTab='solicitudes', trfFormOpen=false, trfEditId=null, trfSentido=null, trfFiltroEstado='pendiente', trfSearch='', trfFrom='', trfTo='', trfCondFormOpen=false, trfCondEditId=null;
-let TRF=[], TRF_COND=[], TRF_PROPS=[], TRF_PLACES=[];
+let TRF=[], TRF_COND=[], TRF_PROPS=[], TRF_PLACES=[]; let trfLiqOpen=null;
 const TRF_AIRPORTS=['Tocumen Aeropuerto','Albrook Aeropuerto','Pacífico Aeropuerto'];
 function trfEnsureStyle(){ if(document.getElementById('trfStyle'))return; const s=document.createElement('style'); s.id='trfStyle'; s.textContent=`
 #trfBoard{display:grid!important;grid-template-columns:repeat(auto-fill,minmax(230px,1fr))!important;gap:10px!important;align-items:start}
@@ -4730,6 +4730,8 @@ function trfCard(t,cond){
   </div>`;
   const comLine = (!cond && t.conductor_id && t.comision!=null)
     ? `<div style="font-size:11px;margin-top:5px;color:var(--suave)">Comisión ${trfMoney(t.comision)}</div>` : '';
+  const asgLine = (!cond && t.asignado_por_nombre)
+    ? `<div style="font-size:11px;margin-top:3px;color:var(--suave)">🧑‍💼 Asignado por ${esc(t.asignado_por_nombre)}</div>` : '';
   const notas = t.notas?`<div style="font-size:11.5px;margin-top:5px;color:#3a4654;background:var(--gris);padding:5px 9px;border-radius:7px">📝 ${esc(t.notas)}</div>`:'';
   let acts='';
   if(cond){
@@ -4748,8 +4750,8 @@ function trfCard(t,cond){
     ? `<span style="margin-left:auto;font-size:11.5px;font-weight:700;color:#2563aa;white-space:nowrap">🧑‍✈️ ${esc(t.conductor_nombre||trfCondName(t.conductor_id))}</span>`
     : `<span style="margin-left:auto;font-size:11px;font-weight:700;color:#b9770e;white-space:nowrap">⚠ Sin asignar</span>`;
   return `<div class="trf-card est-${t.estado}">
-    <div class="trf-h"><b>${esc(t.cliente||'(sin nombre)')}</b>${trfEstBadge(t.estado)}${condHead}</div>
-    ${grid}${comLine}${notas}
+    <div class="trf-h"><span style="font-size:11px;font-weight:700;color:#5a6675;background:var(--gris);padding:1px 7px;border-radius:6px;margin-right:2px">#${t.id}</span><b>${esc(t.cliente||'(sin nombre)')}</b>${trfEstBadge(t.estado)}${condHead}</div>
+    ${grid}${comLine}${asgLine}${notas}
     <div class="trf-acts">${acts}</div>
   </div>`;
 }
@@ -4826,15 +4828,15 @@ async function trfSave(e){ e.preventDefault();
   }
   const cid=g('trfConductor');
   const row={sentido,cliente:g('trfCliente'),destino,aerolinea_vuelo:vuelo,fecha:fecha||null,llegada:llegada||null,recogida,pax:g('trfPax'),equipaje:g('trfEquipaje'),whatsapp:g('trfWhatsapp'),aeropuerto,notas:g('trfNotas')};
-  if(cid){ row.conductor_id=cid; row.conductor_nombre=trfCondName(cid); row.comision=trfCondComision(cid); const cur=trfEditId?(TRF.find(x=>String(x.id)===String(trfEditId))||{}):{}; row.estado=(cur.estado==='realizado'||cur.estado==='cancelado')?cur.estado:'asignado'; }
+  if(cid){ row.conductor_id=cid; row.conductor_nombre=trfCondName(cid); row.comision=trfCondComision(cid); const cur=trfEditId?(TRF.find(x=>String(x.id)===String(trfEditId))||{}):{}; if(String(cur.conductor_id||'')!==String(cid)){ row.asignado_por=ME.id; row.asignado_por_nombre=PROFILE.nombre; row.asignado_at=new Date().toISOString(); } row.estado=(cur.estado==='realizado'||cur.estado==='cancelado')?cur.estado:'asignado'; }
   else { row.conductor_id=null; row.conductor_nombre=''; row.comision=null; const cur=trfEditId?(TRF.find(x=>String(x.id)===String(trfEditId))||{}):{}; row.estado=(cur.estado==='realizado'||cur.estado==='cancelado')?cur.estado:'pendiente'; }
   if(trfEditId){ const {error}=await sb.from('transfers').update(row).eq('id',trfEditId); if(error){alert(error.message);return false;} }
   else { row.created_by=ME.id; row.created_by_nombre=PROFILE.nombre; row.created_at=new Date().toISOString(); const {error}=await sb.from('transfers').insert(row); if(error){alert(error.message);return false;} }
   trfFormOpen=false; trfSentido=null; trfTab='solicitudes'; show('transfer'); return false; }
 async function trfUpd(id,patch){ const {error}=await sb.from('transfers').update(patch).eq('id',id); if(error){alert(error.message);return;} show('transfer'); }
-function trfAsignar(id,cid){ trfUpd(id,{conductor_id:cid,conductor_nombre:trfCondName(cid),comision:trfCondComision(cid),estado:'asignado'}); }
-function trfTomar(id){ trfUpd(id,{conductor_id:ME.id,conductor_nombre:PROFILE.nombre,comision:(parseFloat(PROFILE.comision)||0),estado:'asignado'}); }
-function trfDevolver(id){ trfUpd(id,{conductor_id:null,conductor_nombre:'',comision:null,estado:'pendiente'}); }
+function trfAsignar(id,cid){ trfUpd(id,{conductor_id:cid,conductor_nombre:trfCondName(cid),comision:trfCondComision(cid),estado:'asignado',asignado_por:ME.id,asignado_por_nombre:PROFILE.nombre,asignado_at:new Date().toISOString()}); }
+function trfTomar(id){ trfUpd(id,{conductor_id:ME.id,conductor_nombre:PROFILE.nombre,comision:(parseFloat(PROFILE.comision)||0),estado:'asignado',asignado_por:ME.id,asignado_por_nombre:PROFILE.nombre,asignado_at:new Date().toISOString()}); }
+function trfDevolver(id){ trfUpd(id,{conductor_id:null,conductor_nombre:'',comision:null,estado:'pendiente',asignado_por:null,asignado_por_nombre:null,asignado_at:null}); }
 function trfDone(id){ trfUpd(id,{estado:'realizado',realizado_at:new Date().toISOString()}); }
 function trfReabrir(id){ trfUpd(id,{estado:'asignado',realizado_at:null}); }
 async function trfCancelar(id){ if(!confirm('¿Cancelar este transfer?'))return;
@@ -4952,21 +4954,50 @@ function trfLiquidaciones(){
   const inRange=t=>{ if(t.estado!=='realizado') return false; const d=(t.realizado_at||t.created_at||'').slice(0,10); if(trfFrom&&d<trfFrom) return false; if(trfTo&&d>trfTo) return false; return true; };
   const done=TRF.filter(inRange);
   const map={};
-  done.forEach(t=>{ const k=t.conductor_id||'(sin)'; if(!map[k]) map[k]={nombre:t.conductor_nombre||trfCondName(t.conductor_id)||'(sin asignar)',n:0,total:0}; map[k].n++; map[k].total+=(parseFloat(t.comision)||0); });
-  const rows=Object.values(map).sort((a,b)=>b.total-a.total);
-  const tot=rows.reduce((s,r)=>s+r.total,0), totN=rows.reduce((s,r)=>s+r.n,0);
+  done.forEach(t=>{ const k=t.conductor_id||'(sin)'; if(!map[k]) map[k]={id:t.conductor_id||'',nombre:t.conductor_nombre||trfCondName(t.conductor_id)||'(sin asignar)',n:0,total:0,pagado:0,viajes:[]}; const c=parseFloat(t.comision)||0; map[k].n++; map[k].total+=c; if(t.comision_pagada) map[k].pagado+=c; map[k].viajes.push(t); });
+  const rows=Object.values(map).sort((a,b)=>(b.total-b.pagado)-(a.total-a.pagado));
+  const tot=rows.reduce((s,r)=>s+r.total,0), totPag=rows.reduce((s,r)=>s+r.pagado,0), totPend=tot-totPag, totN=rows.reduce((s,r)=>s+r.n,0);
+  const _inp='padding:9px 11px;border:1px solid var(--gris2);border-radius:8px;font-family:inherit';
   const filtros=`<div class="panel" style="display:flex;gap:14px;flex-wrap:wrap;align-items:flex-end;margin-bottom:14px">
-    <div><label style="display:block;font-size:12px;color:var(--suave);font-weight:600;margin-bottom:4px">Desde</label><input type="date" value="${esc(trfFrom)}" onchange="trfFrom=this.value;show('transfer')" style="padding:9px 11px;border:1px solid var(--gris2);border-radius:8px;font-family:inherit"></div>
-    <div><label style="display:block;font-size:12px;color:var(--suave);font-weight:600;margin-bottom:4px">Hasta</label><input type="date" value="${esc(trfTo)}" onchange="trfTo=this.value;show('transfer')" style="padding:9px 11px;border:1px solid var(--gris2);border-radius:8px;font-family:inherit"></div>
+    <div><label style="display:block;font-size:12px;color:var(--suave);font-weight:600;margin-bottom:4px">Desde</label><input type="date" value="${esc(trfFrom)}" onchange="trfFrom=this.value;show('transfer')" style="${_inp}"></div>
+    <div><label style="display:block;font-size:12px;color:var(--suave);font-weight:600;margin-bottom:4px">Hasta</label><input type="date" value="${esc(trfTo)}" onchange="trfTo=this.value;show('transfer')" style="${_inp}"></div>
     ${(trfFrom||trfTo)?`<button class="btn ghost" onclick="trfFrom='';trfTo='';show('transfer')">Limpiar</button>`:''}
-    <div style="margin-left:auto;text-align:right"><div style="font-size:12px;color:var(--suave)">Total a cobrar a conductores</div><div style="font-size:24px;font-weight:800;color:var(--azul)">${trfMoney(tot)}</div><div style="font-size:11.5px;color:var(--suave)">${totN} viaje(s)</div></div>
+    <div style="margin-left:auto;display:flex;gap:18px;text-align:right;flex-wrap:wrap">
+      <div><div style="font-size:12px;color:var(--suave)">Pendiente de cobro</div><div style="font-size:22px;font-weight:800;color:#c0392b">${trfMoney(totPend)}</div></div>
+      <div><div style="font-size:12px;color:var(--suave)">Cobrado</div><div style="font-size:22px;font-weight:800;color:#1e8a5a">${trfMoney(totPag)}</div></div>
+      <div><div style="font-size:12px;color:var(--suave)">Total · ${totN} viaje(s)</div><div style="font-size:22px;font-weight:800;color:var(--azul)">${trfMoney(tot)}</div></div>
+    </div>
   </div>`;
-  const tbody=rows.length?rows.map(r=>`<tr><td><b>${esc(r.nombre)}</b></td><td style="text-align:center">${r.n}</td><td style="text-align:right">${trfMoney(r.n?r.total/r.n:0)}</td><td style="text-align:right"><b>${trfMoney(r.total)}</b></td></tr>`).join(''):`<tr><td colspan="4" style="color:var(--suave)">No hay viajes realizados en este periodo.</td></tr>`;
-  return filtros+`<div class="panel"><h2 style="margin-top:0">Comisión por conductor</h2>
-    <p style="font-size:12.5px;color:var(--suave);margin:-4px 0 10px">Viajes realizados en el periodo y comisión que cada conductor debe pagar a Amazinn.</p>
-    <div class="asg-scroll"><table class="asg-table"><thead><tr><th>Conductor</th><th style="text-align:center">Viajes</th><th style="text-align:right">Comisión/viaje</th><th style="text-align:right">Total comisión</th></tr></thead>
-    <tbody>${tbody}</tbody></table></div></div>`;
+  if(!rows.length) return filtros+`<div class="panel" style="color:var(--suave)">No hay viajes realizados en este periodo.</div>`;
+  const body=rows.map(r=>{ const pend=r.total-r.pagado; const open=String(trfLiqOpen)===String(r.id);
+    const head=`<div onclick="trfLiqToggle('${r.id}')" style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:11px 14px;cursor:pointer;flex-wrap:wrap">
+      <div><b>${esc(r.nombre)}</b> <span style="font-size:12px;color:var(--suave)">· ${r.n} viaje(s)</span></div>
+      <div style="display:flex;gap:16px;align-items:center;font-size:13px">
+        <span style="color:#1e8a5a">✓ ${trfMoney(r.pagado)}</span>
+        <span style="color:${pend>0?'#c0392b':'#1e8a5a'};font-weight:700">${trfMoney(pend)} ${pend>0?'pendiente':'cobrado'}</span>
+        <span style="color:var(--suave)">${open?'▲':'▼'}</span>
+      </div></div>`;
+    let detail='';
+    if(open){
+      const allPaid=r.viajes.every(v=>v.comision_pagada);
+      const trips=r.viajes.slice().sort((a,b)=>(a.realizado_at||a.created_at||'').localeCompare(b.realizado_at||b.created_at||'')).map(v=>{
+        const fch=(v.realizado_at||v.fecha||v.created_at||'').slice(0,10).split('-').reverse().join('/');
+        const paid=!!v.comision_pagada;
+        return `<tr><td>#${v.id}</td><td>${esc(fch)}</td><td>${esc(v.cliente||'')}</td><td style="text-align:right">${trfMoney(v.comision)}</td><td style="text-align:center">${paid?`<span style="color:#1e8a5a;font-weight:700">✓ Cobrado${v.comision_pagada_por?' · '+esc(v.comision_pagada_por):''}</span>`:`<span style="color:#c0392b">Pendiente</span>`}</td><td style="text-align:center"><button class="btn ghost" style="padding:4px 9px;font-size:12px" onclick="trfPagarToggle(${v.id})">${paid?'↩ Pendiente':'✓ Cobrado'}</button></td></tr>`;
+      }).join('');
+      detail=`<div style="padding:10px 14px;border-top:1px solid var(--gris2);background:#fafbfc">
+        <div style="display:flex;justify-content:flex-end;margin-bottom:8px">${allPaid?`<button class="btn ghost" onclick="trfPagarTodos('${r.id}',false)">↩ Marcar todo pendiente</button>`:`<button class="btn" onclick="trfPagarTodos('${r.id}',true)">✓ Marcar todo como cobrado</button>`}</div>
+        <div class="asg-scroll"><table class="asg-table"><thead><tr><th>Viaje</th><th>Fecha</th><th>Cliente</th><th style="text-align:right">Comisión</th><th style="text-align:center">Estado</th><th></th></tr></thead><tbody>${trips}</tbody></table></div></div>`;
+    }
+    return `<div style="border:1px solid var(--gris2);border-radius:10px;margin-bottom:10px;overflow:hidden">${head}${detail}</div>`;
+  }).join('');
+  return filtros+`<div class="panel"><h2 style="margin-top:0">Cuentas por cobrar a conductores</h2>
+    <p style="font-size:12.5px;color:var(--suave);margin:-4px 0 10px">Comisión que cada conductor debe pagar a Amazinn por los viajes realizados. Pulsa un conductor para ver el detalle y marcar lo cobrado.</p>
+    ${body}</div>`;
 }
+function trfLiqToggle(cid){ trfLiqOpen=(String(trfLiqOpen)===String(cid))?null:cid; show('transfer'); }
+async function trfPagarToggle(id){ const t=TRF.find(x=>String(x.id)===String(id)); if(!t)return; const nuevo=!t.comision_pagada; const upd=nuevo?{comision_pagada:true,comision_pagada_at:new Date().toISOString(),comision_pagada_por:PROFILE.nombre}:{comision_pagada:false,comision_pagada_at:null,comision_pagada_por:null}; const{error}=await sb.from('transfers').update(upd).eq('id',id); if(error){alert(error.message);return;} Object.assign(t,upd); show('transfer'); }
+async function trfPagarTodos(cid,val){ const within=t=>{ const d=(t.realizado_at||t.created_at||'').slice(0,10); if(trfFrom&&d<trfFrom)return false; if(trfTo&&d>trfTo)return false; return true; }; const ids=TRF.filter(t=>t.estado==='realizado'&&String(t.conductor_id||'')===String(cid)&&within(t)).map(t=>t.id); if(!ids.length)return; if(val&&!confirm('¿Marcar como COBRADOS todos los viajes mostrados de este conductor?'))return; const upd=val?{comision_pagada:true,comision_pagada_at:new Date().toISOString(),comision_pagada_por:PROFILE.nombre}:{comision_pagada:false,comision_pagada_at:null,comision_pagada_por:null}; const{error}=await sb.from('transfers').update(upd).in('id',ids); if(error){alert(error.message);return;} show('transfer'); }
 function trfConductores(){
   const rows=TRF_COND.map(c=>`<tr><td><b>${esc(c.nombre)}</b></td><td>${esc(c.telefono||'')}</td><td style="text-align:right">${trfMoney(c.comision)}</td>
     <td class="asg-act"><button onclick="trfCondEdit('${c.id}')" title="Editar comisión">✏️</button></td></tr>`).join('')||`<tr><td colspan="4" style="color:var(--suave)">Aún no hay conductores. Crea un usuario y márcalo como «Conductor» en Usuarios.</td></tr>`;
@@ -6796,7 +6827,6 @@ function renderAsgPanel(){
         <select onchange="asgPSet('tipo',this.value)" style="${_inp}">${tipoOpts}</select>
         <select onchange="asgPSet('uni',this.value)" style="${_inp}">${uniOpts}</select>
         <button class="cc-filt-btn" onclick="asgPQuick('mes')">Este mes</button>
-        <button class="cc-filt-btn" onclick="asgPQuick('15')">Últimos 15 días</button>
         ${(asgPFrom||asgPTo||asgPTipo||asgPUni)?`<button class="cc-filt-btn" onclick="asgPClear()">✕ Limpiar</button>`:''}
       </div>
       <div style="display:flex;gap:14px;flex-wrap:wrap;font-size:13px;margin-bottom:10px;color:#33414f">
