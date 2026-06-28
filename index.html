@@ -3994,7 +3994,7 @@ function reclShowPreview(url,nombre,path){
 function reclEscClose(e){ if(e.key==='Escape') reclClosePreview(); }
 function reclClosePreview(){ const o=document.getElementById('reclPrevOv'); if(o)o.remove(); document.removeEventListener('keydown',reclEscClose); }
 /* ===================== CIERRES DE CAJA (hotel · Panamá) ===================== */
-let ccTab='historial', ccView=null, CCAJA=[], ccFrom='', ccTo='', ccFiltOpen=false;
+let ccTab='historial', ccView=null, CCAJA=[], ccFrom='', ccTo='', ccFiltOpen=false, ccSoloPend=false;
 const CC_BILLETES=[100,50,20,10,5,1];
 const CC_MONEDAS=[1,0.50,0.25,0.10,0.05,0.01];
 const CC_METODOS=[['efectivo','💵 Efectivo'],['tarjeta','💳 Tarjeta'],['yappy','📲 Yappy'],['ach','🏦 Transferencia / ACH'],['otros','➕ Otros']];
@@ -4008,18 +4008,21 @@ function ccBack(){ ccView=null; show('cierres'); }
 function ccToggleFilt(){ ccFiltOpen=!ccFiltOpen; show('cierres'); }
 function ccSetFilt(k,v){ if(k==='from')ccFrom=v; else ccTo=v; show('cierres'); }
 function ccClearFilt(){ ccFrom=''; ccTo=''; show('cierres'); }
-function ccFiltered(){ return CCAJA.filter(c=>{ const f=c.fecha||''; if(ccFrom && f<ccFrom)return false; if(ccTo && f>ccTo)return false; return true; }); }
+function ccTogglePend(){ ccSoloPend=!ccSoloPend; show('cierres'); }
+async function ccToggleRevisado(id,ev){ if(ev){ev.stopPropagation();} if(!isDireccion()){ alert('Solo Dirección puede marcar revisiones.'); return; } const c=CCAJA.find(x=>String(x.id)===String(id)); if(!c)return; const nuevo=!c.revisado; const upd=nuevo?{revisado:true,revisado_por:PROFILE.nombre,revisado_at:new Date().toISOString()}:{revisado:false,revisado_por:null,revisado_at:null}; const{error}=await sb.from('cierres_caja').update(upd).eq('id',id); if(error){ alert('No se pudo guardar: '+error.message); return; } Object.assign(c,upd); toast(nuevo?'✓ Marcado como revisado':'Revisión retirada'); show('cierres'); }
+async function ccSaveNota(id){ if(!isDireccion()){ alert('Solo Dirección puede dejar notas de revisión.'); return; } const el=document.getElementById('ccNota_'+id); const nota=el?el.value:''; const{error}=await sb.from('cierres_caja').update({revision_nota:nota||null}).eq('id',id); if(error){ alert('No se pudo guardar: '+error.message); return; } const c=CCAJA.find(x=>String(x.id)===String(id)); if(c)c.revision_nota=nota||null; toast('✓ Nota guardada'); }
+function ccFiltered(){ return CCAJA.filter(c=>{ const f=c.fecha||''; if(ccFrom && f<ccFrom)return false; if(ccTo && f>ccTo)return false; if(ccSoloPend && c.revisado)return false; return true; }); }
 function ccFiltBar(){ const anyF=ccFrom||ccTo; const inp='padding:7px 10px;border:1px solid var(--gris2);border-radius:8px;font-size:13px;font-family:inherit';
-  return `<div style="margin-bottom:12px;display:flex;gap:8px;align-items:center;flex-wrap:wrap"><button class="inc-chip ${(ccFiltOpen||anyF)?'on':''}" onclick="ccToggleFilt()">🔎 Filtros${anyF?' •':''}</button></div>
+  return `<div style="margin-bottom:12px;display:flex;gap:8px;align-items:center;flex-wrap:wrap"><button class="cc-filt-btn ${(ccFiltOpen||anyF)?'on':''}" onclick="ccToggleFilt()">🔎 Filtros${anyF?' •':''}</button>${isDireccion()?`<button class="cc-filt-btn ${ccSoloPend?'on':''}" onclick="ccTogglePend()">⏳ Solo pendientes</button>`:''}</div>
   ${ccFiltOpen?`<div class="inc-filters" style="align-items:center"><label style="font-size:12.5px;color:var(--suave);display:flex;gap:6px;align-items:center">Desde <input type="date" value="${esc(ccFrom)}" onchange="ccSetFilt('from',this.value)" style="${inp}"></label><label style="font-size:12.5px;color:var(--suave);display:flex;gap:6px;align-items:center">Hasta <input type="date" value="${esc(ccTo)}" onchange="ccSetFilt('to',this.value)" style="${inp}"></label>${anyF?`<button class="inc-clear" onclick="ccClearFilt()">✕ Limpiar</button>`:''}</div>`:''}`;
 }
 async function pageCierres(){
   if(!ccAllowedNow()){ document.getElementById('main').innerHTML='<div class="page-title">🧾 Cierres de caja</div><div class="panel" style="color:var(--suave)">🧾 Sección disponible <b>muy pronto</b>.</div>'; return; }
   const r=await sb.from('cierres_caja').select('*').order('fecha',{ascending:false}).order('id',{ascending:false});
   CCAJA=r.data||[];
-  const tab=(k,l)=>`<button class="asg-tab ${ccTab===k&&ccView==null?'on':''}" onclick="ccSetTab('${k}')">${l}</button>`;
+  const tab=(k,l)=>`<button class="cc-seg-btn ${ccTab===k&&ccView==null?'on':''}" onclick="ccSetTab('${k}')">${l}</button>`;
   const tabs=`<div class="page-title">🧾 Cierres de caja</div><div class="page-sub">Arqueo y cuadre de caja por turno · Recepción del hotel</div>
-    <div class="asg-tabs">${tab('historial','🗂️ Historial')}${tab('panel','📊 Panel')}${ccCan()?tab('nuevo','➕ Nuevo cierre'):''}</div>`;
+    <div class="cc-seg">${tab('historial','🗂️ Historial')}${tab('panel','📊 Panel')}${ccCan()?tab('nuevo','➕ Nuevo cierre'):''}</div>`;
   let body;
   if(ccView!=null) body=ccDetail(ccView);
   else if(ccTab==='nuevo'&&ccCan()) body=ccForm();
@@ -4031,12 +4034,13 @@ async function pageCierres(){
 function ccHistorial(){
   const L=ccFiltered();
   if(!L.length) return `<div class="panel" style="color:var(--suave)">No hay cierres${(ccFrom||ccTo)?' en ese rango de fechas':' registrados'}.${ccCan()&&!CCAJA.length?' Crea el primero en “Nuevo cierre”.':''}</div>`;
-  return `<div class="cc-grid">${L.map(c=>{ const dif=parseFloat(c.diferencia)||0; const col=dif===0?'#1e8a5a':(dif>0?'#b9770e':'#c0392b'); const lbl=dif===0?'Cuadrada':(dif>0?'Sobrante':'Faltante');
-    return `<div class="panel" style="margin:0;cursor:pointer" onclick="ccOpen(${c.id})">
+  return `<div class="cc-grid">${L.map(c=>{ const dif=parseFloat(c.diferencia)||0; const col=dif===0?'#1e8a5a':(dif>0?'#b9770e':'#c0392b'); const lbl=dif===0?'Cuadrada':(dif>0?'Sobrante':'Faltante'); const rev=!!c.revisado;
+    return `<div class="cc-card ${rev?'rev':'pend'}" onclick="ccOpen(${c.id})">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><b>${esc(fechaLarga(c.fecha))}</b><span class="badge" style="background:#eef2f7;color:#34557a">${esc(c.turno||'')}</span></div>
       <div style="font-size:13px;color:var(--suave);margin:4px 0 8px">👤 ${esc(c.responsable||'—')}</div>
       <div style="display:flex;justify-content:space-between;font-size:13.5px"><span>Ventas del turno</span><b>${ccM(c.ventas_total)}</b></div>
       <div style="display:flex;justify-content:space-between;font-size:13.5px;margin-top:3px"><span>Diferencia</span><b style="color:${col}">${dif>0?'+':''}${ccM(dif)} · ${lbl}</b></div>
+      <div class="cc-revrow">${rev?`<span class="cc-pill ok">✓ Revisado${c.revisado_por?' · '+esc(c.revisado_por):''}</span>`:`<span class="cc-pill wait">⏳ Pendiente de revisión</span>`}${isDireccion()?`<button class="cc-revbtn ${rev?'':'go'}" onclick="ccToggleRevisado(${c.id},event)">${rev?'Quitar':'Marcar revisado'}</button>`:''}</div>
     </div>`;}).join('')}</div>`;
 }
 function ccPanel(){
@@ -4138,6 +4142,10 @@ function ccDetail(id){
   const metRows=CC_METODOS.filter(([k])=>met[k]).map(([k,l])=>`<div style="display:flex;justify-content:space-between;padding:3px 0;font-size:13.5px"><span>${l}</span><b>${ccM(met[k])}</b></div>`).join('')||'<div style="color:var(--suave);font-size:13px">—</div>';
   const arqRows=[...CC_BILLETES,...CC_MONEDAS].filter(v=>arq[v]).map(v=>`<div style="display:flex;justify-content:space-between;padding:2px 0;font-size:13px"><span>${ccM(v)} × ${arq[v]}</span><b>${ccM(parseFloat(v)*arq[v])}</b></div>`).join('')||'<div style="color:var(--suave);font-size:13px">—</div>';
   return `<div style="margin-bottom:14px;display:flex;gap:10px;flex-wrap:wrap;align-items:center"><button onclick="ccBack()" style="background:none;border:none;color:var(--azul);font-weight:600;font-size:14px;cursor:pointer;font-family:inherit;padding:6px 4px">← Volver al listado</button><button class="btn" onclick="ccPDF()" style="margin-left:auto">🖨️ Imprimir / PDF</button></div>
+  ${(()=>{ const rev=!!c.revisado; const dir=isDireccion(); return `<div class="cc-revpanel ${rev?'rev':'pend'}">
+    <div class="cc-revhead"><div>${rev?`<b style="color:#1e8a5a">✓ Revisado por Dirección</b>${c.revisado_por?` · ${esc(c.revisado_por)}`:''}${c.revisado_at?` · ${esc(fechaLarga((c.revisado_at||'').slice(0,10)))}`:''}`:`<b style="color:#b9770e">⏳ Pendiente de revisión</b>`}</div>${dir?`<button class="cc-revbtn ${rev?'':'go'}" onclick="ccToggleRevisado(${c.id})">${rev?'Quitar revisión':'✓ Marcar como revisado'}</button>`:''}</div>
+    ${dir?`<label style="font-size:12.5px;color:var(--suave);display:block;margin:10px 0 4px">Nota / comentario de revisión</label><textarea id="ccNota_${c.id}" rows="2" placeholder="Dudas u observaciones para el responsable…" style="width:100%;padding:9px 11px;border:1px solid var(--gris2);border-radius:8px;font-family:inherit;font-size:13.5px">${esc(c.revision_nota||'')}</textarea><div style="margin-top:6px"><button class="btn ghost" onclick="ccSaveNota(${c.id})">💬 Guardar nota</button></div>`:(c.revision_nota?`<div style="margin-top:8px"><div style="font-size:12.5px;color:var(--suave)">Nota de Dirección</div><div style="font-size:13.5px;white-space:pre-wrap">${esc(c.revision_nota)}</div></div>`:'')}
+  </div>`;})()}
   <div id="ccDoc" class="cc-cols">
     <div class="panel"><h2 style="margin-top:0">${esc(fechaLarga(c.fecha))} · ${esc(c.turno||'')}</h2>
       <div style="font-size:13.5px;color:var(--suave);margin-bottom:10px">👤 Responsable: <b style="color:var(--texto)">${esc(c.responsable||'—')}</b></div>
@@ -6591,6 +6599,27 @@ function asgBuildPDF(d){
 
 function asgEnsureStyle(){ if(document.getElementById('asgStyle')) return; const s=document.createElement('style'); s.id='asgStyle'; s.textContent=`
 .cc-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:14px}
+  .cc-seg{display:inline-flex;gap:4px;background:#eef2f7;border:1px solid var(--gris2);border-radius:12px;padding:4px;margin:4px 0 16px;flex-wrap:wrap}
+  .cc-seg-btn{background:none;border:none;border-radius:9px;padding:8px 16px;font-size:13.5px;font-weight:600;color:var(--suave);cursor:pointer;font-family:inherit;transition:all .15s}
+  .cc-seg-btn:hover{color:var(--azul)}
+  .cc-seg-btn.on{background:#fff;color:var(--azul);box-shadow:0 1px 3px rgba(20,40,80,.12)}
+  .cc-filt-btn{background:#fff;border:1px solid var(--gris2);border-radius:10px;padding:8px 14px;font-size:13px;font-weight:600;color:var(--suave);cursor:pointer;font-family:inherit;transition:all .15s}
+  .cc-filt-btn:hover{border-color:var(--azul);color:var(--azul)}
+  .cc-filt-btn.on{background:var(--azul);color:#fff;border-color:var(--azul)}
+  .cc-card{background:#fff;border:1px solid var(--gris2);border-left:5px solid #e0a020;border-radius:12px;padding:14px;cursor:pointer;transition:box-shadow .15s,transform .1s}
+  .cc-card:hover{box-shadow:0 4px 14px rgba(20,40,80,.10);transform:translateY(-1px)}
+  .cc-card.rev{border-left-color:#1e8a5a;background:#f6fbf8}
+  .cc-revrow{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:10px;padding-top:9px;border-top:1px solid var(--gris2);flex-wrap:wrap}
+  .cc-pill{font-size:11.5px;font-weight:700;padding:3px 9px;border-radius:20px}
+  .cc-pill.ok{background:#e4f5ec;color:#1e8a5a}
+  .cc-pill.wait{background:#fdf2dc;color:#b9770e}
+  .cc-revbtn{background:#fff;border:1px solid var(--gris2);border-radius:8px;padding:5px 11px;font-size:12px;font-weight:600;color:var(--suave);cursor:pointer;font-family:inherit}
+  .cc-revbtn:hover{border-color:var(--azul);color:var(--azul)}
+  .cc-revbtn.go{background:#1e8a5a;border-color:#1e8a5a;color:#fff}
+  .cc-revbtn.go:hover{background:#19744c;color:#fff}
+  .cc-revpanel{border:1px solid var(--gris2);border-left:5px solid #e0a020;border-radius:12px;padding:14px;margin-bottom:14px;background:#fffdf7}
+  .cc-revpanel.rev{border-left-color:#1e8a5a;background:#f6fbf8}
+  .cc-revhead{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;font-size:13.5px}
   .cc-cols{display:grid;grid-template-columns:1fr 1fr;gap:14px;align-items:start}
   @media(max-width:760px){.cc-cols{grid-template-columns:1fr}}
   .cc-denoms{display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:8px}
