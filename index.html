@@ -4023,14 +4023,32 @@ async function pageCierres(){
   CCAJA=r.data||[];
   const tab=(k,l)=>`<button class="cc-seg-btn ${ccTab===k&&ccView==null?'on':''}" onclick="ccSetTab('${k}')">${l}</button>`;
   const tabs=`<div class="page-title">🧾 Cierres de caja</div><div class="page-sub">Arqueo y cuadre de caja por turno · Recepción del hotel</div>
-    <div class="cc-seg">${tab('historial','🗂️ Historial')}${tab('panel','📊 Panel')}${ccCan()?tab('nuevo','➕ Nuevo cierre'):''}</div>`;
+    <div class="cc-seg">${tab('historial','🗂️ Historial')}${tab('control','📋 Control de turnos')}${tab('panel','📊 Panel')}${ccCan()?tab('nuevo','➕ Nuevo cierre'):''}</div>`;
   let body;
   if(ccView!=null) body=ccDetail(ccView);
   else if(ccTab==='nuevo'&&ccCan()) body=ccForm();
+  else if(ccTab==='control') body=ccControl();
   else if(ccTab==='panel') body=ccFiltBar()+ccPanel();
   else body=ccFiltBar()+ccHistorial();
   document.getElementById('main').innerHTML=tabs+body;
   if(ccTab==='nuevo'&&ccView==null&&ccCan()){ try{ccCalc();}catch(e){} }
+}
+function ccControl(){
+  const ORD=['Mañana','Tarde','Noche'];
+  const fechas=[...new Set(CCAJA.map(c=>c.fecha).filter(Boolean))].sort().reverse().slice(0,30);
+  if(!fechas.length) return `<div class="panel" style="color:var(--suave)">Aún no hay cierres registrados para controlar.</div>`;
+  const rows=fechas.map(f=>{ const byT={}; CCAJA.filter(c=>c.fecha===f).forEach(c=>{ byT[c.turno||'']=c; });
+    let lastIdx=-1; ORD.forEach((t,i)=>{ if(byT[t]) lastIdx=i; });
+    let huecos=0; const cells=ORD.map((t,i)=>{ const c=byT[t];
+      if(c){ const dif=parseFloat(c.diferencia)||0; const dc=dif===0?'#1e8a5a':'#c0392b'; return `<td class="ccc-ok" onclick="ccOpen(${c.id})" title="Ver cierre"><b style="color:#1e8a5a">✓</b> <span class="ccc-resp">${esc((c.responsable||'').split(' ')[0]||'')}</span>${dif!==0?`<div style="font-size:11px;color:${dc}">${dif>0?'+':''}${ccM(dif)}</div>`:''}</td>`; }
+      if(i<lastIdx){ huecos++; return `<td class="ccc-no">Sin cierre</td>`; }
+      return `<td class="ccc-na">—</td>`;
+    }).join('');
+    return `<tr class="${huecos?'ccc-rowwarn':''}"><th class="ccc-day">${esc(fechaLarga(f))}${huecos?` <span class="cc-pill wait">${huecos} sin cierre</span>`:''}</th>${cells}</tr>`;
+  }).join('');
+  return `<div class="panel"><h2 style="margin-top:0">📋 Control de turnos</h2>
+    <p style="font-size:12.5px;color:var(--suave);margin:-4px 0 10px">Turnos estándar: Mañana · Tarde · Noche. En <b style="color:#c0392b">rojo</b> aparece un turno sin cierre solo cuando un turno posterior del mismo día sí se cerró (es decir, se saltó). Toca un ✓ para abrir el cierre.</p>
+    <div style="overflow-x:auto"><table class="ccc-tbl"><thead><tr><th>Día</th><th>Mañana</th><th>Tarde</th><th>Noche</th></tr></thead><tbody>${rows}</tbody></table></div></div>`;
 }
 function ccHistorial(){
   const L=ccFiltered();
@@ -4082,19 +4100,22 @@ function ccForm(){
   const metRows=CC_METODOS.map(([k,l])=>`<div><label style="font-size:12.5px;color:var(--suave)">${l}</label><input id="cc_m_${k}" type="number" min="0" step="0.01" value="" placeholder="0.00" oninput="ccCalc()" style="${ss}"></div>`).join('');
   const denomRow=(arr,titulo)=>`<div style="font-weight:600;font-size:12.5px;margin:8px 0 4px">${titulo}</div><div class="cc-denoms">${arr.map(v=>`<div class="cc-den"><span>${ccM(v)}</span><input id="${ccDid(v)}" type="number" min="0" step="1" placeholder="0" oninput="ccCalc()"></div>`).join('')}</div>`;
   const ccPrev=(typeof CCAJA!=='undefined'&&CCAJA&&CCAJA.length)?CCAJA[0]:null;
-  const ccSaldoAnt=ccPrev?Math.round(((parseFloat(ccPrev.fondo_inicial)||0)-(parseFloat(ccPrev.gastos)||0))*100)/100:null;
+  const ccSaldoAnt=ccPrev?Math.round(((parseFloat(ccPrev.fondo_inicial)||0)+(parseFloat(ccPrev.reposicion)||0)-(parseFloat(ccPrev.gastos)||0))*100)/100:null;
   return `<div style="margin-bottom:12px"><button onclick="ccSetTab('historial')" style="background:none;border:none;color:var(--azul);font-weight:600;font-size:14px;cursor:pointer;font-family:inherit;padding:6px 4px">← Volver al listado</button></div>
   <div class="cc-cols">
     <div class="panel"><h2 style="margin-top:0">Datos del turno</h2>
       <div class="row"><div><label>Fecha</label><input id="cc_fecha" type="date" value="${esc(hoy)}" style="${ss}"></div>
         <div><label>Turno</label><select id="cc_turno" style="${ss}"><option>Mañana</option><option selected>Tarde</option><option>Noche</option></select></div></div>
       <label>Responsable de caja</label><input id="cc_resp" value="${esc(PROFILE.nombre||'')}" style="${ss}">
-      <label>Fondo de caja inicial (USD)</label>${ccSaldoAnt!=null?`<input id="cc_fondo" type="number" value="${ccSaldoAnt}" readonly style="${ss};background:#eef2f7;color:#243b53;font-weight:700;cursor:not-allowed"><div style="font-size:12px;color:var(--suave);margin-top:4px">🔒 Saldo del cierre anterior (${esc(fechaLarga(ccPrev.fecha))} · ${esc(ccPrev.turno||'')}): fondo inicial − gastos. No editable, para obligar a cuadrar la caja.</div>`:`<input id="cc_fondo" type="number" min="0" step="0.01" value="200" placeholder="0.00" oninput="ccCalc()" style="${ss}"><div style="font-size:12px;color:var(--suave);margin-top:4px">Primer cierre registrado: introduce el fondo inicial de caja.</div>`}
+      <label>Fondo de caja inicial (USD)</label>${ccSaldoAnt!=null?`<input id="cc_fondo" type="number" value="${ccSaldoAnt}" readonly style="${ss};background:#eef2f7;color:#243b53;font-weight:700;cursor:not-allowed"><div style="font-size:12px;color:var(--suave);margin-top:4px">🔒 Saldo del cierre anterior (${esc(fechaLarga(ccPrev.fecha))} · ${esc(ccPrev.turno||'')}): fondo inicial + reposición − gastos. No editable, para obligar a cuadrar la caja.</div>`:`<input id="cc_fondo" type="number" min="0" step="0.01" value="200" placeholder="0.00" oninput="ccCalc()" style="${ss}"><div style="font-size:12px;color:var(--suave);margin-top:4px">Primer cierre registrado: introduce el fondo inicial de caja.</div>`}
       <h2 style="margin:16px 0 6px">Ingresos por método de pago</h2>
       <div class="row" style="flex-wrap:wrap;gap:10px">${metRows}</div>
       <h2 style="margin:16px 0 6px">Gastos / salidas de efectivo</h2>
       <div class="row"><div><label>Importe (USD)</label><input id="cc_gastos" type="number" min="0" step="0.01" value="" placeholder="0.00" oninput="ccCalc()" style="${ss}"></div>
         <div><label>Motivo</label><input id="cc_gastos_motivo" placeholder="Ej: compra de hielo, propinas…" style="${ss}"></div></div>
+      <h2 style="margin:16px 0 6px">Reposición / reembolso de caja</h2>
+      <div class="row"><div><label>Importe (USD)</label><input id="cc_repo" type="number" min="0" step="0.01" value="" placeholder="0.00" oninput="ccCalc()" style="${ss}"></div>
+        <div><label>Motivo</label><input id="cc_repo_motivo" placeholder="Ej: reembolso de gasto, recarga de fondo…" style="${ss}"></div></div>
       <label style="margin-top:10px;display:block">Observaciones</label><textarea id="cc_obs" rows="2" style="${ss}" placeholder="Incidencias del turno, notas…"></textarea>
     </div>
     <div class="panel"><h2 style="margin-top:0">Arqueo de efectivo (USD)</h2>
@@ -4108,15 +4129,16 @@ function ccForm(){
 }
 function ccCalc(){
   const g=id=>parseFloat((document.getElementById(id)||{}).value)||0;
-  const fondo=g('cc_fondo'), efec=g('cc_m_efectivo'), gastos=g('cc_gastos');
+  const fondo=g('cc_fondo'), efec=g('cc_m_efectivo'), gastos=g('cc_gastos'), repo=g('cc_repo');
   let contado=0; [...CC_BILLETES,...CC_MONEDAS].forEach(v=>{ contado+=v*(parseInt((document.getElementById(ccDid(v))||{}).value)||0); });
   let ventas=0; CC_METODOS.forEach(([k])=>ventas+=g('cc_m_'+k));
-  const esperado=fondo+efec-gastos; const dif=Math.round((contado-esperado)*100)/100;
+  const esperado=fondo+efec+repo-gastos; const dif=Math.round((contado-esperado)*100)/100;
   const col=dif===0?'#1e8a5a':(dif>0?'#b9770e':'#c0392b'); const lbl=dif===0?'✅ Caja cuadrada':(dif>0?'⚠ Sobrante':'⚠ Faltante');
   const box=document.getElementById('ccResumen'); if(!box)return;
   const line=(a,b,bold)=>`<div style="display:flex;justify-content:space-between;padding:4px 0;font-size:13.5px${bold?';font-weight:700':''}"><span>${a}</span><span>${b}</span></div>`;
   box.innerHTML=`<div style="border-top:1px solid var(--gris2);padding-top:8px">
     ${line('Ventas totales del turno',ccM(ventas))}
+    ${repo?line('Reposición de caja',ccM(repo)):''}
     ${line('Esperado en efectivo',ccM(esperado))}
     ${line('Contado (arqueo)',ccM(contado))}
     <div style="display:flex;justify-content:space-between;padding:8px 0 0;font-size:15px;font-weight:800;color:${col};border-top:1px dashed var(--gris2);margin-top:4px"><span>${lbl}</span><span>${dif>0?'+':''}${ccM(dif)}</span></div>
@@ -4129,9 +4151,9 @@ async function ccSave(){
   const arqueo={}; [...CC_BILLETES,...CC_MONEDAS].forEach(v=>{ const q=parseInt((document.getElementById(ccDid(v))||{}).value)||0; if(q) arqueo[v]=q; });
   let contado=0; for(const v in arqueo) contado+=parseFloat(v)*arqueo[v];
   let ventas=0; for(const k in metodos) ventas+=metodos[k];
-  const fondo=gn('cc_fondo'), gastos=gn('cc_gastos'); const esperado=fondo+metodos.efectivo-gastos; const dif=Math.round((contado-esperado)*100)/100;
+  const fondo=gn('cc_fondo'), gastos=gn('cc_gastos'), repo=gn('cc_repo'); const esperado=fondo+metodos.efectivo+repo-gastos; const dif=Math.round((contado-esperado)*100)/100;
   const row={ fecha:g('cc_fecha')||hoyISO(), turno:g('cc_turno'), responsable:g('cc_resp')||PROFILE.nombre, fondo_inicial:fondo,
-    metodos, gastos, gastos_motivo:g('cc_gastos_motivo')||null, arqueo, contado, esperado, diferencia:dif, ventas_total:ventas,
+    metodos, gastos, gastos_motivo:g('cc_gastos_motivo')||null, reposicion:repo, reposicion_motivo:g('cc_repo_motivo')||null, arqueo, contado, esperado, diferencia:dif, ventas_total:ventas,
     observaciones:g('cc_obs')||null, creado_por:ME.id, creado_por_nombre:PROFILE.nombre, created_at:new Date().toISOString() };
   const {error}=await sb.from('cierres_caja').insert(row); if(error){ alert('No se pudo guardar: '+error.message); return; }
   toast('✓ Cierre de caja guardado'); ccTab='historial'; ccView=null; show('cierres');
@@ -4154,6 +4176,7 @@ function ccDetail(id){
       <h3 class="inc-h3">Ingresos por método</h3>${metRows}
       <div style="display:flex;justify-content:space-between;padding:6px 0 0;border-top:1px solid var(--gris2);margin-top:6px;font-weight:700"><span>Ventas totales</span><span>${ccM(c.ventas_total)}</span></div>
       ${(parseFloat(c.gastos)||0)?`<h3 class="inc-h3">Gastos de efectivo</h3><div style="display:flex;justify-content:space-between;font-size:13.5px"><span>${esc(c.gastos_motivo||'Gastos')}</span><b>−${ccM(c.gastos)}</b></div>`:''}
+      ${(parseFloat(c.reposicion)||0)?`<h3 class="inc-h3">Reposición de caja</h3><div style="display:flex;justify-content:space-between;font-size:13.5px"><span>${esc(c.reposicion_motivo||'Reposición')}</span><b>+${ccM(c.reposicion)}</b></div>`:''}
       ${c.observaciones?`<h3 class="inc-h3">Observaciones</h3><div style="font-size:13.5px;white-space:pre-wrap">${esc(c.observaciones)}</div>`:''}
     </div>
     <div class="panel"><h2 style="margin-top:0">Arqueo de efectivo</h2>${arqRows}
@@ -6639,6 +6662,16 @@ function asgEnsureStyle(){ if(document.getElementById('asgStyle')) return; const
   .asg-cell-w{min-width:140px}.asg-cell-s{min-width:70px}
   .asg-act{white-space:nowrap;text-align:center}
   .asg-act button{background:none;border:none;cursor:pointer;font-size:14px;padding:2px 4px;opacity:.7}
+  .ccc-tbl{width:100%;border-collapse:collapse;font-size:13px}
+  .ccc-tbl th,.ccc-tbl td{border:1px solid var(--gris2);padding:8px 10px;text-align:left;vertical-align:middle}
+  .ccc-tbl thead th{font-size:11px;text-transform:uppercase;letter-spacing:.4px;color:var(--suave);background:#f7f9fc}
+  .ccc-day{white-space:nowrap;font-weight:600}
+  .ccc-resp{font-size:11.5px;color:var(--suave)}
+  .ccc-ok{background:#f6fbf8;cursor:pointer}
+  .ccc-ok:hover{background:#eaf6ef}
+  .ccc-no{background:#fdecea;color:#c0392b;font-weight:600;font-size:12px}
+  .ccc-na{color:#aab2bd;text-align:center}
+  .ccc-rowwarn .ccc-day{color:#b9770e}
   .asg-act button:hover{opacity:1}
   .asg-nota{color:#8a5b16;font-weight:600}
   .asg-resgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:10px}
