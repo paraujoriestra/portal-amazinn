@@ -2780,27 +2780,56 @@ function pagFiltros(){
 }
 function pagDashboard(){
   const L=pagFiltered();
-  const sum=arr=>arr.reduce((s,p)=>s+(parseFloat(p.monto_total)||0),0);
-  const pagado=L.filter(p=>(p.estado||'')==='Pagado'), porpag=L.filter(p=>(p.estado||'')==='Por Pagar');
-  const totPag=sum(pagado), totPorPag=sum(porpag), totAll=sum(L);
-  const base=L.filter(p=>(p.estado||'')!=='Por Pagar');
-  const porMes={}; base.forEach(p=>{ const mm=p.mes||'—'; porMes[mm]=(porMes[mm]||0)+(parseFloat(p.monto_total)||0); });
+  const M=v=>parseFloat(v)||0;
+  const sum=(arr,f)=>arr.reduce((s,p)=>s+(f?f(p):M(p.monto_total)),0);
+  const base=L.filter(p=>(p.estado||'')!=='Por Pagar');   // lo efectivamente pagado
+  const porpagL=L.filter(p=>(p.estado||'')==='Por Pagar');
+  const totPag=sum(base), totPorPag=sum(porpagL), totAll=sum(L);
+  const itbms=sum(base,p=>M(p.itbms));
+  const porMes={}; base.forEach(p=>{ const mm=p.mes||'—'; porMes[mm]=(porMes[mm]||0)+M(p.monto_total); });
   const mesesOrd=PAG_MESES.filter(mm=>porMes[mm]!=null);
   const maxMes=Math.max(1,...mesesOrd.map(mm=>porMes[mm]));
-  let acc=0;
-  const mesRows=mesesOrd.map(mm=>{ acc+=porMes[mm]; return `<div class="kp-row"><span class="kp-k">${esc(mm)}</span><span class="kp-bar"><i style="width:${Math.round(porMes[mm]/maxMes*100)}%"></i></span><b class="kp-v">${pagMoney(porMes[mm])}</b></div>`; }).join('')||'<div style="color:var(--suave);font-size:13px">Sin datos</div>';
-  const rank=(key,top)=>{ const o={}; base.forEach(p=>{ const k=p[key]||'—'; o[k]=(o[k]||0)+(parseFloat(p.monto_total)||0); }); const arr=Object.entries(o).sort((a,b)=>b[1]-a[1]).slice(0,top); const mx=Math.max(1,...arr.map(x=>x[1])); return arr.length?arr.map(([k,v])=>`<div class="kp-row"><span class="kp-k">${esc(k)}</span><span class="kp-bar"><i style="width:${Math.round(v/mx*100)}%"></i></span><b class="kp-v">${pagMoney(v)}</b></div>`).join(''):'<div style="color:var(--suave);font-size:13px">Sin datos</div>'; };
-  return `<div class="kpi-cards">
-      <div class="kpi"><div class="kpi-n">${pagMoney(totPag)}</div><div class="kpi-l">Total pagado</div></div>
-      <div class="kpi"><div class="kpi-n" style="color:#c0392b">${pagMoney(totPorPag)}</div><div class="kpi-l">Por pagar</div></div>
-      <div class="kpi"><div class="kpi-n">${pagMoney(totAll)}</div><div class="kpi-l">Total (todo)</div></div>
-      <div class="kpi"><div class="kpi-n">${L.length}</div><div class="kpi-l">Movimientos</div></div>
+  let acc=0; const mesRows=mesesOrd.map(mm=>{ acc+=porMes[mm]; return `<div class="kp-row"><span class="kp-k">${esc(mm)}</span><span class="kp-bar"><i style="width:${Math.round(porMes[mm]/maxMes*100)}%"></i></span><b class="kp-v">${pagMoney(porMes[mm])}</b></div>`; }).join('')||'<div style="color:var(--suave);font-size:13px">Sin datos</div>';
+  const nMeses=mesesOrd.length||1;
+  const media=totPag/nMeses;
+  const ticket=base.length?totPag/base.length:0;
+  const nProp=new Set(base.map(p=>p.propiedad).filter(Boolean)).size;
+  const nProv=new Set(base.map(p=>p.empresa).filter(Boolean)).size;
+  const nCat=new Set(base.map(p=>p.categoria).filter(Boolean)).size;
+  const mesMax=mesesOrd.reduce((a,b)=>(porMes[b]>porMes[a]?b:a),mesesOrd[0]||'—');
+  const rank=(key,top)=>{ const o={},c={}; base.forEach(p=>{ const k=p[key]||'—'; o[k]=(o[k]||0)+M(p.monto_total); c[k]=(c[k]||0)+1; }); const arr=Object.entries(o).sort((a,b)=>b[1]-a[1]).slice(0,top); const mx=Math.max(1,...arr.map(x=>x[1])); const tot=Object.values(o).reduce((a,b)=>a+b,0)||1; return arr.length?arr.map(([k,v])=>`<div class="kp-row"><span class="kp-k">${esc(k)} <span style="color:var(--suave);font-size:11px">(${c[k]})</span></span><span class="kp-bar"><i style="width:${Math.round(v/mx*100)}%"></i></span><b class="kp-v">${pagMoney(v)} <span style="color:var(--suave);font-weight:400;font-size:11px">${Math.round(v/tot*100)}%</span></b></div>`).join(''):'<div style="color:var(--suave);font-size:13px">Sin datos</div>'; };
+  const topPagos=base.slice().sort((a,b)=>M(b.monto_total)-M(a.monto_total)).slice(0,10);
+  const fila=(izq,der)=>`<div style="display:flex;justify-content:space-between;gap:10px;font-size:13px;padding:4px 0;border-bottom:1px solid var(--gris)"><span>${izq}</span><b style="white-space:nowrap">${der}</b></div>`;
+  const kpi=(n,l,col)=>`<div class="kpi"><div class="kpi-n"${col?` style="color:${col}"`:''}>${n}</div><div class="kpi-l">${l}</div></div>`;
+  return `
+    <div class="kpi-cards">
+      ${kpi(pagMoney(totPag),'Total pagado')}
+      ${kpi(pagMoney(totPorPag),'Por pagar','#c0392b')}
+      ${kpi(pagMoney(totAll),'Total (todo)')}
+      ${kpi(pagMoney(itbms),'ITBMS pagado')}
+      ${kpi(pagMoney(media),'Media mensual')}
+      ${kpi(pagMoney(ticket),'Ticket medio')}
+      ${kpi(L.length,'Movimientos')}
+      ${kpi(nProp,'Propiedades')}
+      ${kpi(nProv,'Proveedores')}
+      ${kpi(nCat,'Categorías')}
     </div>
-    <div class="panel"><h2 style="margin-top:0">📅 Pagado por mes</h2>${mesRows}<div style="margin-top:8px;padding-top:8px;border-top:1px dashed var(--gris2);display:flex;justify-content:space-between;font-weight:700"><span>Acumulado</span><span>${pagMoney(acc)}</span></div></div>
+    <div class="panel"><h2 style="margin-top:0">📅 Pagado por mes</h2>${mesRows}
+      <div style="display:flex;justify-content:space-between;padding:8px 0 0;border-top:1px dashed var(--gris2);margin-top:6px;font-weight:700"><span>Acumulado</span><span>${pagMoney(acc)}</span></div>
+      <div style="font-size:12px;color:var(--suave);margin-top:6px">Mes más alto: <b>${esc(mesMax)}</b> (${pagMoney(porMes[mesMax]||0)}) · Media: ${pagMoney(media)}</div></div>
     <div class="kp-grid2">
-      <div class="panel"><h2 style="margin-top:0">🏷️ Por categoría</h2>${rank('categoria',14)}</div>
-      <div class="panel"><h2 style="margin-top:0">🏠 Por propiedad (top)</h2>${rank('propiedad',14)}</div>
-    </div>`;
+      <div class="panel"><h2 style="margin-top:0">🏷️ Por categoría</h2>${rank('categoria',16)}</div>
+      <div class="panel"><h2 style="margin-top:0">🏠 Por propiedad (top)</h2>${rank('propiedad',16)}</div>
+    </div>
+    <div class="kp-grid2">
+      <div class="panel"><h2 style="margin-top:0">💳 Por método de pago</h2>${rank('metodo',8)}</div>
+      <div class="panel"><h2 style="margin-top:0">🏢 Por proveedor / empresa (top)</h2>${rank('empresa',16)}</div>
+    </div>
+    <div class="kp-grid2">
+      <div class="panel"><h2 style="margin-top:0">🗂️ Por cuenta</h2>${rank('cuenta',8)}</div>
+      <div class="panel"><h2 style="margin-top:0">🔝 Pagos más grandes</h2>${topPagos.length?topPagos.map(p=>fila(`${esc(p.propiedad||p.empresa||'—')} <span style="color:var(--suave);font-size:11px">· ${esc(p.categoria||'')} · ${esc(p.mes||'')}</span>`,pagMoney(p.monto_total))).join(''):'<div style="color:var(--suave);font-size:13px">Sin datos</div>'}</div>
+    </div>
+    ${porpagL.length?`<div class="panel" style="border-left:5px solid #c0392b"><h2 style="margin-top:0;color:#c0392b">⏳ Cuentas por pagar pendientes (${porpagL.length})</h2>${porpagL.slice().sort((a,b)=>M(b.monto_total)-M(a.monto_total)).slice(0,25).map(p=>fila(`${esc(p.propiedad||'—')} <span style="color:var(--suave);font-size:11px">· ${esc(p.categoria||'')} · ${esc(p.empresa||'')} · ${esc(p.mes||'')}</span>`,pagMoney(p.monto_total))).join('')}<div style="display:flex;justify-content:space-between;padding:8px 0 0;border-top:1px dashed var(--gris2);margin-top:6px;font-weight:700;color:#c0392b"><span>Total por pagar</span><span>${pagMoney(totPorPag)}</span></div></div>`:''}`;
 }
 function pagDetalle(){
   const all=pagFiltered().slice().sort((a,b)=>{ const ya=(parseInt(a.anio)||0)-(parseInt(b.anio)||0); if(ya) return ya; const ma=PAG_MESES.indexOf(a.mes)-PAG_MESES.indexOf(b.mes); if(ma) return ma; return (parseInt((''+(a.consecutivo||'')).trim())||0)-(parseInt((''+(b.consecutivo||'')).trim())||0); });
