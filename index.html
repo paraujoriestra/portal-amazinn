@@ -4421,15 +4421,30 @@ function reclShowPreview(url,nombre,path){
 function reclEscClose(e){ if(e.key==='Escape') reclClosePreview(); }
 function reclClosePreview(){ const o=document.getElementById('reclPrevOv'); if(o)o.remove(); document.removeEventListener('keydown',reclEscClose); }
 /* ===================== CIERRES DE CAJA (hotel · Panamá) ===================== */
-let ccTab='historial', ccView=null, CCAJA=[], ccFrom='', ccTo='', ccFiltOpen=false, ccSoloPend=false;
+let ccTab='historial', ccView=null, CCAJA=[], ccFrom='', ccTo='', ccFiltOpen=false, ccSoloPend=false, ccLugar='Hotel Mio', ccGastos=[];
 const CC_BILLETES=[100,50,20,10,5,1];
 const CC_MONEDAS=[1,0.50,0.25,0.10,0.05,0.01];
-const CC_METODOS=[['efectivo','💵 Efectivo'],['tarjeta','💳 Tarjeta'],['yappy','📲 Yappy'],['ach','🏦 Transferencia / ACH'],['otros','➕ Otros']];
+const CC_METODOS=[['efectivo','💵 Efectivo'],['tarjeta','💳 Tarjeta'],['ach','🏦 Transferencia / ACH'],['otros','➕ Otros']];
+const CC_LUGARES=['Hotel Mio','Hotel Magnolia','Hotel Bardot','Oficina'];
+function ccEsCaja(l){ return l==='Hotel Mio'||l==='Hotel Magnolia'; }
+function ccAyerISO(){ const d=new Date(); d.setDate(d.getDate()-1); return isoD(d); }
+function ccSetLugar(v){ ccLugar=v; ccGastos=[]; show('cierres'); }
+function ccGastosRows(){
+  const ss='width:100%;padding:8px 10px;border:1px solid var(--gris2);border-radius:8px;font-family:inherit;font-size:14px';
+  if(!ccGastos.length) return '<div style="font-size:12.5px;color:var(--suave)">Sin gastos. Pulsa "+ Añadir gasto" si hubo salidas de efectivo.</div>';
+  return ccGastos.map((g,i)=>`<div style="border:1px solid var(--gris2);border-radius:8px;padding:9px;margin-bottom:8px">
+    <div class="row" style="gap:8px;align-items:flex-end"><div><label style="font-size:12px;color:var(--suave)">Importe (USD)</label><input id="cc_g_monto_${i}" type="number" min="0" step="0.01" value="${esc(g.monto!=null?g.monto:'')}" placeholder="0.00" oninput="ccCalc()" style="${ss}"></div><div><label style="font-size:12px;color:var(--suave)">Motivo</label><input id="cc_g_motivo_${i}" value="${esc(g.motivo||'')}" placeholder="Ej: compra de hielo" style="${ss}"></div><button type="button" class="btn ghost" style="padding:6px 11px" onclick="ccDelGasto(${i})">✕</button></div>
+    <label class="inc-chk" style="margin-top:8px"><input type="checkbox" id="cc_g_just_${i}" ${g.just?'checked':''}><span>📄 Justificante entregado (sobre físico)</span></label>
+  </div>`).join('');
+}
+function ccSyncGastos(){ ccGastos.forEach((g,i)=>{ const m=document.getElementById('cc_g_monto_'+i), mo=document.getElementById('cc_g_motivo_'+i), j=document.getElementById('cc_g_just_'+i); if(m)g.monto=m.value; if(mo)g.motivo=mo.value; if(j)g.just=j.checked; }); }
+function ccAddGasto(){ ccSyncGastos(); ccGastos.push({monto:'',motivo:'',just:false}); const b=document.getElementById('ccGastosBox'); if(b)b.innerHTML=ccGastosRows(); try{ccCalc();}catch(e){} }
+function ccDelGasto(i){ ccSyncGastos(); ccGastos.splice(i,1); const b=document.getElementById('ccGastosBox'); if(b)b.innerHTML=ccGastosRows(); try{ccCalc();}catch(e){} }
 function ccM(n){ return '$'+((parseFloat(n)||0).toFixed(2)); }
 function ccAllowedNow(){ if(isAdmin())return true; if(PROFILE.role==='direccion')return true; const dep=(PROFILE.dept||''),area=(PROFILE.area||''); if(dep==='Finanzas'||area==='Finanzas')return true; return false; }
 function ccCan(){ return ccAllowedNow(); }
 function ccDid(v){ return 'cc_d_'+(''+v).replace('.','_'); }
-function ccSetTab(t){ ccTab=t; ccView=null; show('cierres'); }
+function ccSetTab(t){ ccTab=t; ccView=null; if(t==='nuevo')ccGastos=[]; show('cierres'); }
 function ccOpen(id){ ccView=id; show('cierres'); }
 function ccBack(){ ccView=null; show('cierres'); }
 function ccToggleFilt(){ ccFiltOpen=!ccFiltOpen; show('cierres'); }
@@ -4523,32 +4538,50 @@ function ccPanel(){
 }
 function ccForm(){
   const ss='width:100%;padding:9px 11px;border:1px solid var(--gris2);border-radius:8px;font-family:inherit;font-size:14px';
-  const hoy=hoyISO();
+  const hoy=hoyISO(), ayer=ccAyerISO();
+  const lugar=ccLugar||'Hotel Mio'; const esCaja=ccEsCaja(lugar); const esMag=lugar==='Hotel Magnolia';
   const metRows=CC_METODOS.map(([k,l])=>`<div><label style="font-size:12.5px;color:var(--suave)">${l}</label><input id="cc_m_${k}" type="number" min="0" step="0.01" value="" placeholder="0.00" oninput="ccCalc()" style="${ss}"></div>`).join('');
-  const denomRow=(arr,titulo)=>`<div style="font-weight:600;font-size:12.5px;margin:8px 0 4px">${titulo}</div><div class="cc-denoms">${arr.map(v=>`<div class="cc-den"><span>${ccM(v)}</span><input id="${ccDid(v)}" type="number" min="0" step="1" placeholder="0" oninput="ccCalc()"></div>`).join('')}</div>`;
-  const ccPrev=(typeof CCAJA!=='undefined'&&CCAJA&&CCAJA.length)?CCAJA[0]:null;
+  const lugarSel=`<select id="cc_lugar" onchange="ccSetLugar(this.value)" style="${ss}">${CC_LUGARES.map(L=>`<option ${L===lugar?'selected':''}>${esc(L)}</option>`).join('')}</select>`;
+  const fechaInput=`<input id="cc_fecha" type="date" value="${esc(hoy)}" min="${esc(ayer)}" max="${esc(hoy)}" style="${ss}"><div style="font-size:11.5px;color:var(--suave);margin-top:3px">Solo hoy o ayer (para cierres de noche pasadas las 00:00).</div>`;
+  const back=`<div style="margin-bottom:12px"><button onclick="ccSetTab('historial')" style="background:none;border:none;color:var(--azul);font-weight:600;font-size:14px;cursor:pointer;font-family:inherit;padding:6px 4px">← Volver al listado</button></div>`;
+  if(!esCaja){
+    return back+`<div class="cc-cols"><div class="panel"><h2 style="margin-top:0">Cierre · ${esc(lugar)}</h2>
+      <p style="font-size:12px;color:var(--suave);margin:-4px 0 8px">Sin turno, fondo de caja ni gastos. Solo registro de ingresos.</p>
+      <div class="row"><div><label>Lugar</label>${lugarSel}</div><div><label>Fecha</label>${fechaInput}</div></div>
+      <label>Responsable</label><input id="cc_resp" value="${esc(PROFILE.nombre||'')}" style="${ss}">
+      <h2 style="margin:16px 0 6px">Ingresos por método de pago</h2><div class="row" style="flex-wrap:wrap;gap:10px">${metRows}</div>
+      <label style="margin-top:10px;display:block">Observaciones</label><textarea id="cc_obs" rows="2" style="${ss}" placeholder="Notas…"></textarea>
+      <div id="ccResumen" style="margin-top:14px"></div>
+      <div style="margin-top:14px"><button class="btn" onclick="ccSave()">💾 Guardar cierre</button></div>
+    </div></div>`;
+  }
+  const prevs=(CCAJA||[]).filter(c=>c.lugar===lugar);
+  const ccPrev=prevs.length?prevs[0]:null;
   const ccSaldoAnt=ccPrev?Math.round(((parseFloat(ccPrev.fondo_inicial)||0)+(parseFloat(ccPrev.reposicion)||0)-(parseFloat(ccPrev.gastos)||0))*100)/100:null;
-  return `<div style="margin-bottom:12px"><button onclick="ccSetTab('historial')" style="background:none;border:none;color:var(--azul);font-weight:600;font-size:14px;cursor:pointer;font-family:inherit;padding:6px 4px">← Volver al listado</button></div>
-  <div class="cc-cols">
-    <div class="panel"><h2 style="margin-top:0">Datos del turno</h2>
-      <div class="row"><div><label>Fecha</label><input id="cc_fecha" type="date" value="${esc(hoy)}" style="${ss}"></div>
-        <div><label>Turno</label><select id="cc_turno" style="${ss}"><option>Mañana</option><option selected>Tarde</option><option>Noche</option></select></div></div>
-      <label>Responsable de caja</label><input id="cc_resp" value="${esc(PROFILE.nombre||'')}" style="${ss}">
-      <label>Fondo de caja inicial (USD)</label>${ccSaldoAnt!=null?`<input id="cc_fondo" type="number" value="${ccSaldoAnt}" readonly style="${ss};background:#eef2f7;color:#243b53;font-weight:700;cursor:not-allowed"><div style="font-size:12px;color:var(--suave);margin-top:4px">🔒 Saldo del cierre anterior (${esc(fechaLarga(ccPrev.fecha))} · ${esc(ccPrev.turno||'')}): fondo inicial + reposición − gastos. No editable, para obligar a cuadrar la caja.</div>`:`<input id="cc_fondo" type="number" min="0" step="0.01" value="200" placeholder="0.00" oninput="ccCalc()" style="${ss}"><div style="font-size:12px;color:var(--suave);margin-top:4px">Primer cierre registrado: introduce el fondo inicial de caja.</div>`}
+  const defFondo=esMag?100:200;
+  const fondoBlock=(ccSaldoAnt!=null)
+    ? `<input id="cc_fondo" type="number" value="${ccSaldoAnt}" readonly style="${ss};background:#eef2f7;color:#243b53;font-weight:700;cursor:not-allowed"><div style="font-size:12px;color:var(--suave);margin-top:4px">🔒 Saldo del cierre anterior de ${esc(lugar)} (${esc(fechaLarga(ccPrev.fecha))}${ccPrev.turno?' · '+esc(ccPrev.turno):''}): fondo inicial + reposición − gastos. No editable.</div>`
+    : `<input id="cc_fondo" type="number" min="0" step="0.01" value="${defFondo}" placeholder="0.00" oninput="ccCalc()" style="${ss}"><div style="font-size:12px;color:var(--suave);margin-top:4px">Primer cierre de ${esc(lugar)}: fondo inicial ${ccM(defFondo)}.</div>`;
+  const cambioBlock=esMag?`<label>Caja de cambio (fija)</label><input id="cc_cambio" type="number" value="100" readonly style="${ss};background:#eef2f7;font-weight:700;cursor:not-allowed"><div style="font-size:12px;color:var(--suave);margin-top:4px">🔒 $100 solo para dar cambio. No entra en el cuadre de la caja chica.</div>`:'';
+  const denomRow=(arr,titulo)=>`<div style="font-weight:600;font-size:12.5px;margin:8px 0 4px">${titulo}</div><div class="cc-denoms">${arr.map(v=>`<div class="cc-den"><span>${ccM(v)}</span><input id="${ccDid(v)}" type="number" min="0" step="1" placeholder="0" oninput="ccCalc()"></div>`).join('')}</div>`;
+  return back+`<div class="cc-cols">
+    <div class="panel"><h2 style="margin-top:0">Datos del turno · ${esc(lugar)}</h2>
+      <div class="row"><div><label>Lugar</label>${lugarSel}</div><div><label>Turno</label><select id="cc_turno" style="${ss}"><option>Mañana</option><option selected>Tarde</option><option>Noche</option></select></div></div>
+      <div class="row"><div><label>Fecha</label>${fechaInput}</div><div><label>Responsable de caja</label><input id="cc_resp" value="${esc(PROFILE.nombre||'')}" style="${ss}"></div></div>
+      ${cambioBlock}
+      <label>Fondo de caja inicial${esMag?' (caja chica)':''} (USD)</label>${fondoBlock}
       <h2 style="margin:16px 0 6px">Ingresos por método de pago</h2>
       <div class="row" style="flex-wrap:wrap;gap:10px">${metRows}</div>
       <h2 style="margin:16px 0 6px">Gastos / salidas de efectivo</h2>
-      <div class="row"><div><label>Importe (USD)</label><input id="cc_gastos" type="number" min="0" step="0.01" value="" placeholder="0.00" oninput="ccCalc()" style="${ss}"></div>
-        <div><label>Motivo</label><input id="cc_gastos_motivo" placeholder="Ej: compra de hielo, propinas…" style="${ss}"></div></div>
+      <div id="ccGastosBox">${ccGastosRows()}</div>
+      <button type="button" class="btn ghost" style="margin-top:8px" onclick="ccAddGasto()">+ Añadir gasto</button>
       <h2 style="margin:16px 0 6px">Reposición / reembolso de caja</h2>
-      <div class="row"><div><label>Importe (USD)</label><input id="cc_repo" type="number" min="0" step="0.01" value="" placeholder="0.00" oninput="ccCalc()" style="${ss}"></div>
-        <div><label>Motivo</label><input id="cc_repo_motivo" placeholder="Ej: reembolso de gasto, recarga de fondo…" style="${ss}"></div></div>
+      <div class="row"><div><label>Importe (USD)</label><input id="cc_repo" type="number" min="0" step="0.01" value="" placeholder="0.00" oninput="ccCalc()" style="${ss}"></div><div><label>Motivo</label><input id="cc_repo_motivo" placeholder="Ej: reembolso de gasto…" style="${ss}"></div></div>
       <label style="margin-top:10px;display:block">Observaciones</label><textarea id="cc_obs" rows="2" style="${ss}" placeholder="Incidencias del turno, notas…"></textarea>
     </div>
     <div class="panel"><h2 style="margin-top:0">Arqueo de efectivo (USD)</h2>
-      <p style="font-size:12px;color:var(--suave);margin:-4px 0 8px">Cuenta los billetes y monedas reales en caja.</p>
-      ${denomRow(CC_BILLETES,'Billetes')}
-      ${denomRow(CC_MONEDAS,'Monedas')}
+      <p style="font-size:12px;color:var(--suave);margin:-4px 0 8px">Cuenta los billetes y monedas reales en caja${esMag?' (caja chica)':''}.</p>
+      ${denomRow(CC_BILLETES,'Billetes')}${denomRow(CC_MONEDAS,'Monedas')}
       <div id="ccResumen" style="margin-top:14px"></div>
       <div style="margin-top:14px"><button class="btn" onclick="ccSave()">💾 Guardar cierre</button></div>
     </div>
@@ -4556,15 +4589,18 @@ function ccForm(){
 }
 function ccCalc(){
   const g=id=>parseFloat((document.getElementById(id)||{}).value)||0;
-  const fondo=g('cc_fondo'), efec=g('cc_m_efectivo'), gastos=g('cc_gastos'), repo=g('cc_repo');
-  let contado=0; [...CC_BILLETES,...CC_MONEDAS].forEach(v=>{ contado+=v*(parseInt((document.getElementById(ccDid(v))||{}).value)||0); });
   let ventas=0; CC_METODOS.forEach(([k])=>ventas+=g('cc_m_'+k));
-  const esperado=fondo+efec+repo-gastos; const dif=Math.round((contado-esperado)*100)/100;
-  const col=dif===0?'#1e8a5a':(dif>0?'#b9770e':'#c0392b'); const lbl=dif===0?'✅ Caja cuadrada':(dif>0?'⚠ Sobrante':'⚠ Faltante');
   const box=document.getElementById('ccResumen'); if(!box)return;
   const line=(a,b,bold)=>`<div style="display:flex;justify-content:space-between;padding:4px 0;font-size:13.5px${bold?';font-weight:700':''}"><span>${a}</span><span>${b}</span></div>`;
+  if(!document.getElementById('cc_fondo')){ box.innerHTML=`<div style="border-top:1px solid var(--gris2);padding-top:8px">${line('Ventas totales del turno',ccM(ventas),true)}</div>`; return; }
+  const fondo=g('cc_fondo'), efec=g('cc_m_efectivo'), repo=g('cc_repo');
+  let gastos=0; document.querySelectorAll('[id^="cc_g_monto_"]').forEach(el=>{ gastos+=parseFloat(el.value)||0; });
+  let contado=0; [...CC_BILLETES,...CC_MONEDAS].forEach(v=>{ contado+=v*(parseInt((document.getElementById(ccDid(v))||{}).value)||0); });
+  const esperado=fondo+efec+repo-gastos; const dif=Math.round((contado-esperado)*100)/100;
+  const col=dif===0?'#1e8a5a':(dif>0?'#b9770e':'#c0392b'); const lbl=dif===0?'✅ Caja cuadrada':(dif>0?'⚠ Sobrante':'⚠ Faltante');
   box.innerHTML=`<div style="border-top:1px solid var(--gris2);padding-top:8px">
     ${line('Ventas totales del turno',ccM(ventas))}
+    ${gastos?line('Gastos de efectivo',ccM(gastos)):''}
     ${repo?line('Reposición de caja',ccM(repo)):''}
     ${line('Esperado en efectivo',ccM(esperado))}
     ${line('Contado (arqueo)',ccM(contado))}
@@ -4574,44 +4610,65 @@ function ccCalc(){
 async function ccSave(){
   const g=id=>(document.getElementById(id)||{}).value;
   const gn=id=>parseFloat((document.getElementById(id)||{}).value)||0;
+  const lugar=g('cc_lugar')||ccLugar||'Hotel Mio';
+  const esCaja=ccEsCaja(lugar); const esMag=lugar==='Hotel Magnolia';
+  const fechaSel=g('cc_fecha')||hoyISO();
+  if(fechaSel!==hoyISO() && fechaSel!==ccAyerISO()){ alert('La fecha solo puede ser el día de hoy o el de ayer.'); return; }
   const metodos={}; CC_METODOS.forEach(([k])=>metodos[k]=gn('cc_m_'+k));
-  const arqueo={}; [...CC_BILLETES,...CC_MONEDAS].forEach(v=>{ const q=parseInt((document.getElementById(ccDid(v))||{}).value)||0; if(q) arqueo[v]=q; });
-  let contado=0; for(const v in arqueo) contado+=parseFloat(v)*arqueo[v];
   let ventas=0; for(const k in metodos) ventas+=metodos[k];
-  const fondo=gn('cc_fondo'), gastos=gn('cc_gastos'), repo=gn('cc_repo'); const esperado=fondo+metodos.efectivo+repo-gastos; const dif=Math.round((contado-esperado)*100)/100;
-  const row={ fecha:g('cc_fecha')||hoyISO(), turno:g('cc_turno'), responsable:g('cc_resp')||PROFILE.nombre, fondo_inicial:fondo,
-    metodos, gastos, gastos_motivo:g('cc_gastos_motivo')||null, reposicion:repo, reposicion_motivo:g('cc_repo_motivo')||null, arqueo, contado, esperado, diferencia:dif, ventas_total:ventas,
-    observaciones:g('cc_obs')||null, creado_por:ME.id, creado_por_nombre:PROFILE.nombre, created_at:new Date().toISOString() };
+  const base={ lugar, fecha:fechaSel, responsable:g('cc_resp')||PROFILE.nombre, metodos, ventas_total:ventas, observaciones:g('cc_obs')||null, creado_por:ME.id, creado_por_nombre:PROFILE.nombre, created_at:new Date().toISOString() };
+  let row;
+  if(!esCaja){
+    row=Object.assign({}, base, { turno:null, fondo_inicial:null, caja_cambio:null, gastos:0, gastos_items:[], gastos_motivo:null, reposicion:0, reposicion_motivo:null, arqueo:{}, contado:null, esperado:null, diferencia:null });
+  } else {
+    ccSyncGastos();
+    const gItems=ccGastos.map(x=>({monto:Math.round((parseFloat(x.monto)||0)*100)/100, motivo:(x.motivo||'').trim()||null, justificante:!!x.just})).filter(x=>x.monto>0||x.motivo);
+    const gastos=gItems.reduce((s,x)=>s+x.monto,0);
+    const arqueo={}; [...CC_BILLETES,...CC_MONEDAS].forEach(v=>{ const q=parseInt((document.getElementById(ccDid(v))||{}).value)||0; if(q) arqueo[v]=q; });
+    let contado=0; for(const v in arqueo) contado+=parseFloat(v)*arqueo[v];
+    const fondo=gn('cc_fondo'), repo=gn('cc_repo'); const esperado=fondo+metodos.efectivo+repo-gastos; const dif=Math.round((contado-esperado)*100)/100;
+    row=Object.assign({}, base, { turno:g('cc_turno'), fondo_inicial:fondo, caja_cambio:esMag?100:null, gastos:gastos, gastos_items:gItems, gastos_motivo:gItems.map(x=>x.motivo).filter(Boolean).join(' · ')||null, reposicion:repo, reposicion_motivo:g('cc_repo_motivo')||null, arqueo:arqueo, contado:contado, esperado:esperado, diferencia:dif });
+  }
   const {error}=await sb.from('cierres_caja').insert(row); if(error){ alert('No se pudo guardar: '+error.message); return; }
-  toast('✓ Cierre de caja guardado'); ccTab='historial'; ccView=null; show('cierres');
+  toast('✓ Cierre de caja guardado'); ccGastos=[]; ccTab='historial'; ccView=null; show('cierres');
 }
 function ccDetail(id){
   const c=CCAJA.find(x=>String(x.id)===String(id)); if(!c) return `<button class="btn ghost" onclick="ccBack()">← Volver</button><div class="panel">No encontrado.</div>`;
   const met=c.metodos||{}; const arq=c.arqueo||{};
+  const esCaja=ccEsCaja(c.lugar)||(c.fondo_inicial!=null);
   const dif=parseFloat(c.diferencia)||0; const col=dif===0?'#1e8a5a':(dif>0?'#b9770e':'#c0392b'); const lbl=dif===0?'✅ Caja cuadrada':(dif>0?'⚠ Sobrante':'⚠ Faltante');
   const metRows=CC_METODOS.filter(([k])=>met[k]).map(([k,l])=>`<div style="display:flex;justify-content:space-between;padding:3px 0;font-size:13.5px"><span>${l}</span><b>${ccM(met[k])}</b></div>`).join('')||'<div style="color:var(--suave);font-size:13px">—</div>';
   const arqRows=[...CC_BILLETES,...CC_MONEDAS].filter(v=>arq[v]).map(v=>`<div style="display:flex;justify-content:space-between;padding:2px 0;font-size:13px"><span>${ccM(v)} × ${arq[v]}</span><b>${ccM(parseFloat(v)*arq[v])}</b></div>`).join('')||'<div style="color:var(--suave);font-size:13px">—</div>';
+  const items=Array.isArray(c.gastos_items)?c.gastos_items:[];
+  const faltaJust=items.some(x=>(parseFloat(x.monto)||0)>0 && !x.justificante);
+  const gastosBlock=items.length
+    ? `<h3 class="inc-h3">Gastos de efectivo</h3>${items.map(x=>`<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:13.5px;padding:2px 0"><span>${esc(x.motivo||'Gasto')} ${x.justificante?'<span style="color:#1e8a5a;font-size:11px">✓ justificante</span>':'<span style="color:#c0392b;font-size:11px">⚠ sin justificante</span>'}</span><b>−${ccM(x.monto)}</b></div>`).join('')}`
+    : ((parseFloat(c.gastos)||0)?`<h3 class="inc-h3">Gastos de efectivo</h3><div style="display:flex;justify-content:space-between;font-size:13.5px"><span>${esc(c.gastos_motivo||'Gastos')}</span><b>−${ccM(c.gastos)}</b></div>`:'');
+  const reg=c.created_at?new Date(c.created_at).toLocaleString('es-ES'):'';
   return `<div style="margin-bottom:14px;display:flex;gap:10px;flex-wrap:wrap;align-items:center"><button onclick="ccBack()" style="background:none;border:none;color:var(--azul);font-weight:600;font-size:14px;cursor:pointer;font-family:inherit;padding:6px 4px">← Volver al listado</button><button class="btn" onclick="ccPDF()" style="margin-left:auto">🖨️ Imprimir / PDF</button></div>
   ${(()=>{ const rev=!!c.revisado; const dir=isDireccion(); return `<div class="cc-revpanel ${rev?'rev':'pend'}">
     <div class="cc-revhead"><div>${rev?`<b style="color:#1e8a5a">✓ Revisado por Dirección</b>${c.revisado_por?` · ${esc(c.revisado_por)}`:''}${c.revisado_at?` · ${esc(fechaLarga((c.revisado_at||'').slice(0,10)))}`:''}`:`<b style="color:#b9770e">⏳ Pendiente de revisión</b>`}</div>${dir?`<button class="cc-revbtn ${rev?'':'go'}" onclick="ccToggleRevisado(${c.id})">${rev?'Quitar revisión':'✓ Marcar como revisado'}</button>`:''}</div>
+    ${faltaJust?`<div style="margin-top:8px;background:#fdecea;border:1px solid #f5c6cb;color:#c0392b;border-radius:8px;padding:8px 11px;font-size:13px;font-weight:600">⚠ Hay gasto(s) SIN justificante marcado. Revisar el sobre físico.</div>`:''}
     ${dir?`<label style="font-size:12.5px;color:var(--suave);display:block;margin:10px 0 4px">Nota / comentario de revisión</label><textarea id="ccNota_${c.id}" rows="2" placeholder="Dudas u observaciones para el responsable…" style="width:100%;padding:9px 11px;border:1px solid var(--gris2);border-radius:8px;font-family:inherit;font-size:13.5px">${esc(c.revision_nota||'')}</textarea><div style="margin-top:6px"><button class="btn ghost" onclick="ccSaveNota(${c.id})">💬 Guardar nota</button></div>`:(c.revision_nota?`<div style="margin-top:8px"><div style="font-size:12.5px;color:var(--suave)">Nota de Dirección</div><div style="font-size:13.5px;white-space:pre-wrap">${esc(c.revision_nota)}</div></div>`:'')}
   </div>`;})()}
   <div id="ccDoc" class="cc-cols">
-    <div class="panel"><h2 style="margin-top:0">${esc(fechaLarga(c.fecha))} · ${esc(c.turno||'')}</h2>
-      <div style="font-size:13.5px;color:var(--suave);margin-bottom:10px">👤 Responsable: <b style="color:var(--texto)">${esc(c.responsable||'—')}</b></div>
-      <div style="display:flex;justify-content:space-between;padding:3px 0;font-size:13.5px"><span>Fondo de caja inicial</span><b>${ccM(c.fondo_inicial)}</b></div>
+    <div class="panel"><h2 style="margin-top:0">${c.lugar?esc(c.lugar)+' · ':''}${esc(fechaLarga(c.fecha))}${c.turno?' · '+esc(c.turno):''}</h2>
+      <div style="font-size:13.5px;color:var(--suave);margin-bottom:6px">👤 Responsable: <b style="color:var(--texto)">${esc(c.responsable||'—')}</b></div>
+      <div style="font-size:12px;color:var(--suave);margin-bottom:10px">🕒 Registrado: <b>${esc(reg)}</b>${c.creado_por_nombre?' · por '+esc(c.creado_por_nombre):''}</div>
+      ${esCaja?`<div style="display:flex;justify-content:space-between;padding:3px 0;font-size:13.5px"><span>Fondo de caja inicial</span><b>${ccM(c.fondo_inicial)}</b></div>`:''}
+      ${(c.caja_cambio!=null)?`<div style="display:flex;justify-content:space-between;padding:3px 0;font-size:13.5px"><span>Caja de cambio</span><b>${ccM(c.caja_cambio)}</b></div>`:''}
       <h3 class="inc-h3">Ingresos por método</h3>${metRows}
       <div style="display:flex;justify-content:space-between;padding:6px 0 0;border-top:1px solid var(--gris2);margin-top:6px;font-weight:700"><span>Ventas totales</span><span>${ccM(c.ventas_total)}</span></div>
-      ${(parseFloat(c.gastos)||0)?`<h3 class="inc-h3">Gastos de efectivo</h3><div style="display:flex;justify-content:space-between;font-size:13.5px"><span>${esc(c.gastos_motivo||'Gastos')}</span><b>−${ccM(c.gastos)}</b></div>`:''}
+      ${gastosBlock}
       ${(parseFloat(c.reposicion)||0)?`<h3 class="inc-h3">Reposición de caja</h3><div style="display:flex;justify-content:space-between;font-size:13.5px"><span>${esc(c.reposicion_motivo||'Reposición')}</span><b>+${ccM(c.reposicion)}</b></div>`:''}
       ${c.observaciones?`<h3 class="inc-h3">Observaciones</h3><div style="font-size:13.5px;white-space:pre-wrap">${esc(c.observaciones)}</div>`:''}
     </div>
-    <div class="panel"><h2 style="margin-top:0">Arqueo de efectivo</h2>${arqRows}
+    ${esCaja?`<div class="panel"><h2 style="margin-top:0">Arqueo de efectivo</h2>${arqRows}
       <div style="border-top:1px solid var(--gris2);margin-top:8px;padding-top:8px">
         <div style="display:flex;justify-content:space-between;padding:3px 0;font-size:13.5px"><span>Esperado en efectivo</span><b>${ccM(c.esperado)}</b></div>
         <div style="display:flex;justify-content:space-between;padding:3px 0;font-size:13.5px"><span>Contado</span><b>${ccM(c.contado)}</b></div>
         <div style="display:flex;justify-content:space-between;padding:8px 0 0;font-size:16px;font-weight:800;color:${col};border-top:1px dashed var(--gris2);margin-top:4px"><span>${lbl}</span><span>${dif>0?'+':''}${ccM(dif)}</span></div>
-      </div></div>
+      </div></div>`:''}
   </div>`;
 }
 function ccPDF(){ const el=document.getElementById('ccDoc'); if(!el)return; if(typeof html2pdf==='undefined'){ window.print(); return; } html2pdf().set({margin:8,filename:'cierre_caja.pdf',image:{type:'jpeg',quality:.98},html2canvas:{scale:2,backgroundColor:'#ffffff'},jsPDF:{unit:'mm',format:'a4',orientation:'portrait'}}).from(el).save(); }
