@@ -2048,23 +2048,24 @@ async function horGrid(){
     sb.from('turnos').select('empleado_id,fecha,tipo_id,lugar').in('empleado_id',ids).gte('fecha',startISO).lte('fecha',endISO),
     sb.from('solicitudes').select('user_id,tipo,desde,hasta,estado').in('user_id',ids).in('tipo',['Vacaciones','Baja / ausencia'])
   ]);
-  const map={}, locMap={};(exR.data||[]).forEach(t=>{map[t.empleado_id+'|'+t.fecha]=t.tipo_id; if(t.lugar&&!locMap[t.empleado_id]) locMap[t.empleado_id]=t.lugar;});
+  const map={}, locMap={}, locDayMap={};(exR.data||[]).forEach(t=>{map[t.empleado_id+'|'+t.fecha]=t.tipo_id; if(t.lugar){ locDayMap[t.empleado_id+'|'+t.fecha]=t.lugar; if(!locMap[t.empleado_id]) locMap[t.empleado_id]=t.lugar; }});
   const abs={};(solR.data||[]).forEach(s=>{ if(!s.desde)return; const esVac=s.tipo==='Vacaciones'; if(esVac&&s.estado!=='Aprobada')return; if(!esVac&&s.estado==='Rechazada')return; const tg=esVac?'vac':'baja'; let d=new Date(s.desde+'T00:00:00'); const hh=new Date((s.hasta||s.desde)+'T00:00:00'); let g=0; while(d<=hh&&g<400){ abs[s.user_id+'|'+isoD(d)]=tg; d.setDate(d.getDate()+1); g++; } });
   const chosen=TURNOS_TIPO.filter(t=>horW.turnos.includes(t.id));
   const turnoOpts=chosen.map(t=>`<option value="${t.id}">${esc(t.nombre)}</option>`).join('');
   const ubicOpts=cur=>`<option value="">— Ubicación —</option>${CAT.ubicaciones.map(u=>`<option ${cur===u?'selected':''}>${esc(u)}</option>`).join('')}`;
+  const ubicOptsAll=cur=>`<option value="">— Ubicación (todos los días) —</option>${CAT.ubicaciones.map(u=>`<option ${cur===u?'selected':''}>${esc(u)}</option>`).join('')}`;
+  const ubicDayOpts=cur=>`<option value="">— Ubic. —</option>${CAT.ubicaciones.map(u=>`<option ${cur===u?'selected':''}>${esc(u)}</option>`).join('')}`;
   const diaLibreSel=id=>`<select onchange="horFillDayOff('${id}',this.value)" class="hctrl"><option value="__">▾ día libre</option><option value="1">Lunes</option><option value="2">Martes</option><option value="3">Miércoles</option><option value="4">Jueves</option><option value="5">Viernes</option><option value="6">Sábado</option><option value="0">Domingo</option></select>`;
   // Cabecera: DÍA + una columna por persona (con sus controles)
   const head=`<tr><th>DÍA</th>${people.map(p=>`<th><div>${esc(p.nombre)}</div><div class="hsub">${esc(p.dept||p.area||'')}</div>
     <select onchange="horFillRow('${p.id}',this.value)" class="hctrl"><option value="__">▾ Elige turno</option>${turnoOpts}<option value="">vaciar</option></select>
     ${diaLibreSel(p.id)}
-    <select class="uloc hctrl" data-emp="${p.id}">${ubicOpts(locMap[p.id]||'')}</select></th>`).join('')}</tr>`;
+    <select class="uloc hctrl" data-emp="${p.id}" onchange="horSetLocAll('${p.id}',this.value)" title="Aplica esta ubicación a todos los días">${ubicOptsAll(locMap[p.id]||'')}</select></th>`).join('')}</tr>`;
   // Filas: una por día (con su control "todos" para rellenar el día)
   const rows=days.map(d=>{ const iso=isoD(d); const wk=isWk(d);
-    return `<tr><td class="hday${wk?' wknd':''}"><b>${d.getDate()} ${HOR_MES[d.getMonth()]}</b><small>${HOR_DOW[d.getDay()]}</small>
-      <select onchange="horFillCol('${iso}',this.value)" class="hctrl"><option value="__">▾ todos</option>${turnoOpts}<option value="">vaciar</option></select></td>
+    return `<tr><td class="hday${wk?' wknd':''}"><b>${d.getDate()} ${HOR_MES[d.getMonth()]}</b><small>${HOR_DOW[d.getDay()]}</small></td>
       ${people.map(p=>{ const ab=abs[p.id+'|'+iso]; if(ab) return `<td class="hedit${wk?' wknd':''}" style="text-align:center"><span class="badge ${ab==='vac'?'b-grey':'b-amber'}" title="${ab==='vac'?'Vacaciones aprobadas':'Baja/ausencia'}">${ab==='vac'?'🌴':'🤕'}</span></td>`; const cur=map[p.id+'|'+iso]||'';
-        return `<td class="hedit${wk?' wknd':''}"><select class="tcell2" data-emp="${p.id}" data-name="${esc(p.nombre)}" data-dept="${esc(p.dept||'')}" data-fecha="${iso}"><option value="">—</option>${chosen.map(t=>`<option value="${t.id}" ${String(cur)===String(t.id)?'selected':''}>${esc(t.nombre)}</option>`).join('')}</select></td>`;
+        return `<td class="hedit${wk?' wknd':''}"><select class="tcell2" data-emp="${p.id}" data-name="${esc(p.nombre)}" data-dept="${esc(p.dept||'')}" data-fecha="${iso}"><option value="">—</option>${chosen.map(t=>`<option value="${t.id}" ${String(cur)===String(t.id)?'selected':''}>${esc(t.nombre)}</option>`).join('')}</select><select class="uloc2" data-emp="${p.id}" data-fecha="${iso}" style="width:100%;margin-top:4px;font-size:10px;padding:3px 4px;border:1px solid var(--gris2);border-radius:6px;color:#333;background:#fff">${ubicDayOpts(locDayMap[p.id+'|'+iso]||locMap[p.id]||'')}</select></td>`;
       }).join('')}</tr>`; }).join('');
   return `<div class="panel"><div style="margin-bottom:12px;display:flex;gap:8px;flex-wrap:wrap">
       <button class="btn" onclick="horGuardar()">💾 Guardar y publicar</button>
@@ -2095,6 +2096,7 @@ function horFillDayOff(emp,dow){
   toast(n?('✓ Día libre asignado en todos esos días ('+n+')'):'Ese día no está en el rango del horario.');
 }
 function horFillCol(iso,val){ if(val==='__')return; document.querySelectorAll('.tcell2[data-fecha="'+iso+'"]').forEach(c=>{ if([...c.options].some(o=>String(o.value)===String(val))) c.value=val; }); }
+function horSetLocAll(emp,val){ document.querySelectorAll('.uloc2[data-emp="'+emp+'"]').forEach(s=>{ s.value=val; }); }
 function horTurnoMins(tid){ const h=horHora(tid); if(!h.ini||!h.fin) return 0; const p=s=>{const a=s.split(':');return (+a[0])*60+(+a[1]);}; let a=p(h.ini),b=p(h.fin); if(b<=a)b+=1440; return b-a; }
 async function horCopyPrev(){
   const days=horDays(horW.desde,horW.hasta); if(!days.length)return; const len=days.length;
@@ -2121,8 +2123,8 @@ function horResumen(){
 async function horGuardar(){
   const cells=[...document.querySelectorAll('.tcell2')];
   if(!cells.length){alert('No hay cuadrícula que guardar.');return;}
-  const locMap={}; document.querySelectorAll('.uloc').forEach(u=>{ locMap[u.dataset.emp]=u.value||null; });
-  const rows=cells.map(s=>{const tid=s.value?Number(s.value):null;const h=tid?horHora(tid):{ini:'',fin:''};return {dept:s.dataset.dept||horW.dept||PROFILE.dept||'—',empleado_id:s.dataset.emp,empleado_nombre:s.dataset.name,fecha:s.dataset.fecha,tipo_id:tid,hora_ini:tid?h.ini:null,hora_fin:tid?h.fin:null,lugar:(tid?(locMap[s.dataset.emp]||null):null),updated_at:new Date().toISOString()};});
+  const dayLoc={}; document.querySelectorAll('.uloc2').forEach(u=>{ dayLoc[u.dataset.emp+'|'+u.dataset.fecha]=u.value||null; });
+  const rows=cells.map(s=>{const tid=s.value?Number(s.value):null;const h=tid?horHora(tid):{ini:'',fin:''};return {dept:s.dataset.dept||horW.dept||PROFILE.dept||'—',empleado_id:s.dataset.emp,empleado_nombre:s.dataset.name,fecha:s.dataset.fecha,tipo_id:tid,hora_ini:tid?h.ini:null,hora_fin:tid?h.fin:null,lugar:(tid?(dayLoc[s.dataset.emp+'|'+s.dataset.fecha]||null):null),updated_at:new Date().toISOString()};});
   const{error}=await sb.from('turnos').upsert(rows,{onConflict:'empleado_id,fecha'});
   if(error){alert('No se pudo guardar: '+error.message);return;}
   const empIds=[...new Set(rows.filter(r=>r.tipo_id).map(r=>r.empleado_id))];
