@@ -4539,7 +4539,7 @@ function ccPanel(){
 function ccForm(){
   const ss='width:100%;padding:9px 11px;border:1px solid var(--gris2);border-radius:8px;font-family:inherit;font-size:14px';
   const hoy=hoyISO(), ayer=ccAyerISO();
-  const lugar=ccLugar||'Hotel Mio'; const esCaja=ccEsCaja(lugar); const esMag=lugar==='Hotel Magnolia';
+  const lugar=ccLugar||''; const esCaja=ccEsCaja(lugar); const esMag=lugar==='Hotel Magnolia';
   const metRows=CC_METODOS.map(([k,l])=>`<div><label style="font-size:12.5px;color:var(--suave)">${l}</label><input id="cc_m_${k}" type="number" min="0" step="0.01" value="" placeholder="0.00" oninput="ccCalc()" style="${ss}"></div>`).join('');
   const lugarSel=`<select id="cc_lugar" onchange="ccSetLugar(this.value)" style="${ss}"><option value="" ${!lugar?'selected':''}>— Elige el lugar —</option>${CC_LUGARES.map(L=>`<option ${L===lugar?'selected':''}>${esc(L)}</option>`).join('')}</select>`;
   const fechaInput=`<input id="cc_fecha" type="date" value="${esc(hoy)}" min="${esc(ayer)}" max="${esc(hoy)}" style="${ss}"><div style="font-size:11.5px;color:var(--suave);margin-top:3px">Solo hoy o ayer (para cierres de noche pasadas las 00:00).</div>`;
