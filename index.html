@@ -595,6 +595,7 @@
   table.hsched td.hedit.wknd{background:#f6f7fb}
   table.hsched select.hctrl{display:block;width:100%;margin-top:5px;border:1px solid rgba(255,255,255,.5);border-radius:6px;padding:4px 6px;font-size:10.5px;font-family:inherit;background:rgba(255,255,255,.14);color:#fff}
   table.hsched td.hday select.hctrl{border:1px solid var(--gris2);background:#fff;color:#333}
+  table.hsched select.hctrl option{color:#243b53;background:#fff}
   table.hsched td.hedit select{border:1px solid var(--gris2);border-radius:5px;padding:5px;font-size:12px;background:#fff;width:100%;min-width:96px;font-family:inherit}
   table.hsched thead th .hsub{font-size:10px;font-weight:500;color:#cdd9ea}
   .pubbar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:4px 0 18px;padding:12px 16px;background:var(--azul-claro);border-radius:10px;font-size:13px}
@@ -2065,13 +2066,17 @@ function horFillRow(emp,val){ if(val==='__')return; document.querySelectorAll('.
 function horFillDayOff(emp,dow){
   if(dow==='__')return;
   const libre=TURNOS_TIPO.find(isLibreTurno);
-  if(!libre){ toast('No hay un turno "Libre" en el catálogo de turnos.'); return; }
-  const d=parseInt(dow,10); let n=0, opt=false;
+  if(!libre){ toast('No hay un turno «Libre» en el catálogo de turnos.'); return; }
+  if(horW.turnos && !horW.turnos.includes(libre.id)) horW.turnos.push(libre.id);
+  const d=parseInt(dow,10); let n=0;
   document.querySelectorAll('.tcell2[data-emp="'+emp+'"]').forEach(c=>{
     const dt=new Date(c.dataset.fecha+'T00:00:00');
-    if(dt.getDay()===d){ if([...c.options].some(o=>String(o.value)===String(libre.id))){ c.value=String(libre.id); n++; opt=true; } }
+    if(dt.getDay()===d){
+      if(![...c.options].some(o=>String(o.value)===String(libre.id))){ const o=document.createElement('option'); o.value=String(libre.id); o.textContent=libre.nombre; c.appendChild(o); }
+      c.value=String(libre.id); n++;
+    }
   });
-  toast(n?('✓ Día libre asignado ('+n+')'):(opt?'Ese día no está en el rango seleccionado.':'Activa el turno «Libre» en el alcance para poder asignarlo.'));
+  toast(n?('✓ Día libre asignado en todos esos días ('+n+')'):'Ese día no está en el rango del horario.');
 }
 function horFillCol(iso,val){ if(val==='__')return; document.querySelectorAll('.tcell2[data-fecha="'+iso+'"]').forEach(c=>{ if([...c.options].some(o=>String(o.value)===String(val))) c.value=val; }); }
 function horTurnoMins(tid){ const h=horHora(tid); if(!h.ini||!h.fin) return 0; const p=s=>{const a=s.split(':');return (+a[0])*60+(+a[1]);}; let a=p(h.ini),b=p(h.fin); if(b<=a)b+=1440; return b-a; }
