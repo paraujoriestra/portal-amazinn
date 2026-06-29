@@ -2811,20 +2811,22 @@ function pagDashboard(){
   const rank=(key,top)=>{ const o={},c={}; base.forEach(p=>{ const k=p[key]||'—'; o[k]=(o[k]||0)+M(p.monto_total); c[k]=(c[k]||0)+1; }); const arr=Object.entries(o).sort((a,b)=>b[1]-a[1]).slice(0,top); const mx=Math.max(1,...arr.map(x=>x[1])); const tot=Object.values(o).reduce((a,b)=>a+b,0)||1; return arr.length?arr.map(([k,v])=>`<div class="kp-row"><span class="kp-k">${esc(k)} <span style="color:var(--suave);font-size:11px">(${c[k]})</span></span><span class="kp-bar"><i style="width:${Math.round(v/mx*100)}%"></i></span><b class="kp-v">${pagMoney(v)} <span style="color:var(--suave);font-weight:400;font-size:11px">${Math.round(v/tot*100)}%</span></b></div>`).join(''):'<div style="color:var(--suave);font-size:13px">Sin datos</div>'; };
   const topPagos=base.slice().sort((a,b)=>M(b.monto_total)-M(a.monto_total)).slice(0,10);
   const fila=(izq,der)=>`<div style="display:flex;justify-content:space-between;gap:10px;font-size:13px;padding:4px 0;border-bottom:1px solid var(--gris)"><span>${izq}</span><b style="white-space:nowrap">${der}</b></div>`;
-  const kpi=(n,l,col)=>`<div class="kpi"><div class="kpi-n"${col?` style="color:${col}"`:''}>${n}</div><div class="kpi-l">${l}</div></div>`;
+  const kM=v=>'$'+Math.round(parseFloat(v)||0).toLocaleString('es-PA');
+  const kpi=(n,l,col)=>`<div class="pkpi"><div class="pkpi-n"${col?` style="color:${col}"`:''}>${n}</div><div class="pkpi-l">${l}</div></div>`;
   // Pivot categorías x meses
   const pvCats=agg('categoria').slice(0,12);
   const pvCell={}; base.forEach(p=>{ const k=p.categoria||'—'; const mm=p.mes||'—'; pvCell[k+''+mm]=(pvCell[k+''+mm]||0)+M(p.monto_total); });
   const colTot={}; mesesOrd.forEach(mm=>{ colTot[mm]=base.filter(p=>(p.mes||'—')===mm).reduce((s,p)=>s+M(p.monto_total),0); });
   const pivot=`<div class="asg-scroll"><table class="asg-table"><thead><tr><th>Categoría</th>${mesesOrd.map(mm=>`<th style="text-align:right">${esc(mm.slice(0,3))}</th>`).join('')}<th style="text-align:right">Total</th></tr></thead><tbody>${pvCats.map(([k,tt])=>`<tr><td>${esc(k)}</td>${mesesOrd.map(mm=>`<td style="text-align:right;white-space:nowrap">${pagMoney(pvCell[k+''+mm]||0)}</td>`).join('')}<td style="text-align:right;white-space:nowrap;font-weight:700">${pagMoney(tt)}</td></tr>`).join('')}<tr style="font-weight:800;border-top:2px solid var(--gris2)"><td>Total</td>${mesesOrd.map(mm=>`<td style="text-align:right;white-space:nowrap">${pagMoney(colTot[mm]||0)}</td>`).join('')}<td style="text-align:right;white-space:nowrap">${pagMoney(totPag)}</td></tr></tbody></table></div>`;
   return `
-    <div class="kpi-cards">
-      ${kpi(pagMoney(totPag),'Total pagado')}
-      ${kpi(pagMoney(totPorPag),'Por pagar','#c0392b')}
-      ${kpi(pagMoney(totAll),'Total (todo)')}
-      ${kpi(pagMoney(itbms),'ITBMS pagado')}
-      ${kpi(pagMoney(media),'Media mensual')}
-      ${kpi(pagMoney(ticket),'Ticket medio')}
+    <style>.pkpi-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(158px,1fr));gap:10px;margin-bottom:14px}.pkpi{background:var(--gris);border-radius:10px;padding:12px 14px;min-width:0}.pkpi-n{font-size:clamp(15px,1.7vw,21px);font-weight:800;color:var(--azul);line-height:1.15;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.pkpi-l{font-size:11.5px;color:var(--suave);margin-top:3px}</style>
+    <div class="pkpi-cards">
+      ${kpi(kM(totPag),'Total pagado')}
+      ${kpi(kM(totPorPag),'Por pagar','#c0392b')}
+      ${kpi(kM(totAll),'Total (todo)')}
+      ${kpi(kM(itbms),'ITBMS pagado')}
+      ${kpi(kM(media),'Media mensual')}
+      ${kpi(kM(ticket),'Ticket medio')}
       ${kpi(L.length,'Movimientos')}
       ${kpi(nProp,'Propiedades')}
       ${kpi(nProv,'Proveedores')}
@@ -2844,6 +2846,10 @@ function pagDashboard(){
     <div class="kp-grid2">
       <div class="panel"><h2 style="margin-top:0">🏢 Por proveedor / empresa (top)</h2>${rank('empresa',16)}</div>
       <div class="panel"><h2 style="margin-top:0">🗂️ Por cuenta</h2>${rank('cuenta',8)}</div>
+    </div>
+    <div class="kp-grid2">
+      <div class="panel"><h2 style="margin-top:0">🏷️ Por subcategoría</h2>${rank('subcategoria',16)}</div>
+      <div class="panel"><h2 style="margin-top:0">🧾 Con factura vs sin factura</h2>${pagDonut(topOtros('factura',4).map(e=>[e[0]==='Si'?'Con factura':(e[0]==='No'?'Sin factura':(e[0]||'Sin dato')),e[1]]))}</div>
     </div>
     <div class="panel"><h2 style="margin-top:0">🧾 ITBMS por mes</h2>${itbRows}<div style="display:flex;justify-content:space-between;padding:8px 0 0;border-top:1px dashed var(--gris2);margin-top:6px;font-weight:700"><span>Total ITBMS</span><span>${pagMoney(itbms)}</span></div></div>
     <div class="panel"><h2 style="margin-top:0">📊 Comparativa por categoría y mes</h2><p style="font-size:12px;color:var(--suave);margin:-4px 0 10px">Top 12 categorías. Cada columna es un mes; última columna, el total de la categoría.</p>${pivot}</div>
