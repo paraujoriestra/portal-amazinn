@@ -3951,6 +3951,9 @@ function tpRowsHTML(){
     <button type="button" class="btn ghost" style="padding:6px 10px" onclick="tpDelRow(${i})">✕</button>
   </div>`).join('');
 }
+function tpEditScope(a,d,e){ tpA=a; tpD=d; tpE=e; tpLoad(); show('catalogos'); }
+async function tpDelScope(a,d,e){ if(!confirm('¿Borrar el preset de '+(a||'—')+' · '+(d||'—')+(e?' · '+e:'')+'?'))return; await sb.from('turnos_preset').delete().eq('area',a).eq('departamento',d).eq('equipo',e); await loadTurnosPreset(); toast('Preset borrado'); show('catalogos'); }
+function tpSavedListHTML(){ const groups={}; (TURNOS_PRESET||[]).forEach(p=>{ const k=(p.area||'')+'||'+(p.departamento||'')+'||'+(p.equipo||''); (groups[k]=groups[k]||[]).push(p); }); const keys=Object.keys(groups).sort(); if(!keys.length) return '<div style="font-size:13px;color:var(--suave);margin-top:14px">No hay presets guardados todavía.</div>'; return `<div style="margin-top:18px;border-top:1px solid var(--gris2);padding-top:12px"><div style="font-weight:600;margin-bottom:8px">Presets guardados</div>${keys.map(k=>{ const pr=k.split('||'); const a=pr[0],d=pr[1],e=pr[2]; const list=groups[k].slice().sort((x,y)=>(x.orden||0)-(y.orden||0)); const turnos=list.map(p=>{ const t=turnoTipo(p.turno_id); return (t?t.nombre:('turno '+p.turno_id))+' '+(p.hora_ini||'')+'–'+(p.hora_fin||''); }).join(' · '); const ea=a.replace(/'/g,"\\'"),ed=d.replace(/'/g,"\\'"),ee=e.replace(/'/g,"\\'"); return `<div style="border:1px solid var(--gris2);border-radius:8px;padding:9px 11px;margin-bottom:8px"><div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;align-items:center"><b style="font-size:13.5px">${esc(a||'—')} · ${esc(d||'—')}${e?' · '+esc(e):' · (todo el depto)'}</b><span style="white-space:nowrap"><button class=\"btn ghost\" style=\"padding:4px 9px;font-size:12px\" onclick=\"tpEditScope('${ea}','${ed}','${ee}')\">✏️ Editar</button> <button class=\"btn ghost\" style=\"padding:4px 9px;font-size:12px;color:#c0392b\" onclick=\"tpDelScope('${ea}','${ed}','${ee}')\">🗑</button></span></div><div style="font-size:12px;color:var(--suave);margin-top:4px">${esc(turnos)}</div></div>`; }).join('')}</div>`; }
 function tpPanelHTML(){
   const ss2='padding:8px 10px;border:1px solid var(--gris2);border-radius:8px;font-family:inherit;font-size:13.5px';
   const areaSel=`<select onchange="tpSetA(this.value)" style="${ss2}"><option value="">— Área —</option>${(CAT.areas||[]).map(a=>`<option ${tpA===a?'selected':''}>${esc(a)}</option>`).join('')}</select>`;
@@ -3962,7 +3965,7 @@ function tpPanelHTML(){
   return `<div class="panel" style="margin-top:16px"><h2>🕐 Turnos por ámbito <small style="color:var(--suave);font-weight:400">· horarios por área / departamento / equipo</small></h2>
     <p style="font-size:12.5px;color:var(--suave);margin:-4px 0 10px">Define qué turnos y horas salen por defecto al crear un horario para ese ámbito (luego se pueden modificar). Deja el equipo en "Todo el departamento" para un preset general, o elige un equipo para horas específicas (ej. Atención al cliente · Hotel Mio vs Oficina Central).</p>
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">${areaSel}${deptSel}${eqSel}</div>
-    ${body}</div>`;
+    ${body}${tpSavedListHTML()}</div>`;
 }
 async function pageCatalogos(){
   if(!(isAdmin()||PROFILE.role==='direccion')){ document.getElementById('main').innerHTML='<div class="panel">Solo Dirección, Administración o el Propietario pueden gestionar los catálogos.</div>'; return; }
