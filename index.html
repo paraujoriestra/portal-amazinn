@@ -1249,8 +1249,22 @@ const SH=Object.fromEntries(SHIFTS.map(s=>[s.v,s]));
 let TURNOS_TIPO=[];
 let horW={area:'',dept:'',equipos:[],desde:'',hasta:'',turnos:null,gen:false};
 function horToggleEquipo(name,on){ horW.equipos=horW.equipos||[]; if(on){ if(!horW.equipos.includes(name)) horW.equipos.push(name);} else horW.equipos=horW.equipos.filter(x=>x!==name);
-  const c=document.getElementById('horEqCount'); if(c) c.textContent=horW.equipos.length?horW.equipos.length+' equipo(s) seleccionados':'Vacío = todos'; horClearGrid(); }
+  const c=document.getElementById('horEqCount'); if(c) c.textContent=horW.equipos.length?horW.equipos.length+' equipo(s) seleccionados':'Vacío = todos'; horW.gen=false; show('horarios'); }
 async function loadTurnosTipo(){ const{data}=await sb.from('turnos_tipo').select('*').order('orden').order('id'); TURNOS_TIPO=(data||[]).filter(t=>!/^partido$/i.test((t.nombre||'').trim())); if(horW.turnos===null) horW.turnos=TURNOS_TIPO.map(t=>t.id); }
+let TURNOS_PRESET=[];
+async function loadTurnosPreset(){ try{ const{data}=await sb.from('turnos_preset').select('*').order('orden').order('id'); TURNOS_PRESET=data||[]; }catch(e){ TURNOS_PRESET=[]; } }
+function horApplyPreset(){
+  horW.turnos=TURNOS_TIPO.map(t=>t.id); horW.horas={};
+  const area=horW.area||'', dept=horW.dept||'';
+  if(!dept) return;
+  const rows=(TURNOS_PRESET||[]).filter(p=>(p.area||'')===area && (p.departamento||'')===dept);
+  if(!rows.length) return;
+  const eqs=horW.equipos||[]; const hasEq=rows.some(p=>(p.equipo||'')!=='');
+  let chosen=null;
+  if(eqs.length===1){ chosen=rows.filter(p=>(p.equipo||'')===eqs[0]); if(!chosen.length) chosen=rows.filter(p=>(p.equipo||'')===''); }
+  else { if(hasEq){ try{toast('Este ámbito tiene turnos distintos por equipo. Elige un solo equipo para autocompletar, o ajústalos a mano.');}catch(e){} chosen=null; } else chosen=rows.filter(p=>(p.equipo||'')===''); }
+  if(chosen && chosen.length){ const valid=chosen.filter(p=>TURNOS_TIPO.some(t=>String(t.id)===String(p.turno_id))); if(valid.length){ horW.turnos=valid.map(p=>Number(p.turno_id)); horW.horas={}; valid.forEach(p=>{ horW.horas[p.turno_id]={ini:p.hora_ini||'',fin:p.hora_fin||''}; }); } }
+}
 function turnoTipo(id){ return TURNOS_TIPO.find(t=>String(t.id)===String(id)); }
 function abreviaTurno(t){ const n=(t&&t.nombre)||''; return n.slice(0,3); }
 function tchip(id){ if(!id) return `<span class="cell-b" style="background:#f2f2f2;color:#bbb">—</span>`; const t=turnoTipo(id); if(!t) return `<span class="cell-b">·</span>`; const h=t.hora_ini?` ${t.hora_ini}–${t.hora_fin}`:''; return `<span class="cell-b" title="${esc(t.nombre)}${esc(h)}" style="background:${t.color};color:#333">${esc(abreviaTurno(t))}</span>`; }
@@ -1903,7 +1917,7 @@ function horCellTd(r,wk){
 function tchipRow(r){ if(!r||!r.tipo_id) return `<span class="cell-b" style="background:#f2f2f2;color:#bbb">—</span>`; const t=turnoTipo(r.tipo_id); if(!t) return `<span class="cell-b">·</span>`; const lib=isLibreTurno(t); const ini=r.hora_ini||t.hora_ini, fin=r.hora_fin||t.hora_fin; const h=ini?`${ini}–${fin}`:''; const col=lib?'#bfe7c4':t.color; return `<span class="cell-b" title="${esc(t.nombre)}${h?' '+esc(h):''}" style="background:${col};color:#333;display:inline-block;text-align:center;line-height:1.2;padding:4px 7px"><b>${esc(abreviaTurno(t))}</b>${(h&&!lib)?`<br><small style="font-size:9px;font-weight:400;opacity:.85">${esc(h)}</small>`:''}</span>`; }
 
 async function pageHorarios(){
-  await loadTurnosTipo();
+  await loadTurnosTipo(); await loadTurnosPreset();
   const dept=PROFILE.dept||'';
   const canEdit=CAN_MANAGE.includes(PROFILE.role);
   const tabs=canEdit?[['editor','🗓️ Crear horario'],['equipo','👥 Horario del equipo'],['otros','🏢 Otros equipos'],['cambios','🔄 Cambios de turno'],['historial','🗂️ Histórico']]
@@ -1987,9 +2001,11 @@ async function horCrear(){
   const canDept=isAdm||role==='direccion';     // dirección elige depto dentro de su área
   if(role==='direccion'){ horW.area=PROFILE.area||''; }
   if(role==='responsable'){ horW.area=PROFILE.area||''; horW.dept=PROFILE.dept||''; }
+  const _sk=(horW.area||'')+'|'+(horW.dept||'')+'|'+((horW.equipos||[]).slice().sort().join(','));
+  if(horW._scopeKey!==_sk){ horW._scopeKey=_sk; horApplyPreset(); }
   horW.horas=horW.horas||{}; TURNOS_TIPO.forEach(t=>{ if(!horW.horas[t.id]) horW.horas[t.id]={ini:t.hora_ini||'',fin:t.hora_fin||''}; });
   const areaSel=`<select id="horAreaSel" ${canArea?'':'disabled'} onchange="horAreaChange(this.value)"><option value="">Todas</option>${CAT.areas.map(a=>`<option ${horW.area===a?'selected':''}>${esc(a)}</option>`).join('')}</select>`;
-  const deptSel=`<select id="horDeptSel" ${canDept?'':'disabled'} onchange="horW.dept=this.value;horClearGrid()">${horDeptOptionsHTML()}</select>`;
+  const deptSel=`<select id="horDeptSel" ${canDept?'':'disabled'} onchange="horW.dept=this.value;horW.gen=false;show('horarios')">${horDeptOptionsHTML()}</select>`;
   horW.equipos=horW.equipos||[];
   const eqSel=CAT.equipos.length
     ? `<div class="hor-eq">${CAT.equipos.map(e=>`<label class="thk" style="padding:5px 9px;font-size:12.5px"><input type="checkbox" ${horW.equipos.includes(e)?'checked':''} onchange="horToggleEquipo('${e.replace(/'/g,"\\'")}',this.checked)"> ${esc(e)}</label>`).join('')}</div><small id="horEqCount" style="color:var(--suave)">${horW.equipos.length?horW.equipos.length+' equipo(s) seleccionados':'Vacío = todos'}</small>`
@@ -2014,7 +2030,7 @@ async function horCrear(){
 }
 function horDeptOptionsHTML(){ const dep=CAT.deptos.filter(d=>!horW.area||d.area===horW.area);
   return `<option value="">Todos${horW.area?' los de '+esc(horW.area):''}</option>${dep.map(d=>`<option ${horW.dept===d.nombre?'selected':''}>${esc(d.nombre)}</option>`).join('')}`; }
-function horAreaChange(v){ horW.area=v; horW.dept=''; const ds=document.getElementById('horDeptSel'); if(ds) ds.innerHTML=horDeptOptionsHTML(); horClearGrid(); }
+function horAreaChange(v){ horW.area=v; horW.dept=''; horW.gen=false; show('horarios'); }
 function horClearGrid(){ horW.gen=false; const steps=document.getElementById('horWizardSteps'); if(steps) steps.style.display=''; const b=document.getElementById('horGridBox'); if(b) b.innerHTML=''; }
 async function horGrid(){
   let q=sb.from('profiles').select('id,nombre,dept,area,equipo').eq('estado','aprobado');
@@ -3909,8 +3925,48 @@ function cotDescargar(id){
 }
 
 /* ---------------- CATÁLOGOS (Propietario) ---------------- */
-function pageCatalogos(){
+let tpA='', tpD='', tpE='', tpRows=[];
+function tpDeptos(){ return (CAT.deptos||[]).filter(d=>!tpA||d.area===tpA); }
+function tpSetA(v){ tpA=v; tpD=''; tpE=''; tpRows=[]; show('catalogos'); }
+function tpSetD(v){ tpD=v; tpE=''; tpLoad(); show('catalogos'); }
+function tpSetE(v){ tpE=v; tpLoad(); show('catalogos'); }
+function tpLoad(){ tpRows=(TURNOS_PRESET||[]).filter(p=>(p.area||'')===tpA && (p.departamento||'')===tpD && (p.equipo||'')===tpE).map(p=>({turno_id:String(p.turno_id||''),ini:p.hora_ini||'',fin:p.hora_fin||''})); }
+function tpSyncRows(){ tpRows.forEach((r,i)=>{ const t=document.getElementById('tp_t_'+i), a=document.getElementById('tp_i_'+i), b=document.getElementById('tp_f_'+i); if(t)r.turno_id=t.value; if(a)r.ini=a.value; if(b)r.fin=b.value; }); }
+function tpAddRow(){ tpSyncRows(); tpRows.push({turno_id:'',ini:'',fin:''}); const box=document.getElementById('tpRowsBox'); if(box)box.innerHTML=tpRowsHTML(); }
+function tpDelRow(i){ tpSyncRows(); tpRows.splice(i,1); const box=document.getElementById('tpRowsBox'); if(box)box.innerHTML=tpRowsHTML(); }
+async function tpNewTurno(){ const n=(prompt('Nombre del nuevo turno (ej: Turno A, Medio…):')||'').trim(); if(!n) return; const{data,error}=await sb.from('turnos_tipo').insert({nombre:n,hora_ini:'',hora_fin:'',color:'#cfe0f2',orden:(TURNOS_TIPO.length+1)}).select('id').single(); if(error){ alert('No se pudo crear (¿ya existe ese nombre?): '+error.message); return; } await loadTurnosTipo(); tpSyncRows(); tpRows.push({turno_id:String(data.id),ini:'',fin:''}); show('catalogos'); }
+async function tpSave(){ if(!tpA||!tpD){ alert('Elige área y departamento.'); return; } tpSyncRows();
+  const rows=tpRows.filter(r=>r.turno_id).map((r,i)=>({area:tpA,departamento:tpD,equipo:tpE||'',turno_id:Number(r.turno_id),hora_ini:(r.ini||'').trim(),hora_fin:(r.fin||'').trim(),orden:i}));
+  await sb.from('turnos_preset').delete().eq('area',tpA).eq('departamento',tpD).eq('equipo',tpE||'');
+  if(rows.length){ const{error}=await sb.from('turnos_preset').insert(rows); if(error){ alert('Error: '+error.message); return; } }
+  await loadTurnosPreset(); toast('✓ Preset de turnos guardado'); show('catalogos'); }
+function tpRowsHTML(){
+  const ss='padding:7px 9px;border:1px solid var(--gris2);border-radius:8px;font-family:inherit;font-size:13px';
+  if(!tpRows.length) return '<div style="font-size:12.5px;color:var(--suave)">Sin turnos en este ámbito. Pulsa "+ Añadir turno" o "+ Nuevo tipo de turno".</div>';
+  return tpRows.map((r,i)=>`<div class="row" style="gap:8px;align-items:center;margin-bottom:7px;flex-wrap:wrap">
+    <select id="tp_t_${i}" style="${ss};min-width:150px"><option value="">— Turno —</option>${TURNOS_TIPO.map(t=>`<option value="${t.id}" ${String(r.turno_id)===String(t.id)?'selected':''}>${esc(t.nombre)}</option>`).join('')}</select>
+    <input id="tp_i_${i}" value="${esc(r.ini)}" placeholder="inicio (07:00)" style="${ss};max-width:120px">
+    <span style="color:var(--suave)">a</span>
+    <input id="tp_f_${i}" value="${esc(r.fin)}" placeholder="fin (15:30)" style="${ss};max-width:120px">
+    <button type="button" class="btn ghost" style="padding:6px 10px" onclick="tpDelRow(${i})">✕</button>
+  </div>`).join('');
+}
+function tpPanelHTML(){
+  const ss2='padding:8px 10px;border:1px solid var(--gris2);border-radius:8px;font-family:inherit;font-size:13.5px';
+  const areaSel=`<select onchange="tpSetA(this.value)" style="${ss2}"><option value="">— Área —</option>${(CAT.areas||[]).map(a=>`<option ${tpA===a?'selected':''}>${esc(a)}</option>`).join('')}</select>`;
+  const deptSel=`<select onchange="tpSetD(this.value)" style="${ss2}" ${tpA?'':'disabled'}><option value="">— Departamento —</option>${tpDeptos().map(d=>`<option ${tpD===d.nombre?'selected':''}>${esc(d.nombre)}</option>`).join('')}</select>`;
+  const eqSel=`<select onchange="tpSetE(this.value)" style="${ss2}" ${tpD?'':'disabled'}><option value="" ${!tpE?'selected':''}>(Todo el departamento)</option>${(CAT.equipos||[]).map(e=>`<option ${tpE===e?'selected':''}>${esc(e)}</option>`).join('')}</select>`;
+  const body=(tpA&&tpD)?`<div id="tpRowsBox">${tpRowsHTML()}</div>
+      <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap"><button class="btn ghost" onclick="tpAddRow()">+ Añadir turno</button><button class="btn ghost" onclick="tpNewTurno()">+ Nuevo tipo de turno</button><button class="btn" onclick="tpSave()">💾 Guardar preset</button></div>`
+    :`<div style="font-size:13px;color:var(--suave)">Elige área y departamento (y opcionalmente un equipo) para definir sus turnos y horas.</div>`;
+  return `<div class="panel" style="margin-top:16px"><h2>🕐 Turnos por ámbito <small style="color:var(--suave);font-weight:400">· horarios por área / departamento / equipo</small></h2>
+    <p style="font-size:12.5px;color:var(--suave);margin:-4px 0 10px">Define qué turnos y horas salen por defecto al crear un horario para ese ámbito (luego se pueden modificar). Deja el equipo en "Todo el departamento" para un preset general, o elige un equipo para horas específicas (ej. Atención al cliente · Hotel Mio vs Oficina Central).</p>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">${areaSel}${deptSel}${eqSel}</div>
+    ${body}</div>`;
+}
+async function pageCatalogos(){
   if(!(isAdmin()||PROFILE.role==='direccion')){ document.getElementById('main').innerHTML='<div class="panel">Solo Dirección, Administración o el Propietario pueden gestionar los catálogos.</div>'; return; }
+  await loadTurnosTipo(); await loadTurnosPreset();
   const areaList=CAT.areas.map(a=>`<div class="cat-row"><span>${esc(a)}</span><button class="cat-x" onclick="delArea('${a.replace(/'/g,"\\'")}')">🗑</button></div>`).join('')||'<div class="cat-empty">—</div>';
   const deptList=CAT.deptos.map(d=>`<div class="cat-row"><span>${esc(d.nombre)} <small style="color:var(--suave)">· ${esc(d.area||'sin área')}</small></span><button class="cat-x" onclick="delDepto('${d.nombre.replace(/'/g,"\\'")}')">🗑</button></div>`).join('')||'<div class="cat-empty">—</div>';
   const posList=CAT.posiciones.map(p=>`<div class="cat-row"><span>${esc(p)}</span><button class="cat-x" onclick="delPos('${p.replace(/'/g,"\\'")}')">🗑</button></div>`).join('')||'<div class="cat-empty">—</div>';
@@ -3980,6 +4036,7 @@ function pageCatalogos(){
         </div>
       </div>
     </div>
+    ${tpPanelHTML()}
     <div class="panel" style="margin-top:16px"><h2>🔑 Roles y alcances (referencia)</h2>
       <div style="overflow-x:auto"><table class="rol-tabla"><thead><tr>
         <th>Rol</th><th>Alcance</th><th>Horarios</th><th>Aprobaciones</th><th>Comunicados</th><th>KPIs / Dirección</th><th>Admin / Catálogos</th></tr></thead>
