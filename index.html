@@ -2719,9 +2719,13 @@ function pagFiltered(){ const q=(pagSearch||'').trim().toLowerCase(); return PAG
 async function pagePagos(){
   if(!pagosCan()){ document.getElementById('main').innerHTML='<div class="page-title">💵 Pagos</div><div class="panel" style="color:var(--suave)">No tienes acceso a esta sección.</div>'; return; }
   asgEnsureStyle();
-  const r=await sb.from('pagos').select('*').order('fecha',{ascending:false}).limit(20000);
-  if(r.error){ document.getElementById('main').innerHTML='<div class="page-title">💵 Pagos</div><div class="panel">No se pudo cargar (¿ejecutaste <b>supabase_pagos.sql</b>?):<br><small style="color:var(--suave)">'+esc(r.error.message)+'</small></div>'; return; }
-  PAGOS=r.data||[];
+  PAGOS=[]; let from=0; const PAGE=1000;
+  while(true){
+    const r=await sb.from('pagos').select('*').order('fecha',{ascending:false}).range(from, from+PAGE-1);
+    if(r.error){ document.getElementById('main').innerHTML='<div class="page-title">💵 Pagos</div><div class="panel">No se pudo cargar (¿ejecutaste <b>supabase_pagos.sql</b>?):<br><small style="color:var(--suave)">'+esc(r.error.message)+'</small></div>'; return; }
+    const batch=r.data||[]; PAGOS=PAGOS.concat(batch);
+    if(batch.length<PAGE || from>200000) break; from+=PAGE;
+  }
   const rr=await sb.from('paneles_resumen').select('*').order('nombre'); RESUMENES=(rr&&!rr.error&&rr.data)?rr.data:[];
   pagRender();
 }
