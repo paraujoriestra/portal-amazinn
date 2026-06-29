@@ -2044,7 +2044,7 @@ async function horGrid(){
   const turnoOpts=chosen.map(t=>`<option value="${t.id}">${esc(t.nombre)}</option>`).join('');
   const ubicOpts=cur=>`<option value="">— Ubicación —</option>${CAT.ubicaciones.map(u=>`<option ${cur===u?'selected':''}>${esc(u)}</option>`).join('')}`;
   const ubicOptsAll=cur=>`<option value="">— Ubicación (todos los días) —</option>${CAT.ubicaciones.map(u=>`<option ${cur===u?'selected':''}>${esc(u)}</option>`).join('')}`;
-  const ubicDayOpts=cur=>`<option value="">— Ubic. —</option>${CAT.ubicaciones.map(u=>`<option ${cur===u?'selected':''}>${esc(u)}</option>`).join('')}`;
+  const ubicDayOpts=cur=>`<option value="">📍 Ubicación</option>${CAT.ubicaciones.map(u=>`<option ${cur===u?'selected':''}>${esc(u)}</option>`).join('')}`;
   const diaLibreSel=id=>`<select onchange="horFillDayOff('${id}',this.value)" class="hctrl"><option value="__">▾ día libre</option><option value="1">Lunes</option><option value="2">Martes</option><option value="3">Miércoles</option><option value="4">Jueves</option><option value="5">Viernes</option><option value="6">Sábado</option><option value="0">Domingo</option></select>`;
   // Cabecera: DÍA + una columna por persona (con sus controles)
   const head=`<tr><th>DÍA</th>${people.map(p=>`<th><div>${esc(p.nombre)}</div><div class="hsub">${esc(p.dept||p.area||'')}</div>
@@ -2055,7 +2055,7 @@ async function horGrid(){
   const rows=days.map(d=>{ const iso=isoD(d); const wk=isWk(d);
     return `<tr><td class="hday${wk?' wknd':''}"><b>${d.getDate()} ${HOR_MES[d.getMonth()]}</b><small>${HOR_DOW[d.getDay()]}</small></td>
       ${people.map(p=>{ const ab=abs[p.id+'|'+iso]; if(ab) return `<td class="hedit${wk?' wknd':''}" style="text-align:center"><span class="badge ${ab==='vac'?'b-grey':'b-amber'}" title="${ab==='vac'?'Vacaciones aprobadas':'Baja/ausencia'}">${ab==='vac'?'🌴':'🤕'}</span></td>`; const cur=map[p.id+'|'+iso]||'';
-        return `<td class="hedit${wk?' wknd':''}"><select class="tcell2" data-emp="${p.id}" data-name="${esc(p.nombre)}" data-dept="${esc(p.dept||'')}" data-fecha="${iso}"><option value="">—</option>${chosen.map(t=>`<option value="${t.id}" ${String(cur)===String(t.id)?'selected':''}>${esc(t.nombre)}</option>`).join('')}</select><select class="uloc2" data-emp="${p.id}" data-fecha="${iso}" style="width:100%;margin-top:4px;font-size:10px;padding:3px 4px;border:1px solid var(--gris2);border-radius:6px;color:#333;background:#fff">${ubicDayOpts(locDayMap[p.id+'|'+iso]||'')}</select></td>`;
+        return `<td class="hedit${wk?' wknd':''}"><select class="tcell2" data-emp="${p.id}" data-name="${esc(p.nombre)}" data-dept="${esc(p.dept||'')}" data-fecha="${iso}"><option value="">—</option>${chosen.map(t=>`<option value="${t.id}" ${String(cur)===String(t.id)?'selected':''}>${esc(t.nombre)}</option>`).join('')}</select><select class="uloc2" data-emp="${p.id}" data-fecha="${iso}" title="Ubicación de esta persona este día" style="width:100%;margin-top:4px;font-size:11px;padding:4px 5px;border:1px solid #cfd8e3;border-radius:6px;color:#243b53;background:#f4f7fb">${ubicDayOpts(locDayMap[p.id+'|'+iso]||'')}</select></td>`;
       }).join('')}</tr>`; }).join('');
   return `<div class="panel"><div style="margin-bottom:12px;display:flex;gap:8px;flex-wrap:wrap">
       <button class="btn" onclick="horGuardar()">💾 Guardar y publicar</button>
