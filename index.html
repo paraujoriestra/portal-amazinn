@@ -2706,7 +2706,7 @@ async function saveProp(e){e.preventDefault();
 }
 
 /* ---------------- PAGOS (P&L · finanzas) ---------------- */
-let PAGOS=[], pagMes='', pagCat='', pagProp='', pagEstado='', pagFrom='', pagTo='', pagView='panel', pagSearch='';
+let PAGOS=[], pagMes='', pagCat='', pagProp='', pagEstado='', pagFrom='', pagTo='', pagView='panel', pagSearch='', pagFiltOpen=false;
 const PAG_MESES=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
 let RESUMENES=[], pagResSel='';
 let pagSyncResult=null;
@@ -2716,6 +2716,7 @@ function pagMoney(n){ const x=parseFloat(n)||0; return '$'+x.toLocaleString('es-
 function pagSetView(v){ pagView=v; pagRender(); }
 function pagSet(k,v){ if(k==='mes')pagMes=v; else if(k==='cat')pagCat=v; else if(k==='prop')pagProp=v; else if(k==='estado')pagEstado=v; else if(k==='from')pagFrom=v; else if(k==='to')pagTo=v; pagRender(); }
 function pagClear(){ pagMes=pagCat=pagProp=pagEstado=pagFrom=pagTo=''; pagRender(); }
+function pagToggleFilt(){ pagFiltOpen=!pagFiltOpen; pagRenderBody(); }
 function pagFiltered(){ const q=(pagSearch||'').trim().toLowerCase(); return PAGOS.filter(p=>{ if(pagMes&&p.mes!==pagMes) return false; if(pagCat&&p.categoria!==pagCat) return false; if(pagProp&&p.propiedad!==pagProp) return false; if(pagEstado&&(p.estado||'')!==pagEstado) return false; const f=(p.fecha||''); if(pagFrom&&f&&f<pagFrom) return false; if(pagTo&&f&&f>pagTo) return false; if(q){ const hay=[p.fecha,p.mes,p.categoria,p.subcategoria,p.propiedad,p.empresa,p.metodo,p.estado,p.consecutivo,p.cuenta,p.factura,p.monto_total,p.base,p.itbms].map(x=>(''+(x==null?'':x)).toLowerCase()).join(' '); if(hay.indexOf(q)<0) return false; } return true; }); }
 async function pagePagos(){
   if(!pagosCan()){ document.getElementById('main').innerHTML='<div class="page-title">💵 Pagos</div><div class="panel" style="color:var(--suave)">No tienes acceso a esta sección.</div>'; return; }
@@ -2768,7 +2769,9 @@ function pagFiltros(){
   const inp='padding:7px 10px;border:1px solid var(--gris2);border-radius:8px;font-size:13px;font-family:inherit;background:#fff';
   const sel=(id,val,opts,ph)=>`<select onchange="pagSet('${id}',this.value)" style="${inp}"><option value="">${ph}</option>${opts.map(o=>`<option ${val===o?'selected':''}>${esc(o)}</option>`).join('')}</select>`;
   const any=(pagMes||pagCat||pagProp||pagEstado||pagFrom||pagTo);
-  return `<div class="panel" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:14px">
+  const toggle=`<div style="margin-bottom:${pagFiltOpen?'10px':'14px'};display:flex;gap:8px;align-items:center;flex-wrap:wrap"><button class="cc-filt-btn ${(any||pagFiltOpen)?'on':''}" onclick="pagToggleFilt()">🔎 Filtros ${pagFiltOpen?'▲':'▼'}${any?' · activos':''}</button>${(any&&!pagFiltOpen)?`<button class="cc-filt-btn" onclick="pagClear()">✕ Limpiar</button>`:''}</div>`;
+  if(!pagFiltOpen) return toggle;
+  return toggle+`<div class="panel" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:14px">
     ${sel('mes',pagMes,meses,'Todos los meses')}
     ${sel('cat',pagCat,cats,'Todas las categorías')}
     ${sel('prop',pagProp,props,'Todas las propiedades')}
@@ -2777,6 +2780,26 @@ function pagFiltros(){
     <label style="font-size:12px;color:var(--suave);display:flex;gap:5px;align-items:center">Hasta<input type="date" value="${esc(pagTo)}" onchange="pagSet('to',this.value)" style="${inp}"></label>
     ${any?`<button class="cc-filt-btn on" onclick="pagClear()">✕ Limpiar</button>`:''}
   </div>`;
+}
+function pagResGrid(nombre){ const r=(typeof RESUMENES!=='undefined'&&RESUMENES)?RESUMENES.find(x=>x.nombre===nombre):null; return (r&&Array.isArray(r.grid))?r.grid:null; }
+function pagNum(v){ let s=(''+(v==null?'':v)).trim(); if(!s||/^#/.test(s)) return 0; let neg=false; if(/^\(.*\)$/.test(s)){ neg=true; s=s.slice(1,-1); } s=s.replace(/[^0-9.\-]/g,''); const n=parseFloat(s); if(isNaN(n)) return 0; return neg?-n:n; }
+function pagResMonthCols(grid){ for(const row of (grid||[])){ const idxs=[]; (row||[]).forEach((c,i)=>{ const v=(''+(c==null?'':c)).trim(); const m=PAG_MESES.find(mm=>v===mm||v.indexOf(mm)===0); if(m && idxs.findIndex(x=>x.mes===m)<0) idxs.push({col:i,mes:m}); }); if(idxs.length>=3) return idxs; } return []; }
+function pagResRow(nombre, re){ const grid=pagResGrid(nombre); if(!grid) return null; const cols=pagResMonthCols(grid); if(!cols.length) return null; for(const row of grid){ const lbl=(''+(((row||[]).find(c=>(''+(c==null?'':c)).trim()!==''))||'')).trim(); if(re.test(lbl)){ const o={}; cols.forEach(({col,mes})=>{ o[mes]=pagNum(row[col]); }); return o; } } return null; }
+function pagGanProps(){
+  const grid=pagResGrid('Ganancia por propiedad'); if(!grid) return [];
+  const cols=pagResMonthCols(grid); if(!cols.length) return [];
+  const isMonth=v=>PAG_MESES.some(mm=>v===mm||v.indexOf(mm)===0);
+  const isHeader=row=>{ const has=(row||[]).filter(c=>isMonth((''+(c==null?'':c)).trim())).length; const lbl=(''+((row||[])[0]==null?'':(row||[])[0])).trim(); return has>=3 && !!lbl && !isMonth(lbl); };
+  const out=[]; let cur=null;
+  for(const row of grid){
+    const lbl0=(''+(((row||[]).find(c=>(''+(c==null?'':c)).trim()!==''))||'')).trim();
+    if(/resumen mensual/i.test(lbl0)) break;
+    if(isHeader(row)){ cur={prop:(''+((row||[])[0]||'')).trim(), ingreso:0, ganancia:0, hasGan:false}; out.push(cur); continue; }
+    if(!cur) continue;
+    if(/^ingreso$/i.test(lbl0)){ cur.ingreso=cols.reduce((s,o)=>s+pagNum(row[o.col]),0); }
+    else if(/^ganancia$/i.test(lbl0)){ cur.ganancia=cols.reduce((s,o)=>s+pagNum(row[o.col]),0); cur.hasGan=true; }
+  }
+  return out.filter(p=>p.prop && (p.hasGan||p.ingreso));
 }
 function pagDonut(entries){
   const cols=['#1f4e79','#2e8b57','#d98c20','#9b59b6','#16a085','#c0392b','#2980b9','#e67e22','#7f8c8d','#34557a'];
@@ -2806,6 +2829,13 @@ function pagDashboard(){
   const nMeses=mesesOrd.length||1, media=totPag/nMeses, ticket=base.length?totPag/base.length:0;
   const nProp=new Set(base.map(p=>p.propiedad).filter(Boolean)).size, nProv=new Set(base.map(p=>p.empresa).filter(Boolean)).size, nCat=new Set(base.map(p=>p.categoria).filter(Boolean)).size;
   const mesMax=mesesOrd.reduce((a,b)=>(porMes[b]>porMes[a]?b:a),mesesOrd[0]||'—');
+  const ingMes=pagResRow('Flujo Real Banco', /^total ingresos/i) || pagResRow('Flujo Mes', /^total ingresos/i) || {};
+  const sumIng=mesesOrd.reduce((s,mm)=>s+(ingMes[mm]||0),0);
+  const hayBanco=mesesOrd.some(mm=>ingMes[mm]);
+  const gprops=pagGanProps();
+  const gIng=gprops.reduce((s,p)=>s+p.ingreso,0), gGan=gprops.reduce((s,p)=>s+p.ganancia,0), gMargen=gIng>0?(gGan/gIng*100):null;
+  const hayIng=hayBanco||gprops.length>0;
+  const barList=(arr,valf,top,neg)=>{ const a=arr.slice().sort((x,y)=>valf(y)-valf(x)); const sel=neg?a.slice(-top).reverse():a.slice(0,top); const mx=Math.max(1,...sel.map(x=>Math.abs(valf(x))||0)); return sel.length?sel.map(x=>{ const v=valf(x); return `<div class="kp-row"><span class="kp-k">${esc(x.prop)}</span><span class="kp-bar"><i style="width:${Math.round(Math.abs(v)/mx*100)}%${v<0?';background:#c0392b':''}"></i></span><b class="kp-v"${v<0?' style="color:#c0392b"':''}>${pagMoney(v)}</b></div>`; }).join(''):'<div style="color:var(--suave);font-size:13px">Sin datos</div>'; };
   const agg=key=>{ const o={}; base.forEach(p=>{ const k=p[key]||'—'; o[k]=(o[k]||0)+M(p.monto_total); }); return Object.entries(o).sort((a,b)=>b[1]-a[1]); };
   const topOtros=(key,top)=>{ const arr=agg(key); const head=arr.slice(0,top); const rest=arr.slice(top).reduce((s,e)=>s+e[1],0); if(rest>0) head.push(['Otros',rest]); return head; };
   const rank=(key,top)=>{ const o={},c={}; base.forEach(p=>{ const k=p[key]||'—'; o[k]=(o[k]||0)+M(p.monto_total); c[k]=(c[k]||0)+1; }); const arr=Object.entries(o).sort((a,b)=>b[1]-a[1]).slice(0,top); const mx=Math.max(1,...arr.map(x=>x[1])); const tot=Object.values(o).reduce((a,b)=>a+b,0)||1; return arr.length?arr.map(([k,v])=>`<div class="kp-row"><span class="kp-k">${esc(k)} <span style="color:var(--suave);font-size:11px">(${c[k]})</span></span><span class="kp-bar"><i style="width:${Math.round(v/mx*100)}%"></i></span><b class="kp-v">${pagMoney(v)} <span style="color:var(--suave);font-weight:400;font-size:11px">${Math.round(v/tot*100)}%</span></b></div>`).join(''):'<div style="color:var(--suave);font-size:13px">Sin datos</div>'; };
@@ -2824,6 +2854,9 @@ function pagDashboard(){
       ${kpi(kM(totPag),'Total pagado')}
       ${kpi(kM(totPorPag),'Por pagar','#c0392b')}
       ${kpi(kM(totAll),'Total (todo)')}
+      ${hayBanco?kpi(kM(sumIng),'Ingresos (banco)'):''}
+      ${gprops.length?kpi(kM(gGan),'Ganancia gestión','#1e8a5a'):''}
+      ${(gprops.length&&gMargen!=null)?kpi(Math.round(gMargen)+'%','Margen gestión'):''}
       ${kpi(kM(itbms),'ITBMS pagado')}
       ${kpi(kM(media),'Media mensual')}
       ${kpi(kM(ticket),'Ticket medio')}
@@ -2835,6 +2868,12 @@ function pagDashboard(){
     <div class="panel"><h2 style="margin-top:0">📅 Pagado por mes <span style="font-size:12px;font-weight:400;color:var(--suave)">(▲▼ variación vs mes anterior)</span></h2>${mesRows}
       <div style="display:flex;justify-content:space-between;padding:8px 0 0;border-top:1px dashed var(--gris2);margin-top:6px;font-weight:700"><span>Acumulado</span><span>${pagMoney(acc)}</span></div>
       <div style="font-size:12px;color:var(--suave);margin-top:6px">Mes más alto: <b>${esc(mesMax)}</b> (${pagMoney(porMes[mesMax]||0)}) · Media: ${pagMoney(media)}</div></div>
+    ${hayBanco?`<div class="panel"><h2 style="margin-top:0">📈 Ingresos vs pagos por mes</h2>
+      <p style="font-size:12px;color:var(--suave);margin:-4px 0 10px">Ingresos = dinero recibido (hoja "Flujo Real Banco", toda la empresa por mes). Pagos = de esta sección. Diferencia = ingresos − pagos (flujo de caja aproximado).</p>
+      <div class="asg-scroll"><table class="asg-table"><thead><tr><th>Mes</th><th style="text-align:right">Ingresos</th><th style="text-align:right">Pagos</th><th style="text-align:right">Diferencia</th></tr></thead><tbody>
+      ${mesesOrd.map(mm=>{ const ing=ingMes[mm]||0, pa=porMes[mm]||0, di=ing-pa; return `<tr><td>${esc(mm)}</td><td style="text-align:right;white-space:nowrap">${pagMoney(ing)}</td><td style="text-align:right;white-space:nowrap">${pagMoney(pa)}</td><td style="text-align:right;white-space:nowrap;color:${di<0?'#c0392b':'#1e8a5a'}">${pagMoney(di)}</td></tr>`; }).join('')}
+      <tr style="font-weight:800;border-top:2px solid var(--gris2)"><td>Total</td><td style="text-align:right;white-space:nowrap">${pagMoney(sumIng)}</td><td style="text-align:right;white-space:nowrap">${pagMoney(totPag)}</td><td style="text-align:right;white-space:nowrap;color:${(sumIng-totPag)<0?'#c0392b':'#1e8a5a'}">${pagMoney(sumIng-totPag)}</td></tr>
+      </tbody></table></div></div>`:''}
     <div class="kp-grid2">
       <div class="panel"><h2 style="margin-top:0">🥧 Distribución por categoría</h2>${pagDonut(topOtros('categoria',8))}</div>
       <div class="panel"><h2 style="margin-top:0">🥧 Distribución por método</h2>${pagDonut(topOtros('metodo',6))}</div>
@@ -2852,6 +2891,12 @@ function pagDashboard(){
       <div class="panel"><h2 style="margin-top:0">🧾 Con factura vs sin factura</h2>${pagDonut(topOtros('factura',4).map(e=>[e[0]==='Si'?'Con factura':(e[0]==='No'?'Sin factura':(e[0]||'Sin dato')),e[1]]))}</div>
     </div>
     <div class="panel"><h2 style="margin-top:0">🧾 ITBMS por mes</h2>${itbRows}<div style="display:flex;justify-content:space-between;padding:8px 0 0;border-top:1px dashed var(--gris2);margin-top:6px;font-weight:700"><span>Total ITBMS</span><span>${pagMoney(itbms)}</span></div></div>
+    ${gprops.length?`<div class="panel" style="background:#f3fbf6;border-left:5px solid #1e8a5a"><b>🏆 Ganancia de gestión por propiedad</b> <span style="font-size:12px;color:var(--suave)">(hoja "Ganancia por propiedad" · ${gprops.length} propiedades · acumulado)</span><div style="display:flex;gap:24px;flex-wrap:wrap;margin-top:6px;font-size:13.5px"><span>Ingreso gestión: <b>${pagMoney(gIng)}</b></span><span>Ganancia: <b style="color:#1e8a5a">${pagMoney(gGan)}</b></span><span>Margen: <b>${gMargen==null?'—':Math.round(gMargen)+'%'}</b></span></div></div>
+    <div class="kp-grid2">
+      <div class="panel"><h2 style="margin-top:0">🏠 Ingresos por propiedad (top)</h2>${barList(gprops,p=>p.ingreso,14)}</div>
+      <div class="panel"><h2 style="margin-top:0">🏆 Ganancia por propiedad (top)</h2>${barList(gprops,p=>p.ganancia,14)}</div>
+    </div>
+    <div class="panel"><h2 style="margin-top:0">📉 Propiedades con menor ganancia / en pérdida</h2><p style="font-size:12px;color:var(--suave);margin:-4px 0 10px">De la hoja "Ganancia por propiedad" (acumulado del periodo). En rojo, pérdidas.</p>${barList(gprops,p=>p.ganancia,14,true)}</div>`:''}
     <div class="panel"><h2 style="margin-top:0">📊 Comparativa por categoría y mes</h2><p style="font-size:12px;color:var(--suave);margin:-4px 0 10px">Top 12 categorías. Cada columna es un mes; última columna, el total de la categoría.</p>${pivot}</div>
     <div class="kp-grid2">
       <div class="panel"><h2 style="margin-top:0">🔝 Pagos más grandes</h2>${topPagos.length?topPagos.map(p=>fila(`${esc(p.propiedad||p.empresa||'—')} <span style="color:var(--suave);font-size:11px">· ${esc(p.categoria||'')} · ${esc(p.mes||'')}</span>`,pagMoney(p.monto_total))).join(''):'<div style="color:var(--suave);font-size:13px">Sin datos</div>'}</div>
