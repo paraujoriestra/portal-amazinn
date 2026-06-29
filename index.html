@@ -7067,7 +7067,7 @@ function asgPSet(k,v){ if(k==='from')asgPFrom=v; else if(k==='to')asgPTo=v; else
 function asgPClear(){ asgPFrom=asgPTo=asgPTipo=asgPUni=''; show('asignaciones'); }
 function asgPQuick(which){ const t=new Date(); const pad=n=>(''+n).padStart(2,'0'); const iso=d=>d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate()); if(which==='mes'){ asgPFrom=iso(new Date(t.getFullYear(),t.getMonth(),1)); asgPTo=iso(t); } else if(which==='15'){ const d=new Date(t); d.setDate(t.getDate()-14); asgPFrom=iso(d); asgPTo=iso(t); } show('asignaciones'); }
 let ASG={pubId:null,equipo:'',fecha:'',unidades:[],comunes:[]};
-let ASG_TRAB=[], ASG_TRAB_FULL=[], ASG_UNI=[], ASG_AREA=[], ASG_PUBS=[];
+let ASG_TRAB=[], ASG_TRAB_FULL=[], ASG_UNI=[], ASG_AREA=[], ASG_PUBS=[], ASG_EDIF=[], ASG_UNIS=[];
 function asgCan(){ return CAN_MANAGE.includes(PROFILE.role); }
 function asgTeamWorkers(){ return ASG_TRAB_FULL.filter(t=>!ASG.equipo||(t.equipo||'')===ASG.equipo).map(t=>t.nombre); }
 function asgSetEquipo(e){ ASG.equipo=e; show('asignaciones'); }
@@ -7097,7 +7097,7 @@ function asgCancelEdit(){ if(!confirm('¿Cancelar esta asignación? Se perderán
 function setAsgTab(t){ asgTab=t; show('asignaciones'); }
 function asgFind(id){ return ASG_PUBS.find(p=>p.id===id); }
 let asgOpenPub=null;
-function asgNewUnit(){ return {unidad:'',checkin:'',tipo:'salida_entrada',cliente:'',pax:'',extra:'',trabajadores:[],t1:'',t2:'',supervisora:'',estado:'pendiente'}; }
+function asgNewUnit(){ return {edificio:'',unidad:'',unidadNombre:'',checkin:'',tipo:'salida_entrada',cliente:'',pax:'',extra:'',trabajadores:[],t1:'',t2:'',supervisora:'',estado:'pendiente'}; }
 function asgTrabAdd(i){ const el=document.getElementById('asgTWin_'+i); if(!el)return; const v=(el.value||'').trim(); const u=ASG.unidades[i]; if(!u){return;} u.trabajadores=Array.isArray(u.trabajadores)?u.trabajadores:asgWorkersOf(u); if(v && !u.trabajadores.includes(v)) u.trabajadores.push(v); el.value=''; asgRenderUTbody(false); setTimeout(()=>{const e=document.getElementById('asgTWin_'+i); if(e)e.focus();},20); }
 function asgTrabDel(i,wi){ const u=ASG.unidades[i]; if(!u)return; u.trabajadores=Array.isArray(u.trabajadores)?u.trabajadores:asgWorkersOf(u); u.trabajadores.splice(wi,1); asgRenderUTbody(false); }
 function asgTimeKey(t){ t=(''+(t||'')).trim(); const m=t.match(/(\d{1,2}):(\d{2})/); if(m) return (+m[1])*60+(+m[2]); const h=t.match(/^(\d{1,2})$/); return h?(+h[1])*60:99999; }
@@ -7418,8 +7418,15 @@ function asgDatalists(){ return `<datalist id="asgUniDL">${ASG_UNI.map(x=>`<opti
   <datalist id="asgAreaDL">${ASG_AREA.map(x=>`<option value="${esc(x)}">`).join('')}</datalist>`; }
 function asgUnidadRows(){
   const edit=asgCan();
-  const rows=ASG.unidades.map((u,i)=> edit ? `<tr>
-    <td><input list="asgUniDL" value="${esc(u.unidad)}" placeholder="Buscar unidad…" oninput="asgUpdU(${i},'unidad',this.value)" class="asg-cell asg-cell-w"></td>
+  const edOpts=cur=>`<option value="">— Edificio —</option>${ASG_EDIF.map(e=>`<option ${cur===e?'selected':''}>${esc(e)}</option>`).join('')}`;
+  const unOpts=(ed,cur)=>{ const us=ASG_UNIS.filter(x=>x.edificio===ed).sort((a,b)=>(a.orden||0)-(b.orden||0)||String(a.nombre).localeCompare(String(b.nombre))); return `<option value="">— Unidad —</option>${us.map(x=>`<option ${cur===x.nombre?'selected':''}>${esc(x.nombre)}</option>`).join('')}`; };
+  const rows=ASG.unidades.map((u,i)=>{
+    if(u.edificio===undefined) u.edificio='';
+    if(u.unidadNombre===undefined){ if(u.unidad && u.unidad.indexOf(' · ')>-1){ const pp=u.unidad.split(' · '); if(!u.edificio) u.edificio=pp[0]; u.unidadNombre=pp.slice(1).join(' · '); } else { u.unidadNombre=u.edificio?'':(u.unidad||''); } }
+    return edit ? `<tr>
+    <td class="asg-act"><button onclick="asgDupUnidad(${i})" title="Duplicar esta fila">⧉</button></td>
+    <td><select onchange="asgSetEdificio(${i},this.value)" class="asg-cell" style="min-width:120px">${edOpts(u.edificio)}</select></td>
+    <td><select onchange="asgSetUnidad(${i},this.value)" class="asg-cell" ${u.edificio?'':'disabled'} style="min-width:110px">${unOpts(u.edificio,u.unidadNombre)}</select></td>
     <td><input type="time" value="${esc(u.checkin||'')}" oninput="asgUpdU(${i},'checkin',this.value)" class="asg-cell asg-cell-s" title="Hora de check-in del huésped"></td>
     <td><select onchange="asgUpdU(${i},'tipo',this.value)" class="asg-cell">${ASG_TIPO.map(o=>`<option value="${o[0]}" ${u.tipo===o[0]?'selected':''}>${o[1]}</option>`).join('')}</select></td>
     <td><input value="${esc(u.cliente||'')}" placeholder="Cliente…" oninput="asgUpdU(${i},'cliente',this.value)" class="asg-cell"></td>
@@ -7428,9 +7435,13 @@ function asgUnidadRows(){
     <td style="min-width:170px">${asgWorkersOf(u).map((w,wi)=>`<span style="display:inline-flex;align-items:center;gap:4px;background:#e7eef7;color:#1b3a5b;padding:2px 7px;border-radius:12px;font-size:11.5px;font-weight:600;margin:0 4px 4px 0">${esc(w)} <span onclick="asgTrabDel(${i},${wi})" style="cursor:pointer;color:#c0392b">✕</span></span>`).join('')}<input list="asgTrabDL" id="asgTWin_${i}" placeholder="+ trabajador" onkeydown="if(event.key==='Enter'){event.preventDefault();asgTrabAdd(${i});}" onchange="asgTrabAdd(${i})" class="asg-cell" style="min-width:120px;margin-top:2px"></td>
     <td><input list="asgTrabDL" value="${esc(u.supervisora)}" placeholder="Supervisora…" oninput="asgUpdU(${i},'supervisora',this.value)" class="asg-cell"></td>
     <td class="asg-act"><button onclick="asgDelUnidad(${i})" title="Quitar fila">🗑</button></td></tr>`
-    : `<tr><td><b>${esc(u.unidad)}</b></td><td>${u.checkin?'🕐 '+esc(u.checkin):''}</td><td>${asgTipoLabel(u.tipo)}</td><td>${esc(u.cliente||'')}</td><td>${esc(u.pax)}</td><td>${u.extra?`<span class="asg-nota">📝 ${esc(u.extra)}</span>`:''}</td><td>${esc(asgWorkersOf(u).join(', '))}</td><td>${esc(u.supervisora)}</td></tr>`).join('');
-  return rows||`<tr><td colspan="${edit?9:8}" style="color:var(--suave)">Sin unidades. Añade una fila.</td></tr>`;
+    : `<tr><td></td><td>${esc(u.edificio||'')}</td><td><b>${esc(u.unidadNombre||u.unidad||'')}</b></td><td>${u.checkin?'🕐 '+esc(u.checkin):''}</td><td>${asgTipoLabel(u.tipo)}</td><td>${esc(u.cliente||'')}</td><td>${esc(u.pax)}</td><td>${u.extra?`<span class="asg-nota">📝 ${esc(u.extra)}</span>`:''}</td><td>${esc(asgWorkersOf(u).join(', '))}</td><td>${esc(u.supervisora)}</td></tr>`;
+  }).join('');
+  return rows||`<tr><td colspan="${edit?11:10}" style="color:var(--suave)">Sin unidades. Añade una fila.</td></tr>`;
 }
+function asgSetEdificio(i,v){ const u=ASG.unidades[i]; if(!u)return; u.edificio=v; u.unidadNombre=''; u.unidad=''; asgRenderUTbody(false); }
+function asgSetUnidad(i,v){ const u=ASG.unidades[i]; if(!u)return; u.unidadNombre=v; u.unidad=(u.edificio?u.edificio+' · ':'')+v; asgRefreshResumen(); }
+function asgDupUnidad(i){ const u=ASG.unidades[i]; if(!u)return; const copy=JSON.parse(JSON.stringify(u)); ASG.unidades.splice(i+1,0,copy); asgRenderUTbody(false); }
 function asgComunRows(){
   const edit=asgCan();
   const rows=ASG.comunes.map((c,i)=> edit ? `<tr>
@@ -7461,9 +7472,9 @@ function asgRenderEditor(){
       ${edit?`<button class="btn ghost" style="margin-left:auto" onclick="asgCancelEdit()">✕ Cancelar</button><button class="btn" onclick="asgPublicar()">${ASG.pubId!=null?'💾 Actualizar publicación':'✓ Publicar'}</button>`:''}
     </div>
     <div class="panel"><h2 style="margin-top:0">🏠 Unidades</h2>
-      <div class="asg-scroll"><table class="asg-table"><thead><tr><th style="min-width:150px">Unidad</th><th>🕐 Check-in</th><th style="min-width:155px">Tipo</th><th>Cliente</th><th>Nº pax</th><th>Extra / nota</th><th style="min-width:170px">Trabajadores</th><th>Supervisora</th>${edit?'<th></th>':''}</tr></thead>
+      <div class="asg-scroll"><table class="asg-table"><thead><tr><th></th><th style="min-width:130px">Edificio</th><th style="min-width:110px">Unidad</th><th>🕐 Check-in</th><th style="min-width:155px">Tipo</th><th>Cliente</th><th>Nº pax</th><th>Extra / nota</th><th style="min-width:170px">Trabajadores</th><th>Supervisora</th>${edit?'<th></th>':''}</tr></thead>
         <tbody id="asgUTbody">${asgUnidadRows()}</tbody></table></div>
-      ${edit?`<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px"><button class="btn ghost" onclick="asgAddUnidad()">+ Añadir unidad</button><button class="btn ghost" onclick="asgSortByCheckin()">🕐 Ordenar por check-in</button></div>`:''}
+      ${edit?`<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px"><button class="btn ghost" onclick="asgAddUnidad()">+ Añadir unidad</button></div>`:''}
     </div>
     ${edit?`<div class="panel"><h2 style="margin-top:0">⚖️ Balance de carga del equipo</h2>
       <p style="font-size:12.5px;color:var(--suave);margin:-4px 0 12px">Unidades asignadas por trabajador (incluye 2º trabajador). ⚠ = posible sobrecarga.</p>
@@ -7520,7 +7531,7 @@ async function pageAsignaciones(){
   const [edC,unC,ac]=await Promise.all([ sb.from('mant_edificios').select('nombre').order('nombre'), sb.from('mant_unidades').select('edificio,nombre,tipo,orden'), sb.from('limpieza_areas_cat').select('*').order('nombre') ]);
   const _eds=edC.data||[], _uns=unC.data||[]; const _opts=[];
   _eds.forEach(e=>{ const ap=_uns.filter(u=>u.edificio===e.nombre).sort((a,b)=>(a.orden||0)-(b.orden||0)||String(a.nombre).localeCompare(String(b.nombre))); if(ap.length){ ap.forEach(u=>_opts.push(e.nombre+' · '+u.nombre)); } else { _opts.push(e.nombre); } });
-  ASG_UNI=_opts;
+  ASG_UNI=_opts; ASG_EDIF=_eds.map(e=>e.nombre); ASG_UNIS=_uns;
   const _com=_uns.filter(u=>u.tipo==='comun').sort((a,b)=>String(a.edificio).localeCompare(String(b.edificio))).map(u=>u.edificio+' · '+u.nombre);
   ASG_AREA = _com.length ? _com : (ac.data||[]).map(x=>x.nombre);
   const [pubs,us,cs]=await Promise.all([ sb.from('limpieza_pub').select('*').order('fecha',{ascending:false}), sb.from('limpieza_pub_unidades').select('*').order('orden'), sb.from('limpieza_pub_comunes').select('*').order('orden') ]);
