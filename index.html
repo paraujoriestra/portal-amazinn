@@ -2803,7 +2803,7 @@ function pagDashboard(){
     </div>`;
 }
 function pagDetalle(){
-  const all=pagFiltered();
+  const all=pagFiltered().slice().sort((a,b)=>{ const ya=(parseInt(a.anio)||0)-(parseInt(b.anio)||0); if(ya) return ya; const ma=PAG_MESES.indexOf(a.mes)-PAG_MESES.indexOf(b.mes); if(ma) return ma; return (parseInt((''+(a.consecutivo||'')).trim())||0)-(parseInt((''+(b.consecutivo||'')).trim())||0); });
   const CAP=5000;
   const L=all.slice(0,CAP);
   const tot=all.reduce((s,p)=>s+(parseFloat(p.monto_total)||0),0);
