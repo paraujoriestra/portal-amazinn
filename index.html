@@ -865,6 +865,15 @@
   .b-red{background:#fbeae8;color:var(--rojo)} .b-amber{background:#fbf2e0;color:var(--amarillo)} .b-grey{background:#eef1f5;color:var(--suave)}
   body.dark{--azul:#cfe0f2;--azul-claro:#22324a}
   body.dark nav.side a.active{background:#1f4e79 !important;color:#fff !important}
+  .inc-chk{display:inline-flex;align-items:center;gap:8px;border:1px solid var(--gris2);border-radius:10px;padding:9px 13px;font-size:13.5px;font-weight:600;color:#3a4654;cursor:pointer;background:#fff;transition:border-color .15s,background .15s,color .15s;user-select:none}
+  .inc-chk:hover{border-color:var(--azul)}
+  .inc-chk input{width:16px;height:16px;cursor:pointer;accent-color:var(--azul);margin:0}
+  .inc-chk:has(input:checked){border-color:var(--azul);background:var(--azul-claro);color:var(--azul)}
+  .inc-chk.danger input{accent-color:#c0392b}
+  .inc-chk.danger:has(input:checked){border-color:#c0392b;background:#fdecea;color:#c0392b}
+  button.btn-busy{pointer-events:none;opacity:.8;position:relative}
+  button.btn-busy::after{content:"";position:absolute;top:50%;right:9px;width:13px;height:13px;margin-top:-7px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:btnspin .7s linear infinite}
+  @keyframes btnspin{to{transform:rotate(360deg)}}
 </style>
 </head>
 <body>
@@ -1229,6 +1238,7 @@ const NAV=[
   {id:'backup',ic:'💾',t:'Copia de seguridad', owner:true},
 ];
 const CAN_MANAGE=['responsable','direccion','admin','propietario'];
+(function(){ document.addEventListener('click',function(e){ var b=(e.target&&e.target.closest)?e.target.closest('button'):null; if(!b||b.getAttribute('data-nobusy')!=null||b.classList.contains('btn-busy')) return; var ref=b; setTimeout(function(){ if(document.contains(ref)&&!ref.classList.contains('btn-busy')){ ref.classList.add('btn-busy'); setTimeout(function(){ if(document.contains(ref)) ref.classList.remove('btn-busy'); },15000); } },140); }, true); })();
 let supTab='electricidad', navOpen=null;
 let navPinned=(()=>{try{return localStorage.getItem('navPinned')==='1';}catch(e){return false;}})();
 function toggleNavPin(){ navPinned=!navPinned; try{localStorage.setItem('navPinned',navPinned?'1':'0');}catch(e){} document.body.classList.toggle('nav-pinned',navPinned); }
@@ -2743,7 +2753,7 @@ function pagRender(){
       <button onclick="pagMatchGo(-1)" class="cc-filt-btn" style="padding:6px 11px" title="Coincidencia anterior">▲</button>
       <button onclick="pagMatchGo(1)" class="cc-filt-btn" style="padding:6px 11px" title="Coincidencia siguiente">▼</button>
       ${canImp?`<label class="btn ghost" style="cursor:pointer">📥 Importar Excel<input type="file" accept=".xlsx,.xls" style="display:none" onchange="pagosImport(this)"></label>`:''}
-      ${canImp?`<button class="btn ghost" onclick="pagosSync(this)">🔄 Sincronizar Google</button>`:''}
+      ${canImp?`<button class="btn ghost" data-nobusy="1" onclick="pagosSync(this)">🔄 Sincronizar Google</button>`:''}
       <span style="font-size:12px;color:var(--suave)">${PAGOS.length} pago(s)</span>
     </div>`;
   m.innerHTML=head+'<div id="pagBody"></div>';
@@ -6310,7 +6320,7 @@ function incFormHTML(){
     <textarea id="iDesc" rows="3" required placeholder="Describe el problema con el máximo detalle"></textarea>
     <label>Fotos / vídeo (opcional)</label>
     <input id="iFotos" type="file" accept="image/*,video/*" multiple>
-    <div style="display:flex;gap:18px;flex-wrap:wrap;margin:12px 0 2px"><label style="font-weight:400;display:flex;gap:6px;align-items:center;cursor:pointer"><input type="checkbox" id="iAfecta"> 🛎️ Afecta a un huésped / reserva activa</label><label style="font-weight:400;display:flex;gap:6px;align-items:center;cursor:pointer"><input type="checkbox" id="iFuera"> ⛔ Unidad fuera de servicio</label></div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin:12px 0 4px"><label class="inc-chk"><input type="checkbox" id="iAfecta"><span>🛎️ Afecta a reserva activa</span></label><label class="inc-chk danger"><input type="checkbox" id="iFuera"><span>⛔ Unidad fuera de servicio</span></label></div>
     <div class="row">
       <div><label>Asignar a equipo</label><select id="iEquipo" onchange="incFormEquipo()">${teamOpts}</select></div>
       <div><label>Asignar a persona(s) <small style="color:var(--suave);font-weight:400">(una o varias)</small></label>
@@ -6493,7 +6503,7 @@ function renderIncDetail(id){
       <div><label>Persona</label><select id="ePersona">${perOpts}</select></div></div>
       <div class="row"><div><label>Coste (opcional)</label><input id="eCoste" type="number" min="0" step="0.01" value="${i.coste!=null?i.coste:''}"></div>
       <div><label>Proveedor (opcional)</label><input id="eProv" value="${esc(i.proveedor||'')}"></div></div>
-      <div style="display:flex;gap:18px;flex-wrap:wrap;margin:12px 0 2px"><label style="font-weight:400;display:flex;gap:6px;align-items:center;cursor:pointer"><input type="checkbox" id="eAfecta" ${i.afecta_huesped?'checked':''}> 🛎️ Afecta a huésped</label><label style="font-weight:400;display:flex;gap:6px;align-items:center;cursor:pointer"><input type="checkbox" id="eFuera" ${i.fuera_servicio?'checked':''}> ⛔ Fuera de servicio</label></div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;margin:12px 0 4px"><label class="inc-chk"><input type="checkbox" id="eAfecta" ${i.afecta_huesped?'checked':''}><span>🛎️ Afecta a reserva activa</span></label><label class="inc-chk danger"><input type="checkbox" id="eFuera" ${i.fuera_servicio?'checked':''}><span>⛔ Unidad fuera de servicio</span></label></div>
       <div class="inc-final"><button class="btn-ok" onclick="incSaveEdit(${i.id})">Guardar cambios</button><button class="btn-sm ghost" onclick="incToggleEdit()">Cancelar</button></div></div>`;
   })() : '';
   return `
@@ -6506,7 +6516,7 @@ function renderIncDetail(id){
     <div class="inc-card-top"><span class="badge ${u[1]}">${u[2]} ${u[0]}</span><span class="badge ${e[1]}">${running?'<span class="inc-dot"></span> ':''}${e[0]}</span>${incVencida(i)?'<span class="badge b-red">⏰ Fuera de plazo</span>':''}</div>
     <h2 style="margin:8px 0 2px">🏠 ${esc(i.edificio||'—')}${i.unidad?' · '+esc(i.unidad):''}</h2>
     <p style="font-size:15px;white-space:pre-wrap;margin:6px 0 0">${esc(i.descripcion||'')}</p>
-    ${(i.afecta_huesped||i.fuera_servicio)?`<div class="inc-kv" style="margin-top:8px">${i.afecta_huesped?'<span class="badge b-amber">🛎️ Afecta a huésped</span> ':''}${i.fuera_servicio?'<span class="badge b-red">⛔ Unidad fuera de servicio</span>':''}</div>`:''}
+    ${(i.afecta_huesped||i.fuera_servicio)?`<div class="inc-kv" style="margin-top:8px">${i.afecta_huesped?'<span class="badge b-amber">🛎️ Afecta a reserva activa</span> ':''}${i.fuera_servicio?'<span class="badge b-red">⛔ Unidad fuera de servicio</span>':''}</div>`:''}
     <details class="inc-more" style="margin-top:12px"><summary style="cursor:pointer;font-weight:600;color:var(--azul);font-size:13.5px">ℹ️ Ver más detalles de la incidencia</summary>
       <div style="margin-top:10px">
         <div class="inc-kv"><b>Categoría:</b> ${incCatLabel(i.categoria)}</div>
