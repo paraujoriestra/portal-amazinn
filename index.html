@@ -4421,7 +4421,7 @@ function reclShowPreview(url,nombre,path){
 function reclEscClose(e){ if(e.key==='Escape') reclClosePreview(); }
 function reclClosePreview(){ const o=document.getElementById('reclPrevOv'); if(o)o.remove(); document.removeEventListener('keydown',reclEscClose); }
 /* ===================== CIERRES DE CAJA (hotel · Panamá) ===================== */
-let ccTab='historial', ccView=null, CCAJA=[], ccFrom='', ccTo='', ccFiltOpen=false, ccSoloPend=false, ccLugar='Hotel Mio', ccGastos=[];
+let ccTab='historial', ccView=null, CCAJA=[], ccFrom='', ccTo='', ccFiltOpen=false, ccSoloPend=false, ccLugar='', ccGastos=[];
 const CC_BILLETES=[100,50,20,10,5,1];
 const CC_MONEDAS=[1,0.50,0.25,0.10,0.05,0.01];
 const CC_METODOS=[['efectivo','💵 Efectivo'],['tarjeta','💳 Tarjeta'],['ach','🏦 Transferencia / ACH'],['otros','➕ Otros']];
@@ -4444,7 +4444,7 @@ function ccM(n){ return '$'+((parseFloat(n)||0).toFixed(2)); }
 function ccAllowedNow(){ if(isAdmin())return true; if(PROFILE.role==='direccion')return true; const dep=(PROFILE.dept||''),area=(PROFILE.area||''); if(dep==='Finanzas'||area==='Finanzas')return true; return false; }
 function ccCan(){ return ccAllowedNow(); }
 function ccDid(v){ return 'cc_d_'+(''+v).replace('.','_'); }
-function ccSetTab(t){ ccTab=t; ccView=null; if(t==='nuevo')ccGastos=[]; show('cierres'); }
+function ccSetTab(t){ ccTab=t; ccView=null; if(t==='nuevo'){ccGastos=[];ccLugar='';} show('cierres'); }
 function ccOpen(id){ ccView=id; show('cierres'); }
 function ccBack(){ ccView=null; show('cierres'); }
 function ccToggleFilt(){ ccFiltOpen=!ccFiltOpen; show('cierres'); }
@@ -4541,9 +4541,10 @@ function ccForm(){
   const hoy=hoyISO(), ayer=ccAyerISO();
   const lugar=ccLugar||'Hotel Mio'; const esCaja=ccEsCaja(lugar); const esMag=lugar==='Hotel Magnolia';
   const metRows=CC_METODOS.map(([k,l])=>`<div><label style="font-size:12.5px;color:var(--suave)">${l}</label><input id="cc_m_${k}" type="number" min="0" step="0.01" value="" placeholder="0.00" oninput="ccCalc()" style="${ss}"></div>`).join('');
-  const lugarSel=`<select id="cc_lugar" onchange="ccSetLugar(this.value)" style="${ss}">${CC_LUGARES.map(L=>`<option ${L===lugar?'selected':''}>${esc(L)}</option>`).join('')}</select>`;
+  const lugarSel=`<select id="cc_lugar" onchange="ccSetLugar(this.value)" style="${ss}"><option value="" ${!lugar?'selected':''}>— Elige el lugar —</option>${CC_LUGARES.map(L=>`<option ${L===lugar?'selected':''}>${esc(L)}</option>`).join('')}</select>`;
   const fechaInput=`<input id="cc_fecha" type="date" value="${esc(hoy)}" min="${esc(ayer)}" max="${esc(hoy)}" style="${ss}"><div style="font-size:11.5px;color:var(--suave);margin-top:3px">Solo hoy o ayer (para cierres de noche pasadas las 00:00).</div>`;
   const back=`<div style="margin-bottom:12px"><button onclick="ccSetTab('historial')" style="background:none;border:none;color:var(--azul);font-weight:600;font-size:14px;cursor:pointer;font-family:inherit;padding:6px 4px">← Volver al listado</button></div>`;
+  if(!lugar){ return back+`<div class="cc-cols"><div class="panel"><h2 style="margin-top:0">Nuevo cierre</h2><label>Lugar</label>${lugarSel}<div style="font-size:13px;color:var(--suave);margin-top:8px">👉 Selecciona primero el lugar para empezar el cierre.</div></div></div>`; }
   if(!esCaja){
     return back+`<div class="cc-cols"><div class="panel"><h2 style="margin-top:0">Cierre · ${esc(lugar)}</h2>
       <p style="font-size:12px;color:var(--suave);margin:-4px 0 8px">Sin turno, fondo de caja ni gastos. Solo registro de ingresos.</p>
@@ -4610,7 +4611,8 @@ function ccCalc(){
 async function ccSave(){
   const g=id=>(document.getElementById(id)||{}).value;
   const gn=id=>parseFloat((document.getElementById(id)||{}).value)||0;
-  const lugar=g('cc_lugar')||ccLugar||'Hotel Mio';
+  const lugar=g('cc_lugar')||ccLugar||'';
+  if(!lugar){ alert('Selecciona el lugar del cierre.'); return; }
   const esCaja=ccEsCaja(lugar); const esMag=lugar==='Hotel Magnolia';
   const fechaSel=g('cc_fecha')||hoyISO();
   if(fechaSel!==hoyISO() && fechaSel!==ccAyerISO()){ alert('La fecha solo puede ser el día de hoy o el de ayer.'); return; }
