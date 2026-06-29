@@ -1888,17 +1888,7 @@ async function turnosMap(dept){const{data}=await sb.from('turnos').select('*').e
 function isLibreTurno(t){ return /libre/i.test((t&&t.nombre)||''); }
 // Paleta viva por turno (colores marcados y distintos entre sí). Libre siempre verde.
 const HOR_VIVID=['#e23b3b','#f4b400','#2f7fe0','#d63bb5','#8b919b','#16a085','#e8771e','#7c4dff','#0ea5e9','#c026d3','#65a30d','#db2777'];
-function horVivid(t){ if(!t) return '#e5e7eb';
-  const n=(t.nombre||'').toLowerCase();
-  if(/libre/.test(n)) return '#9ca3af';       // Gris: día libre
-  if(/ma[ñn]ana/.test(n)) return '#22c55e';   // Verde: mañana
-  if(/noche/.test(n)) return '#2f2f2f';        // Negro mate: noche
-  if(/medi/.test(n)) return '#e8771e';         // Naranja: medio
-  if(/tarde/.test(n)) return '#2f7fe0';        // Azul: tarde
-  const list=(TURNOS_TIPO||[]).filter(x=>!/libre|ma[ñn]ana|tarde|noche|medi/.test((x.nombre||'').toLowerCase()));
-  let idx=list.findIndex(x=>String(x.id)===String(t.id)); if(idx<0) idx=0;
-  return HOR_VIVID[idx%HOR_VIVID.length];
-}
+function horVivid(t){ return (t&&t.color)?t.color:'#e5e7eb'; }
 function horTextOn(hex){ const c=horParseColor(hex); const lum=0.299*c[0]+0.587*c[1]+0.114*c[2]; return lum>150?'#1a1a1a':'#ffffff'; }
 function horLegendFrom(rows){
   const seen={};
@@ -2065,7 +2055,7 @@ async function horGrid(){
   const rows=days.map(d=>{ const iso=isoD(d); const wk=isWk(d);
     return `<tr><td class="hday${wk?' wknd':''}"><b>${d.getDate()} ${HOR_MES[d.getMonth()]}</b><small>${HOR_DOW[d.getDay()]}</small></td>
       ${people.map(p=>{ const ab=abs[p.id+'|'+iso]; if(ab) return `<td class="hedit${wk?' wknd':''}" style="text-align:center"><span class="badge ${ab==='vac'?'b-grey':'b-amber'}" title="${ab==='vac'?'Vacaciones aprobadas':'Baja/ausencia'}">${ab==='vac'?'🌴':'🤕'}</span></td>`; const cur=map[p.id+'|'+iso]||'';
-        return `<td class="hedit${wk?' wknd':''}"><select class="tcell2" data-emp="${p.id}" data-name="${esc(p.nombre)}" data-dept="${esc(p.dept||'')}" data-fecha="${iso}"><option value="">—</option>${chosen.map(t=>`<option value="${t.id}" ${String(cur)===String(t.id)?'selected':''}>${esc(t.nombre)}</option>`).join('')}</select><select class="uloc2" data-emp="${p.id}" data-fecha="${iso}" style="width:100%;margin-top:4px;font-size:10px;padding:3px 4px;border:1px solid var(--gris2);border-radius:6px;color:#333;background:#fff">${ubicDayOpts(locDayMap[p.id+'|'+iso]||locMap[p.id]||'')}</select></td>`;
+        return `<td class="hedit${wk?' wknd':''}"><select class="tcell2" data-emp="${p.id}" data-name="${esc(p.nombre)}" data-dept="${esc(p.dept||'')}" data-fecha="${iso}"><option value="">—</option>${chosen.map(t=>`<option value="${t.id}" ${String(cur)===String(t.id)?'selected':''}>${esc(t.nombre)}</option>`).join('')}</select><select class="uloc2" data-emp="${p.id}" data-fecha="${iso}" style="width:100%;margin-top:4px;font-size:10px;padding:3px 4px;border:1px solid var(--gris2);border-radius:6px;color:#333;background:#fff">${ubicDayOpts(locDayMap[p.id+'|'+iso]||'')}</select></td>`;
       }).join('')}</tr>`; }).join('');
   return `<div class="panel"><div style="margin-bottom:12px;display:flex;gap:8px;flex-wrap:wrap">
       <button class="btn" onclick="horGuardar()">💾 Guardar y publicar</button>
@@ -3953,6 +3943,9 @@ function tpRowsHTML(){
     <button type="button" class="btn ghost" style="padding:6px 10px" onclick="tpDelRow(${i})">✕</button>
   </div>`).join('');
 }
+async function ttColor(id,color){ const{error}=await sb.from('turnos_tipo').update({color:color}).eq('id',id); if(error){alert(error.message);return;} await loadTurnosTipo(); toast('✓ Color actualizado'); show('catalogos'); }
+async function ttDel(id){ if(!confirm('¿Borrar este tipo de turno? (no afecta a horarios ya publicados)'))return; const{error}=await sb.from('turnos_tipo').delete().eq('id',id); if(error){alert('No se pudo borrar (¿está en uso en algún horario?): '+error.message);return;} await loadTurnosTipo(); toast('Turno borrado'); show('catalogos'); }
+function ttPanelHTML(){ if(!(TURNOS_TIPO&&TURNOS_TIPO.length)) return ''; return `<div class="panel" style="margin-top:16px"><h2>🎨 Tipos de turno y colores</h2><p style="font-size:12.5px;color:var(--suave);margin:-4px 0 10px">Cambia el color de cada turno. Estos colores se usan en la leyenda y en los horarios publicados.</p><div style="display:flex;flex-direction:column;gap:8px">${TURNOS_TIPO.map(t=>`<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><input type="color" value="${esc(t.color||'#cccccc')}" onchange="ttColor(${t.id},this.value)" style="width:42px;height:30px;border:1px solid var(--gris2);border-radius:6px;padding:0;cursor:pointer"><b style="min-width:130px">${esc(t.nombre)}</b><span style="font-size:12px;color:var(--suave)">${t.hora_ini?esc(t.hora_ini)+'–'+esc(t.hora_fin):''}</span><button class=\"btn ghost\" style=\"padding:4px 9px;font-size:12px;color:#c0392b;margin-left:auto\" onclick=\"ttDel(${t.id})\">🗑</button></div>`).join('')}</div></div>`; }
 function tpEditScope(a,d,e){ tpA=a; tpD=d; tpE=e; tpLoad(); show('catalogos'); }
 async function tpDelScope(a,d,e){ if(!confirm('¿Borrar el preset de '+(a||'—')+' · '+(d||'—')+(e?' · '+e:'')+'?'))return; await sb.from('turnos_preset').delete().eq('area',a).eq('departamento',d).eq('equipo',e); await loadTurnosPreset(); toast('Preset borrado'); show('catalogos'); }
 function tpSavedListHTML(){ const groups={}; (TURNOS_PRESET||[]).forEach(p=>{ const k=(p.area||'')+'||'+(p.departamento||'')+'||'+(p.equipo||''); (groups[k]=groups[k]||[]).push(p); }); const keys=Object.keys(groups).sort(); if(!keys.length) return '<div style="font-size:13px;color:var(--suave);margin-top:14px">No hay presets guardados todavía.</div>'; return `<div style="margin-top:18px;border-top:1px solid var(--gris2);padding-top:12px"><div style="font-weight:600;margin-bottom:8px">Presets guardados</div>${keys.map(k=>{ const pr=k.split('||'); const a=pr[0],d=pr[1],e=pr[2]; const list=groups[k].slice().sort((x,y)=>(x.orden||0)-(y.orden||0)); const turnos=list.map(p=>{ const t=turnoTipo(p.turno_id); return (t?t.nombre:('turno '+p.turno_id))+' '+(p.hora_ini||'')+'–'+(p.hora_fin||''); }).join(' · '); const ea=a.replace(/'/g,"\\'"),ed=d.replace(/'/g,"\\'"),ee=e.replace(/'/g,"\\'"); return `<div style="border:1px solid var(--gris2);border-radius:8px;padding:9px 11px;margin-bottom:8px"><div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;align-items:center"><b style="font-size:13.5px">${esc(a||'—')} · ${esc(d||'—')}${e?' · '+esc(e):' · (todo el depto)'}</b><span style="white-space:nowrap"><button class=\"btn ghost\" style=\"padding:4px 9px;font-size:12px\" onclick=\"tpEditScope('${ea}','${ed}','${ee}')\">✏️ Editar</button> <button class=\"btn ghost\" style=\"padding:4px 9px;font-size:12px;color:#c0392b\" onclick=\"tpDelScope('${ea}','${ed}','${ee}')\">🗑</button></span></div><div style="font-size:12px;color:var(--suave);margin-top:4px">${esc(turnos)}</div></div>`; }).join('')}</div>`; }
@@ -4041,6 +4034,7 @@ async function pageCatalogos(){
         </div>
       </div>
     </div>
+    ${ttPanelHTML()}
     ${tpPanelHTML()}
     <div class="panel" style="margin-top:16px"><h2>🔑 Roles y alcances (referencia)</h2>
       <div style="overflow-x:auto"><table class="rol-tabla"><thead><tr>
