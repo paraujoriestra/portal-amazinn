@@ -4535,7 +4535,7 @@ function reclShowPreview(url,nombre,path){
 function reclEscClose(e){ if(e.key==='Escape') reclClosePreview(); }
 function reclClosePreview(){ const o=document.getElementById('reclPrevOv'); if(o)o.remove(); document.removeEventListener('keydown',reclEscClose); }
 /* ===================== CIERRES DE CAJA (hotel · Panamá) ===================== */
-let ccTab='historial', ccView=null, CCAJA=[], ccFrom='', ccTo='', ccFiltOpen=false, ccSoloPend=false, ccLugar='', ccGastos=[], ccLugarFiltro='', ccCtrlLugar='';
+let ccTab='historial', ccView=null, CCAJA=[], ccFrom='', ccTo='', ccFiltOpen=false, ccSoloPend=false, ccLugar='', ccGastos=[], ccLugarFiltro='', ccCtrlLugar='', ccEditId=null, ccEditRec=null;
 const CC_BILLETES=[100,50,20,10,5,1];
 const CC_MONEDAS=[1,0.50,0.25,0.10,0.05,0.01];
 const CC_METODOS=[['efectivo','💵 Efectivo'],['tarjeta','💳 Tarjeta'],['ach','🏦 Transferencia / ACH'],['otros','➕ Otros']];
@@ -4558,9 +4558,11 @@ function ccM(n){ return '$'+((parseFloat(n)||0).toFixed(2)); }
 function ccAllowedNow(){ if(isAdmin())return true; if(PROFILE.role==='direccion')return true; const dep=(PROFILE.dept||''),area=(PROFILE.area||''); if(dep==='Finanzas'||area==='Finanzas')return true; return false; }
 function ccCan(){ if(typeof zonaRO==='function' && zonaRO('cierres')) return false; return ccAllowedNow(); }
 function ccDid(v){ return 'cc_d_'+(''+v).replace('.','_'); }
-function ccSetTab(t){ ccTab=t; ccView=null; if(t==='nuevo'){ccGastos=[];ccLugar='';} show('cierres'); }
+function ccSetTab(t){ ccEditId=null; ccEditRec=null; ccTab=t; ccView=null; if(t==='nuevo'){ccGastos=[];ccLugar='';} show('cierres'); }
 function ccOpen(id){ ccView=id; show('cierres'); }
-function ccBack(){ ccView=null; show('cierres'); }
+function ccBack(){ ccView=null; ccEditId=null; ccEditRec=null; show('cierres'); }
+function ccEditar(id){ if(typeof zonaRO==='function'&&zonaRO('cierres')){ alert('Tienes esta sección en solo lectura.'); return; } if(!isDireccion()){ alert('Solo Dirección puede editar cierres.'); return; } const c=CCAJA.find(x=>String(x.id)===String(id)); if(!c){ alert('Cierre no encontrado.'); return; } ccEditId=id; ccEditRec=c; ccLugar=c.lugar||''; ccGastos=(Array.isArray(c.gastos_items)?c.gastos_items:[]).map(x=>({monto:x.monto,motivo:x.motivo||'',just:!!x.justificante})); ccView=null; ccTab='nuevo'; show('cierres'); }
+async function ccEliminar(id){ if(typeof zonaRO==='function'&&zonaRO('cierres')){ alert('Tienes esta sección en solo lectura.'); return; } if(!isDireccion()){ alert('Solo Dirección puede eliminar cierres.'); return; } const c=CCAJA.find(x=>String(x.id)===String(id))||{}; if(!confirm('¿Eliminar el cierre de '+(c.lugar||'')+' del '+fechaLarga(c.fecha||'')+(c.turno?(' · '+c.turno):'')+'?\n\nQuedará registrado en Auditoría.')) return; const{error}=await sb.from('cierres_caja').delete().eq('id',id); if(error){ alert('No se pudo eliminar: '+error.message); return; } try{ await auditLog('🗑 Eliminó el cierre de caja · '+(c.lugar||'')+' · '+(c.fecha||'')+(c.turno?(' · '+c.turno):'')+' · ventas '+ccM(c.ventas_total||0),'cierres'); }catch(_e){} toast('✓ Cierre eliminado'); ccView=null; ccEditId=null; ccEditRec=null; ccTab='historial'; show('cierres'); }
 function ccToggleFilt(){ ccFiltOpen=!ccFiltOpen; show('cierres'); }
 function ccSetFilt(k,v){ if(k==='from')ccFrom=v; else ccTo=v; show('cierres'); }
 function ccClearFilt(){ ccFrom=''; ccTo=''; show('cierres'); }
@@ -4663,35 +4665,37 @@ function ccForm(){
   const ss='width:100%;padding:9px 11px;border:1px solid var(--gris2);border-radius:8px;font-family:inherit;font-size:14px';
   const hoy=hoyISO(), ayer=ccAyerISO();
   const lugar=ccLugar||''; const esCaja=ccEsCaja(lugar); const esMag=lugar==='Hotel Magnolia';
-  const metRows=CC_METODOS.map(([k,l])=>`<div><label style="font-size:12.5px;color:var(--suave)">${l}</label><input id="cc_m_${k}" type="number" min="0" step="0.01" value="" placeholder="0.00" oninput="ccCalc()" style="${ss}"></div>`).join('');
+  const ed=(ccEditId&&ccEditRec)?ccEditRec:null;
+  const metRows=CC_METODOS.map(([k,l])=>`<div><label style="font-size:12.5px;color:var(--suave)">${l}</label><input id="cc_m_${k}" type="number" min="0" step="0.01" value="${ed&&ed.metodos&&ed.metodos[k]!=null?esc(ed.metodos[k]):''}" placeholder="0.00" oninput="ccCalc()" style="${ss}"></div>`).join('');
   const lugarSel=`<select id="cc_lugar" onchange="ccSetLugar(this.value)" style="${ss}"><option value="" ${!lugar?'selected':''}>— Elige la ubicación —</option>${CC_LUGARES.map(L=>`<option ${L===lugar?'selected':''}>${esc(L)}</option>`).join('')}</select>`;
-  const fechaInput=`<input id="cc_fecha" type="date" value="${esc(hoy)}" min="${esc(ayer)}" max="${esc(hoy)}" style="${ss}"><div style="font-size:11.5px;color:var(--suave);margin-top:3px">Solo hoy o ayer (para cierres de noche pasadas las 00:00).</div>`;
+  const fechaInput=ed?`<input id="cc_fecha" type="date" value="${esc(ed.fecha||hoy)}" style="${ss}">`:`<input id="cc_fecha" type="date" value="${esc(hoy)}" min="${esc(ayer)}" max="${esc(hoy)}" style="${ss}"><div style="font-size:11.5px;color:var(--suave);margin-top:3px">Solo hoy o ayer (para cierres de noche pasadas las 00:00).</div>`;
   const back=`<div style="margin-bottom:12px"><button onclick="ccSetTab('historial')" style="background:none;border:none;color:var(--azul);font-weight:600;font-size:14px;cursor:pointer;font-family:inherit;padding:6px 4px">← Volver al listado</button></div>`;
   if(!lugar){ return back+`<div class="cc-cols"><div class="panel"><h2 style="margin-top:0">Nuevo cierre</h2><label>Ubicación</label>${lugarSel}<div style="font-size:13px;color:var(--suave);margin-top:8px">👉 Selecciona primero la ubicación para empezar el cierre.</div></div></div>`; }
   if(!esCaja){
     return back+`<div class="cc-cols"><div class="panel"><h2 style="margin-top:0">Cierre · ${esc(lugar)}</h2>
       <p style="font-size:12px;color:var(--suave);margin:-4px 0 8px">Sin turno, fondo de caja ni gastos. Solo registro de ingresos.</p>
       <div class="row"><div><label>Ubicación</label>${lugarSel}</div><div><label>Fecha</label>${fechaInput}</div></div>
-      <label>Responsable</label><input id="cc_resp" value="${esc(PROFILE.nombre||'')}" style="${ss}">
+      <label>Responsable</label><input id="cc_resp" value="${esc((ed?ed.responsable:PROFILE.nombre)||'')}" style="${ss}">
       <h2 style="margin:16px 0 6px">Ingresos por método de pago</h2><div class="row" style="flex-wrap:wrap;gap:10px">${metRows}</div>
-      <label style="margin-top:10px;display:block">Observaciones</label><textarea id="cc_obs" rows="2" style="${ss}" placeholder="Notas…"></textarea>
+      <label style="margin-top:10px;display:block">Observaciones</label><textarea id="cc_obs" rows="2" style="${ss}" placeholder="Notas…">${ed?esc(ed.observaciones||''):''}</textarea>
       <div id="ccResumen" style="margin-top:14px"></div>
-      <div style="margin-top:14px"><button class="btn" onclick="ccSave()">💾 Guardar cierre</button></div>
+      <div style="margin-top:14px"><button class="btn" onclick="ccSave()">${ed?'💾 Actualizar cierre':'💾 Guardar cierre'}</button></div>
     </div></div>`;
   }
   const prevs=(CCAJA||[]).filter(c=>c.lugar===lugar);
   const ccPrev=prevs.length?prevs[0]:null;
   const ccSaldoAnt=ccPrev?Math.round(((parseFloat(ccPrev.fondo_inicial)||0)+(parseFloat(ccPrev.reposicion)||0)-(parseFloat(ccPrev.gastos)||0))*100)/100:null;
   const defFondo=esMag?100:200;
-  const fondoBlock=(ccSaldoAnt!=null)
+  let fondoBlock=(ccSaldoAnt!=null)
     ? `<input id="cc_fondo" type="number" value="${ccSaldoAnt}" readonly style="${ss};background:#eef2f7;color:#243b53;font-weight:700;cursor:not-allowed"><div style="font-size:12px;color:var(--suave);margin-top:4px">🔒 Saldo del cierre anterior de ${esc(lugar)} (${esc(fechaLarga(ccPrev.fecha))}${ccPrev.turno?' · '+esc(ccPrev.turno):''}): fondo inicial + reposición − gastos. No editable.</div>`
     : `<input id="cc_fondo" type="number" min="0" step="0.01" value="${defFondo}" placeholder="0.00" oninput="ccCalc()" style="${ss}"><div style="font-size:12px;color:var(--suave);margin-top:4px">Primer cierre de ${esc(lugar)}: fondo inicial ${ccM(defFondo)}.</div>`;
+  if(ed){ fondoBlock=`<input id="cc_fondo" type="number" min="0" step="0.01" value="${esc(ed.fondo_inicial!=null?ed.fondo_inicial:'')}" oninput="ccCalc()" style="${ss}"><div style="font-size:12px;color:#b9770e;margin-top:4px">✏️ Editando — fondo editable.</div>`; }
   const cambioBlock=esMag?`<label>Caja de cambio (fija)</label><input id="cc_cambio" type="number" value="100" readonly style="${ss};background:#eef2f7;font-weight:700;cursor:not-allowed"><div style="font-size:12px;color:var(--suave);margin-top:4px">🔒 $100 solo para dar cambio. No entra en el cuadre de la caja chica.</div>`:'';
-  const denomRow=(arr,titulo)=>`<div style="font-weight:600;font-size:12.5px;margin:8px 0 4px">${titulo}</div><div class="cc-denoms">${arr.map(v=>`<div class="cc-den"><span>${ccM(v)}</span><input id="${ccDid(v)}" type="number" min="0" step="1" placeholder="0" oninput="ccCalc()"></div>`).join('')}</div>`;
+  const denomRow=(arr,titulo)=>`<div style="font-weight:600;font-size:12.5px;margin:8px 0 4px">${titulo}</div><div class="cc-denoms">${arr.map(v=>`<div class="cc-den"><span>${ccM(v)}</span><input id="${ccDid(v)}" type="number" min="0" step="1" value="${ed&&ed.arqueo&&ed.arqueo[v]?esc(ed.arqueo[v]):''}" placeholder="0" oninput="ccCalc()"></div>`).join('')}</div>`;
   return back+`<div class="cc-cols">
     <div class="panel"><h2 style="margin-top:0">Datos del turno · ${esc(lugar)}</h2>
-      <div class="row"><div><label>Ubicación</label>${lugarSel}</div><div><label>Turno</label><select id="cc_turno" style="${ss}"><option>Mañana</option><option selected>Tarde</option><option>Noche</option></select></div></div>
-      <div class="row"><div><label>Fecha</label>${fechaInput}</div><div><label>Responsable de caja</label><input id="cc_resp" value="${esc(PROFILE.nombre||'')}" style="${ss}"></div></div>
+      <div class="row"><div><label>Ubicación</label>${lugarSel}</div><div><label>Turno</label><select id="cc_turno" style="${ss}">${['Mañana','Tarde','Noche'].map(tt=>`<option ${(ed&&ed.turno?ed.turno:'Tarde')===tt?'selected':''}>${tt}</option>`).join('')}</select></div></div>
+      <div class="row"><div><label>Fecha</label>${fechaInput}</div><div><label>Responsable de caja</label><input id="cc_resp" value="${esc((ed?ed.responsable:PROFILE.nombre)||'')}" style="${ss}"></div></div>
       ${cambioBlock}
       <label>Fondo de caja inicial${esMag?' (caja chica)':''} (USD)</label>${fondoBlock}
       <h2 style="margin:16px 0 6px">Ingresos por método de pago</h2>
@@ -4700,15 +4704,15 @@ function ccForm(){
       <div id="ccGastosBox">${ccGastosRows()}</div>
       <button type="button" class="btn ghost" style="margin-top:8px" onclick="ccAddGasto()">+ Añadir gasto</button>
       <h2 style="margin:16px 0 6px">Reposición / reembolso de caja</h2>
-      <div class="row"><div><label>Importe (USD)</label><input id="cc_repo" type="number" min="0" step="0.01" value="" placeholder="0.00" oninput="ccCalc()" style="${ss}"></div><div><label>Motivo</label><input id="cc_repo_motivo" placeholder="Ej: reembolso de gasto…" style="${ss}"></div></div>
-      <label style="margin-top:10px;display:block">Observaciones</label><textarea id="cc_obs" rows="2" style="${ss}" placeholder="Incidencias del turno, notas…"></textarea>
+      <div class="row"><div><label>Importe (USD)</label><input id="cc_repo" type="number" min="0" step="0.01" value="${ed&&ed.reposicion?esc(ed.reposicion):''}" placeholder="0.00" oninput="ccCalc()" style="${ss}"></div><div><label>Motivo</label><input id="cc_repo_motivo" value="${ed?esc(ed.reposicion_motivo||''):''}" placeholder="Ej: reembolso de gasto…" style="${ss}"></div></div>
+      <label style="margin-top:10px;display:block">Observaciones</label><textarea id="cc_obs" rows="2" style="${ss}" placeholder="Incidencias del turno, notas…">${ed?esc(ed.observaciones||''):''}</textarea>
     </div>
     <div class="panel"><h2 style="margin-top:0">Arqueo de efectivo (USD)</h2>
       <p style="font-size:12px;color:var(--suave);margin:-4px 0 8px">Cuenta los billetes y monedas reales en caja${esMag?' (caja chica)':''}.</p>
       ${denomRow(CC_BILLETES,'Billetes')}${denomRow(CC_MONEDAS,'Monedas')}
-      ${esMag?`<div style="border-top:1px solid var(--gris2);margin-top:10px;padding-top:8px"><label>Arqueo caja de cambio — total contado (USD)</label><input id="cc_cambio_cont" type="number" min="0" step="0.01" value="" placeholder="Cuenta los $100 de la caja de cambio" oninput="ccCalc()" style="${ss}"><div id="ccCambioChk" style="font-size:12px;margin-top:4px;color:var(--suave)">Cuenta la caja de cambio (debe ser $100).</div></div>`:''}
+      ${esMag?`<div style="border-top:1px solid var(--gris2);margin-top:10px;padding-top:8px"><label>Arqueo caja de cambio — total contado (USD)</label><input id="cc_cambio_cont" type="number" min="0" step="0.01" value="${ed&&ed.caja_cambio_contado!=null?esc(ed.caja_cambio_contado):''}" placeholder="Cuenta los $100 de la caja de cambio" oninput="ccCalc()" style="${ss}"><div id="ccCambioChk" style="font-size:12px;margin-top:4px;color:var(--suave)">Cuenta la caja de cambio (debe ser $100).</div></div>`:''}
       <div id="ccResumen" style="margin-top:14px"></div>
-      <div style="margin-top:14px"><button class="btn" onclick="ccSave()">💾 Guardar cierre</button></div>
+      <div style="margin-top:14px"><button class="btn" onclick="ccSave()">${ed?'💾 Actualizar cierre':'💾 Guardar cierre'}</button></div>
     </div>
   </div>`;
 }
@@ -4740,7 +4744,7 @@ async function ccSave(){ if(typeof zonaRO==='function' && zonaRO('cierres')){ al
   if(!lugar){ alert('Selecciona la ubicación del cierre.'); return; }
   const esCaja=ccEsCaja(lugar); const esMag=lugar==='Hotel Magnolia';
   const fechaSel=g('cc_fecha')||hoyISO();
-  if(fechaSel!==hoyISO() && fechaSel!==ccAyerISO()){ alert('La fecha solo puede ser el día de hoy o el de ayer.'); return; }
+  if(!ccEditId && fechaSel!==hoyISO() && fechaSel!==ccAyerISO()){ alert('La fecha solo puede ser el día de hoy o el de ayer.'); return; }
   const metodos={}; CC_METODOS.forEach(([k])=>metodos[k]=gn('cc_m_'+k));
   let ventas=0; for(const k in metodos) ventas+=metodos[k];
   const base={ lugar, fecha:fechaSel, responsable:g('cc_resp')||PROFILE.nombre, metodos, ventas_total:ventas, observaciones:g('cc_obs')||null, creado_por:ME.id, creado_por_nombre:PROFILE.nombre, created_at:new Date().toISOString() };
@@ -4756,8 +4760,11 @@ async function ccSave(){ if(typeof zonaRO==='function' && zonaRO('cierres')){ al
     const fondo=gn('cc_fondo'), repo=gn('cc_repo'); const esperado=fondo+metodos.efectivo+repo-gastos; const dif=Math.round((contado-esperado)*100)/100;
     row=Object.assign({}, base, { turno:g('cc_turno'), fondo_inicial:fondo, caja_cambio:esMag?100:null, caja_cambio_contado:esMag?gn('cc_cambio_cont'):null, gastos:gastos, gastos_items:gItems, gastos_motivo:gItems.map(x=>x.motivo).filter(Boolean).join(' · ')||null, reposicion:repo, reposicion_motivo:g('cc_repo_motivo')||null, arqueo:arqueo, contado:contado, esperado:esperado, diferencia:dif });
   }
-  const {error}=await sb.from('cierres_caja').insert(row); if(error){ alert('No se pudo guardar: '+error.message); return; }
-  toast('✓ Cierre de caja guardado'); ccGastos=[]; ccTab='historial'; ccView=null; show('cierres');
+  let error;
+  if(ccEditId){ const ed2=Object.assign({},row); delete ed2.creado_por; delete ed2.creado_por_nombre; delete ed2.created_at; const r=await sb.from('cierres_caja').update(ed2).eq('id',ccEditId); error=r.error; if(!error){ try{ await auditLog('✏️ Editó el cierre de caja · '+(row.lugar||'')+' · '+(row.fecha||'')+(row.turno?(' · '+row.turno):'')+' · ventas '+ccM(row.ventas_total)+(row.diferencia!=null?(' · dif '+ccM(row.diferencia)):''),'cierres'); }catch(_e){} } }
+  else { const r=await sb.from('cierres_caja').insert(row); error=r.error; }
+  if(error){ alert('No se pudo guardar: '+error.message); return; }
+  toast(ccEditId?'✓ Cierre actualizado':'✓ Cierre de caja guardado'); ccEditId=null; ccEditRec=null; ccGastos=[]; ccTab='historial'; ccView=null; show('cierres');
 }
 function ccDetail(id){
   const c=CCAJA.find(x=>String(x.id)===String(id)); if(!c) return `<button class="btn ghost" onclick="ccBack()">← Volver</button><div class="panel">No encontrado.</div>`;
@@ -4772,7 +4779,7 @@ function ccDetail(id){
     ? `<h3 class="inc-h3">Gastos de efectivo</h3>${items.map(x=>`<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:13.5px;padding:2px 0"><span>${esc(x.motivo||'Gasto')} ${x.justificante?'<span style="color:#1e8a5a;font-size:11px">✓ justificante</span>':'<span style="color:#c0392b;font-size:11px">⚠ sin justificante</span>'}</span><b>−${ccM(x.monto)}</b></div>`).join('')}`
     : ((parseFloat(c.gastos)||0)?`<h3 class="inc-h3">Gastos de efectivo</h3><div style="display:flex;justify-content:space-between;font-size:13.5px"><span>${esc(c.gastos_motivo||'Gastos')}</span><b>−${ccM(c.gastos)}</b></div>`:'');
   const reg=c.created_at?new Date(c.created_at).toLocaleString('es-ES'):'';
-  return `<div style="margin-bottom:14px;display:flex;gap:10px;flex-wrap:wrap;align-items:center"><button onclick="ccBack()" style="background:none;border:none;color:var(--azul);font-weight:600;font-size:14px;cursor:pointer;font-family:inherit;padding:6px 4px">← Volver al listado</button><button class="btn" onclick="ccPDF()" style="margin-left:auto">🖨️ Imprimir / PDF</button></div>
+  return `<div style="margin-bottom:14px;display:flex;gap:10px;flex-wrap:wrap;align-items:center"><button onclick="ccBack()" style="background:none;border:none;color:var(--azul);font-weight:600;font-size:14px;cursor:pointer;font-family:inherit;padding:6px 4px">← Volver al listado</button>${isDireccion()?`<button class="btn ghost" style="margin-left:auto" onclick="ccEditar(${c.id})">✏️ Editar</button><button class="btn ghost" style="color:#c0392b;border-color:#e7b3b3" onclick="ccEliminar(${c.id})">🗑 Eliminar</button><button class="btn" onclick="ccPDF()">🖨️ PDF</button>`:`<button class="btn" onclick="ccPDF()" style="margin-left:auto">🖨️ Imprimir / PDF</button>`}</div>
   ${(()=>{ const rev=!!c.revisado; const dir=isDireccion(); return `<div class="cc-revpanel ${rev?'rev':'pend'}">
     <div class="cc-revhead"><div>${rev?`<b style="color:#1e8a5a">✓ Revisado por Dirección</b>${c.revisado_por?` · ${esc(c.revisado_por)}`:''}${c.revisado_at?` · ${esc(fechaLarga((c.revisado_at||'').slice(0,10)))}`:''}`:`<b style="color:#b9770e">⏳ Pendiente de revisión</b>`}</div>${dir?`<button class="cc-revbtn ${rev?'':'go'}" onclick="ccToggleRevisado(${c.id})">${rev?'Quitar revisión':'✓ Marcar como revisado'}</button>`:''}</div>
     ${faltaJust?`<div style="margin-top:8px;background:#fdecea;border:1px solid #f5c6cb;color:#c0392b;border-radius:8px;padding:8px 11px;font-size:13px;font-weight:600">⚠ Hay gasto(s) SIN justificante marcado. Revisar el sobre físico.</div>`:''}
@@ -7821,6 +7828,22 @@ function val(id){const el=document.getElementById(id);return el?el.value.trim():
 async function delRow(table,id,page){ if(typeof ZONA_RO!=='undefined'&&ZONA_RO){ alert('Tienes esta sección en solo lectura.'); return; }if(!confirm('¿Eliminar este registro?'))return;const{error}=await sb.from(table).delete().eq('id',id);if(error){alert('Error: '+error.message);return;}show(page);}
 
 function esc(t){return (t==null?'':''+t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+/* ===== Red de seguridad de fiabilidad (global) ===== */
+(function(){
+  function isBusy(b){ return /guardando|guardar…|⏳|enviando|procesando|publicando|subiendo/i.test((b&&b.textContent)||''); }
+  function freeStuck(){ try{ document.querySelectorAll('button:disabled').forEach(b=>{ if(isBusy(b)){ b.disabled=false; if(b.dataset.lbl) b.textContent=b.dataset.lbl; } }); }catch(_){} }
+  function netBanner(off){ var b=document.getElementById('netOff'); if(!off){ if(b)b.remove(); return; } if(b)return; b=document.createElement('div'); b.id='netOff'; b.textContent='⚠️ Sin conexión — los cambios podrían no guardarse'; b.style.cssText='position:fixed;left:0;right:0;bottom:0;z-index:99998;background:#b91c1c;color:#fff;text-align:center;padding:8px 12px;font-family:inherit;font-size:13px;font-weight:600'; document.body.appendChild(b); }
+  window.addEventListener('offline',function(){ netBanner(true); });
+  window.addEventListener('online',function(){ netBanner(false); try{ if(typeof toast==='function') toast('✓ Conexión restablecida'); }catch(_){} });
+  window.addEventListener('unhandledrejection',function(){ freeStuck(); try{ if(typeof toast==='function') toast('⚠️ No se pudo completar la acción. Revisa tu conexión e inténtalo de nuevo.'); }catch(_){} });
+  window.addEventListener('error',function(){ freeStuck(); });
+  document.addEventListener('submit',function(ev){
+    var form=ev.target; if(!form||form.tagName!=='FORM') return;
+    var btn=form.querySelector('button[type=submit]')||form.querySelector('button:not([type])'); if(!btn) return;
+    var orig=btn.textContent;
+    setTimeout(function(){ if(document.body.contains(btn)&&btn.disabled&&isBusy(btn)){ btn.disabled=false; btn.textContent=orig; try{ if(typeof toast==='function') toast('⏱️ Tardó demasiado. Revisa tu conexión y vuelve a intentarlo.'); }catch(_){} } },25000);
+  },true);
+})();
 </script>
 </body>
 </html>
