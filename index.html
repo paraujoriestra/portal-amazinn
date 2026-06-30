@@ -1279,15 +1279,18 @@ function lblD(x){const ds=['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'],ms=['ene
 function isWk(x){return x.getDay()===0||x.getDay()===6;}
 let horTab='mi', horOtherDept=null, horEditDept=null, horOtherEquipo='';
 let horHistDept='', horHistEq='';
-let ACCESS_DENY=new Set(), ACCESS_GRANT=new Set(), ACCESS_PDENY=new Set(), ACCESS_PGRANT=new Set();
+let ACCESS_DENY=new Set(), ACCESS_GRANT=new Set(), ACCESS_VIEW=new Set(), ACCESS_PDENY=new Set(), ACCESS_PGRANT=new Set(), ACCESS_PVIEW=new Set(); let ZONA_RO=false;
 const PERM_V2=true;
 const ZONA_SISTEMA=['auditoria','permisos','registros','admin','backup'];
 function meId(){ try{ if(typeof ME!=='undefined' && ME && ME.id) return ME.id; }catch(e){} return (typeof PROFILE!=='undefined'&&PROFILE&&PROFILE.id)||''; }
-async function loadAccesos(){ ACCESS_DENY=new Set(); ACCESS_GRANT=new Set(); ACCESS_PDENY=new Set(); ACCESS_PGRANT=new Set(); if(isOwner()) return;
-  try{ const {data}=await sb.from('accesos').select('item_id,visible').eq('dept',PROFILE.dept||'').eq('role',PROFILE.role);
-    (data||[]).forEach(r=>{ if(r.visible===false) ACCESS_DENY.add(r.item_id); else if(r.visible===true) ACCESS_GRANT.add(r.item_id); }); }catch(e){}
-  try{ const {data}=await sb.from('acceso_persona').select('item_id,visible').eq('user_id',meId());
-    (data||[]).forEach(r=>{ if(r.visible===false) ACCESS_PDENY.add(r.item_id); else if(r.visible===true) ACCESS_PGRANT.add(r.item_id); }); }catch(e){} }
+async function loadAccesos(){ ACCESS_DENY=new Set(); ACCESS_GRANT=new Set(); ACCESS_VIEW=new Set(); ACCESS_PDENY=new Set(); ACCESS_PGRANT=new Set(); ACCESS_PVIEW=new Set(); if(isOwner()) return;
+  const nivelDe=r=> r.nivel || (r.visible===false?'none':'full');
+  try{ const {data,error}=await sb.from('accesos').select('item_id,visible,nivel').eq('dept',PROFILE.dept||'').eq('role',PROFILE.role); if(error) throw error;
+    (data||[]).forEach(r=>{ const n=nivelDe(r); if(n==='none') ACCESS_DENY.add(r.item_id); else if(n==='view') ACCESS_VIEW.add(r.item_id); else ACCESS_GRANT.add(r.item_id); }); }
+  catch(e){ try{ const {data}=await sb.from('accesos').select('item_id,visible').eq('dept',PROFILE.dept||'').eq('role',PROFILE.role); (data||[]).forEach(r=>{ if(r.visible===false) ACCESS_DENY.add(r.item_id); else ACCESS_GRANT.add(r.item_id); }); }catch(_){} }
+  try{ const {data,error}=await sb.from('acceso_persona').select('item_id,visible,nivel').eq('user_id',meId()); if(error) throw error;
+    (data||[]).forEach(r=>{ const n=nivelDe(r); if(n==='none') ACCESS_PDENY.add(r.item_id); else if(n==='view') ACCESS_PVIEW.add(r.item_id); else ACCESS_PGRANT.add(r.item_id); }); }
+  catch(e){ try{ const {data}=await sb.from('acceso_persona').select('item_id,visible').eq('user_id',meId()); (data||[]).forEach(r=>{ if(r.visible===false) ACCESS_PDENY.add(r.item_id); else ACCESS_PGRANT.add(r.item_id); }); }catch(_){} } }
 function pagosCanFor(p){ const role=p&&p.role; if(role==='admin'||role==='propietario') return true; const a=(p&&p.area)||'',d=(p&&p.dept)||''; if(a==='Finanzas'||d==='Finanzas') return true; if(role==='direccion') return true; return false; }
 function accDefaultVisibleFor(p, it){
   const role=(p&&p.role)||'empleado';
@@ -1305,10 +1308,16 @@ function navAllowed(it){
   if(isOwner()) return true;
   if(typeof isProvider==='function' && isProvider()) return !!(it.id && PROV_NAV_OK.includes(it.id));
   if(typeof isConductor==='function' && isConductor()) return !!(it.id && CONDUCTOR_NAV_OK.includes(it.id));
-  if(it.id){ if(ACCESS_PDENY.has(it.id)) return false; if(ACCESS_PGRANT.has(it.id)) return true; if(ACCESS_DENY.has(it.id)) return false; if(ACCESS_GRANT.has(it.id)) return true; }
+  if(it.id){ if(ACCESS_PDENY.has(it.id)) return false; if(ACCESS_PGRANT.has(it.id)||ACCESS_PVIEW.has(it.id)) return true; if(ACCESS_DENY.has(it.id)) return false; if(ACCESS_GRANT.has(it.id)||ACCESS_VIEW.has(it.id)) return true; }
   return accDefaultVisible(it);
 }
 function navItemAllowed(id){ const it=NAV.find(n=>n.id===id); return it? navAllowed(it) : true; }
+function nivelZona(id){ if(isOwner()) return 'full';
+  if(ACCESS_PDENY.has(id)) return 'none'; if(ACCESS_PVIEW.has(id)) return 'view'; if(ACCESS_PGRANT.has(id)) return 'full';
+  if(ACCESS_DENY.has(id)) return 'none'; if(ACCESS_VIEW.has(id)) return 'view'; if(ACCESS_GRANT.has(id)) return 'full';
+  const it=NAV.find(n=>n.id===id); return (it && accDefaultVisible(it)) ? 'full' : 'none'; }
+function zonaRO(id){ return nivelZona(id)==='view'; }
+function puedeEditar(id){ return !zonaRO(id); }
 function navGroups(){
   const groups=[]; let cur=null;
   NAV.forEach(it=>{
@@ -1567,6 +1576,7 @@ function show(id){
   const _lk=NAV.find(n=>n.id===id);   // secciones "Próximamente" según el rol
   if(_lk && _lk.lockRoles && _lk.lockRoles.includes(PROFILE.role)){ m.innerHTML=`<div class="page-title">${esc(_lk.t)}</div><div class="panel" style="color:var(--suave)">🔒 La sección “${esc(_lk.t)}” estará disponible próximamente.</div>`; return; }
   if(_lk && _lk.id && !isOwner() && typeof navItemAllowed==='function' && !navItemAllowed(id)){ m.innerHTML='<div class="page-title">'+esc(_lk.t||'')+'</div><div class="panel" style="color:var(--suave)">🔒 No tienes acceso a esta sección. Si crees que es un error, contacta con un administrador.</div>'; return; }
+  try{ ZONA_RO = !!(_lk && _lk.id) && (typeof zonaRO==='function') && zonaRO(id); document.body.classList.toggle('zona-ro', !!ZONA_RO); }catch(e){}
   if(id==='perfil'){ ld('<div class="page-title">Mi perfil</div><div class="page-sub">Cargando…</div>'); pagePerfil(); return; }
   if(id==='inicio'){ ld('<div class="page-sub">Cargando…</div>'); pageInicio(); return; }
   else if(id==='comunicados'){ ld('<div class="page-title">Comunicados</div><div class="page-sub">Cargando…</div>'); pageComunicados(); }
@@ -7108,7 +7118,7 @@ function asgPClear(){ asgPFrom=asgPTo=asgPTipo=asgPUni=''; show('asignaciones');
 function asgPQuick(which){ const t=new Date(); const pad=n=>(''+n).padStart(2,'0'); const iso=d=>d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate()); if(which==='mes'){ asgPFrom=iso(new Date(t.getFullYear(),t.getMonth(),1)); asgPTo=iso(t); } else if(which==='15'){ const d=new Date(t); d.setDate(t.getDate()-14); asgPFrom=iso(d); asgPTo=iso(t); } show('asignaciones'); }
 let ASG={pubId:null,equipo:'',fecha:'',unidades:[],comunes:[]};
 let ASG_TRAB=[], ASG_TRAB_FULL=[], ASG_UNI=[], ASG_AREA=[], ASG_PUBS=[], ASG_EDIF=[], ASG_UNIS=[];
-function asgCan(){ const r=PROFILE.role, d=normKey(PROFILE.dept||''); if(r==='direccion'||r==='admin'||r==='propietario') return true; if(r==='responsable') return d===normKey('Atención al cliente')||d===normKey('Limpieza'); if(r==='empleado') return d===normKey('Atención al cliente'); return false; }
+function asgCan(){ if(typeof zonaRO==='function' && zonaRO('asignaciones')) return false; const r=PROFILE.role, d=normKey(PROFILE.dept||''); if(r==='direccion'||r==='admin'||r==='propietario') return true; if(r==='responsable') return d===normKey('Atención al cliente')||d===normKey('Limpieza'); if(r==='empleado') return d===normKey('Atención al cliente'); return false; }
 function asgTeamWorkers(){ return ASG_TRAB_FULL.filter(t=>!ASG.equipo||(t.equipo||'')===ASG.equipo).map(t=>t.nombre); }
 function asgSetEquipo(e){ ASG.equipo=e; show('asignaciones'); }
 function asgTipoLabel(t){ if(t==='entrada')t='limpieza_cortesia'; const o=ASG_TIPO.find(x=>x[0]===t); return o?o[1]:''; }
@@ -7615,27 +7625,27 @@ function permDeptos(){ // departamentos (filtrados por área si CAT.deptos tiene
   return DEPTS;
 }
 function setsEqual(a,b){ if(a.size!==b.size) return false; for(const x of a) if(!b.has(x)) return false; return true; }
-function permHasChanges(){ return permState&&permSaved&&!setsEqual(permState,permSaved); }
+function permHasChanges(){ return permState&&permSaved&&!mapsEqual(permState,permSaved); }
 function permGuardCheck(){ if(permHasChanges()) return confirm('Tienes cambios sin guardar. ¿Descartarlos?'); return true; }
 function permSetArea(v){ if(!permGuardCheck()){show('permisos');return;} permArea=v; permDept=''; permCtx=null; show('permisos'); }
 function permSetDept(v){ if(!permGuardCheck()){show('permisos');return;} permDept=v; permCtx=null; show('permisos'); }
 function permSetRole(v){ if(!permGuardCheck()){show('permisos');return;} permRole=v; permCtx=null; show('permisos'); }
-function permItemSet(id,allow){ if(allow) permState.delete(id); else permState.add(id); show('permisos'); }
-function permSecSet(name,allow){ const g=permFullGroups().find(x=>x.name===name); if(!g) return;
-  g.items.filter(it=>permItemVis(g.meta,it,permRole,permDept)).forEach(it=>{ if(allow) permState.delete(it.id); else permState.add(it.id); }); show('permisos'); }
-function permDescartar(){ if(permSaved) permState=new Set(permSaved); show('permisos'); }
+function permItemSet(id,v){ if(!permState) return; if(v==='') permState.delete(id); else permState.set(id,v); show('permisos'); }
+function permSecSet(name,v){ const g=permFullGroups().find(x=>x.name===name); if(!g||!permState) return; g.items.forEach(it=>{ if(v==='') permState.delete(it.id); else permState.set(it.id,v); }); show('permisos'); }
+function permDescartar(){ if(permSaved) permState=new Map(permSaved); show('permisos'); }
 async function permGuardar(){
   if(!permHasChanges()) return;
   const dep=permDept, role=permRole;
-  const adds=[...permState].filter(x=>!permSaved.has(x));   // nuevos ocultos
-  const dels=[...permSaved].filter(x=>!permState.has(x));   // vueltos a visible
+  const ups=[], dels=[];
+  permState.forEach((v,id)=>{ ups.push({dept:dep,role,item_id:id,visible:(v!=='none'),nivel:v}); });
+  if(permSaved) permSaved.forEach((v,id)=>{ if(!permState.has(id)) dels.push(id); });
   try{
-    if(adds.length){ const {error}=await sb.from('accesos').upsert(adds.map(id=>({dept:dep,role,item_id:id,visible:false})),{onConflict:'dept,role,item_id'}); if(error) throw error; }
+    if(ups.length){ const {error}=await sb.from('accesos').upsert(ups,{onConflict:'dept,role,item_id'}); if(error) throw error; }
     for(const id of dels){ const {error}=await sb.from('accesos').delete().eq('dept',dep).eq('role',role).eq('item_id',id); if(error) throw error; }
   }catch(e){ alert('Error al guardar: '+(e.message||e)); return; }
-  permSaved=new Set(permState);
+  permSaved=new Map(permState);
   await loadAccesos(); buildNav();
-  alert('✓ Cambios guardados. El usuario afectado los verá al volver a entrar.');
+  alert('✓ Cambios guardados. Las personas de ese rol y departamento los verán al volver a entrar.');
   show('permisos');
 }
 let permMode='persona', permPersonId='', permPersonState=null, permPersonSaved=null, PERM_PEOPLE=null;
@@ -7646,7 +7656,7 @@ function mapsEqual(a,b){ if(a.size!==b.size) return false; for(const [k,v] of a)
 async function permPersonGuardar(){
   const person=PERM_PEOPLE&&PERM_PEOPLE.find(p=>String(p.id)===String(permPersonId)); if(!person||!permPersonState) return;
   const ups=[], dels=[];
-  permPersonState.forEach((v,id)=>{ ups.push({user_id:person.id,item_id:id,visible:v==='grant'}); });
+  permPersonState.forEach((v,id)=>{ ups.push({user_id:person.id,item_id:id,visible:(v!=='none'),nivel:v}); });
   if(permPersonSaved) permPersonSaved.forEach((v,id)=>{ if(!permPersonState.has(id)) dels.push(id); });
   try{
     if(ups.length){ const {error}=await sb.from('acceso_persona').upsert(ups,{onConflict:'user_id,item_id'}); if(error) throw error; }
@@ -7666,8 +7676,8 @@ async function pagePermisosPersona(tabs){
   if(!person){ main.innerHTML=tabs+titulo+picker+'<div class="panel" style="color:var(--suave)">Selecciona una persona para configurar sus accesos.</div>'; return; }
   if(person.role==='propietario'){ main.innerHTML=tabs+titulo+picker+'<div class="panel" style="color:var(--suave)">El Propietario siempre tiene acceso total; no se puede limitar.</div>'; return; }
   if(permPersonState===null){
-    try{ const {data}=await sb.from('acceso_persona').select('item_id,visible').eq('user_id',person.id);
-      permPersonState=new Map(); (data||[]).forEach(r=>{ permPersonState.set(r.item_id, r.visible===false?'deny':'grant'); }); permPersonSaved=new Map(permPersonState);
+    try{ const {data}=await sb.from('acceso_persona').select('item_id,visible,nivel').eq('user_id',person.id);
+      permPersonState=new Map(); (data||[]).forEach(r=>{ permPersonState.set(r.item_id, r.nivel || (r.visible===false?'none':'full')); }); permPersonSaved=new Map(permPersonState);
     }catch(e){ main.innerHTML=tabs+titulo+picker+'<div class="panel">No se pudo cargar. ¿Ejecutaste <b>supabase_acceso_persona.sql</b>?<br><small>'+esc(e.message||e)+'</small></div>'; return; }
   }
   const rows=permFullGroups().map(g=>{
@@ -7675,8 +7685,8 @@ async function pagePermisosPersona(tabs){
     const its=g.items.map(it=>{
       const def=accDefaultVisibleFor(person,it);
       const st=permPersonState.get(it.id)||'';
-      const sel='<select onchange="permPersonSet(\''+it.id+'\',this.value)" style="padding:5px 8px;border:1px solid var(--gris2);border-radius:7px;font-family:inherit;font-size:12.5px"><option value="">Por defecto ('+(def?'con acceso':'sin acceso')+')</option><option value="grant" '+(st==='grant'?'selected':'')+'>✓ Con acceso</option><option value="deny" '+(st==='deny'?'selected':'')+'>✕ Sin acceso</option></select>';
-      const eff = st==='grant'?true : st==='deny'?false : def;
+      const sel='<select onchange="permPersonSet(\''+it.id+'\',this.value)" style="padding:5px 8px;border:1px solid var(--gris2);border-radius:7px;font-family:inherit;font-size:12.5px"><option value="">Por defecto ('+(def?'con acceso':'sin acceso')+')</option><option value="full" '+(st==='full'?'selected':'')+'>✓ Acceso completo</option><option value="view" '+(st==='view'?'selected':'')+'>👁 Solo ver</option><option value="none" '+(st==='none'?'selected':'')+'>✕ Sin acceso</option></select>';
+      const eff = st==='none'?false : (st===''? def : true);
       return '<tr><td class="perm-area">'+(it.ic?it.ic+' ':'')+esc(it.t)+(eff?'':' <span style="color:#c0392b;font-size:11px">(oculto)</span>')+'</td><td>'+sel+'</td></tr>';
     }).join('');
     return head+its;
@@ -7705,22 +7715,19 @@ async function pagePermisos(){
     return;
   }
   const dep=permDept, role=permRole, combo=dep+'|'+role;
-  if(permCtx!==combo){   // cargar de la BD solo al cambiar de combinación (conserva cambios pendientes)
-    try{ const {data}=await sb.from('accesos').select('item_id,visible').eq('dept',dep).eq('role',role);
-      const den=new Set((data||[]).filter(r=>r.visible===false).map(r=>r.item_id));
-      permState=new Set(den); permSaved=new Set(den); permCtx=combo;
+  if(permCtx!==combo){
+    try{ const {data}=await sb.from('accesos').select('item_id,visible,nivel').eq('dept',dep).eq('role',role);
+      permState=new Map(); (data||[]).forEach(r=>{ permState.set(r.item_id, r.nivel || (r.visible===false?'none':'full')); }); permSaved=new Map(permState); permCtx=combo;
     }catch(e){ document.getElementById('main').innerHTML=titulo+`<div class="panel">No se pudo cargar. ¿Ejecutaste <b>supabase_accesos.sql</b> en Supabase?<br><small style="color:var(--suave)">${esc(e.message||e)}</small></div>`; return; }
   }
-  const denied=id=> permState.has(id);
   const rows=permFullGroups().map(g=>{
-    const vis=g.items.filter(it=>permItemVis(g.meta,it,role,dep));
-    const allOn=vis.length>0 && vis.every(it=>!denied(it.id));
-    const secChk=vis.length? `<input type="checkbox" class="perm-chk" ${allOn?'checked':''} onchange="permSecSet('${g.name.replace(/'/g,"\\'")}',this.checked)" title="Toda la sección">` : '<span class="perm-lock">·</span>';
-    const head=`<tr class="perm-sec"><td><b>${GRP_ICON[g.name]||''} ${esc(g.name)}</b></td><td>${secChk}</td></tr>`;
+    const head=`<tr class="perm-sec"><td colspan="2"><b>${GRP_ICON[g.name]||''} ${esc(g.name)}</b></td></tr>`;
     const its=g.items.map(it=>{
-      const def=permItemVis(g.meta,it,role,dep);
-      const ctrl=def? `<input type="checkbox" class="perm-chk" ${!denied(it.id)?'checked':''} onchange="permItemSet('${it.id}',this.checked)">` : '<span class="perm-lock" title="No disponible para este rol">·</span>';
-      return `<tr><td class="perm-area">${it.ic?it.ic+' ':''}${esc(it.t)}</td><td>${ctrl}</td></tr>`;
+      const def=accDefaultVisibleFor({role:role,dept:dep,area:permArea}, it);
+      const st=permState.get(it.id)||'';
+      const sel=`<select onchange="permItemSet('${it.id}',this.value)" style="padding:5px 8px;border:1px solid var(--gris2);border-radius:7px;font-family:inherit;font-size:12.5px"><option value="">Por defecto (${def?'con acceso':'sin acceso'})</option><option value="full" ${st==='full'?'selected':''}>✓ Acceso completo</option><option value="view" ${st==='view'?'selected':''}>👁 Solo ver</option><option value="none" ${st==='none'?'selected':''}>✕ Sin acceso</option></select>`;
+      const eff = st==='none'?false : (st===''? def : true);
+      return `<tr><td class="perm-area">${it.ic?it.ic+' ':''}${esc(it.t)}${eff?'':' <span style="color:#c0392b;font-size:11px">(oculto)</span>'}</td><td>${sel}</td></tr>`;
     }).join('');
     return head+its;
   }).join('');
@@ -7732,8 +7739,8 @@ async function pagePermisos(){
   document.getElementById('main').innerHTML=titulo+selectors+
    `<div class="panel"><h2 style="margin-top:0">Accesos de: <span style="color:var(--azul)">${esc(permArea||'Todas las áreas')} · ${esc(dep)} · ${esc(roleLbl)}</span></h2>
      <div style="overflow-x:auto"><table class="tbl-compact perm-tbl perm-single">
-     <thead><tr><th>Sección / Área</th><th>Visible</th></tr></thead><tbody>${rows}</tbody></table></div>
-     <p style="font-size:12px;color:var(--suave);margin-top:14px;line-height:1.6">Casilla en la fila de una <b>sección</b> = activa/oculta toda la sección. “·” = no disponible para ese rol.</p>
+     <thead><tr><th>Sección / Zona</th><th>Acceso</th></tr></thead><tbody>${rows}</tbody></table></div>
+     <p style="font-size:12px;color:var(--suave);margin-top:14px;line-height:1.6">En cada zona: <b>Por defecto</b> (lo que le toca por su rol) · <b>Con acceso</b> (se la das aunque por defecto no la tenga) · <b>Sin acceso</b> (se la quitas). El Propietario siempre ve todo.</p>
      ${saveBar}
    </div>`;
 }
