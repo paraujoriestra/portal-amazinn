@@ -1851,7 +1851,7 @@ function toggleComForm(){ comFormOpen=!comFormOpen; comEditId=null; const b=docu
 function comEdit(id){ const c=CC.coms.find(x=>x.id===id); if(!c) return; comEditId=id; comFormOpen=true; const b=document.getElementById('comFormBox'); if(b){ b.innerHTML=comFormHTML(c); b.scrollIntoView({behavior:'smooth',block:'start'}); } }
 function comCancelForm(){ comFormOpen=false; comEditId=null; const b=document.getElementById('comFormBox'); if(b) b.innerHTML=''; }
 function comRowMenu(e,id){ e.stopPropagation(); let m=document.getElementById('rowMenuPop'); if(!m){ m=document.createElement('div'); m.id='rowMenuPop'; m.className='rowmenu-pop'; document.body.appendChild(m); } m.innerHTML=`<button onclick="closeRowMenu();comEdit(${id})">✏️ Editar</button><button onclick="closeRowMenu();deleteCom(${id})">🗑️ Eliminar</button>`; const r=e.currentTarget.getBoundingClientRect(); m.style.display='flex'; m.style.top=(r.bottom+window.scrollY+4)+'px'; m.style.left=(Math.max(8,Math.min(r.left,window.innerWidth-168))+window.scrollX)+'px'; setTimeout(()=>document.addEventListener('click',closeRowMenu),0); }
-async function createCom(e){
+async function createCom(e){ if(typeof zonaRO==='function'&&zonaRO('comunicados')){ if(e&&e.preventDefault)e.preventDefault(); alert('Tienes esta sección en solo lectura.'); return false; }
   e.preventDefault();
   comScReadDOM();
   const base={ titulo:document.getElementById('cTit').value.trim(), cuerpo:document.getElementById('cCpo').value.trim(),
@@ -1892,7 +1892,7 @@ async function confirmRead(id){
   if(error && !String(error.message).includes('duplicate')){ alert('Error: '+error.message); return; }
   loadComUnread(); pageComunicados();
 }
-async function deleteCom(id){
+async function deleteCom(id){ if(typeof zonaRO==='function'&&zonaRO('comunicados')){ alert('Tienes esta sección en solo lectura.'); return; }
   if(!confirm('¿Eliminar este comunicado de forma permanente? No se puede deshacer.')) return;
   // borrar archivos del almacenamiento
   const { data:adjs } = await sb.from('comunicado_adjuntos').select('path').eq('comunicado_id',id);
@@ -3495,7 +3495,7 @@ async function pageSolicitudes(){
     <div class="panel"><h2>Mis solicitudes</h2><div style="overflow-x:auto"><table><thead><tr><th>Tipo</th><th>Detalle</th><th>Estado</th><th>Respuesta / documento</th></tr></thead><tbody>${filas}</tbody></table></div></div>
     <div class="panel"><h2>💵 Mis comprobantes de pago</h2><div style="overflow-x:auto"><table><thead><tr><th>Periodo</th><th>Publicado</th><th></th></tr></thead><tbody>${nomRows}</tbody></table></div></div>`;
 }
-async function createSol(e){e.preventDefault();
+async function createSol(e){e.preventDefault(); if(typeof zonaRO==='function'&&zonaRO('solicitudes')){ if(e&&e.preventDefault)e.preventDefault(); alert('Tienes esta sección en solo lectura.'); return false; }
   const g=id=>{const el=document.getElementById(id);return el?el.value:'';};
   const t=solTipo; const sub=document.getElementById('solSub');
   const estado=(t==='Baja / ausencia')?'Registrada':'Pendiente';
@@ -3523,7 +3523,7 @@ async function pageAprobaciones(){
     ${all.map(rowH).join('')||'<tr><td colspan="5" style="color:var(--suave)">No hay solicitudes.</td></tr>'}
     </tbody></table></div></div>`;
 }
-async function setSol(id,estado){ const resp=(estado==='Rechazada')?(prompt('Motivo del rechazo (opcional):')||''):''; const patch={estado}; if(resp) patch.respuesta=resp; await sb.from('solicitudes').update(patch).eq('id',id);loadAprobPend();show('aprobaciones');}
+async function setSol(id,estado){ if(typeof zonaRO==='function'&&zonaRO('solicitudes')){ alert('Tienes esta sección en solo lectura.'); return; } const resp=(estado==='Rechazada')?(prompt('Motivo del rechazo (opcional):')||''):''; const patch={estado}; if(resp) patch.respuesta=resp; await sb.from('solicitudes').update(patch).eq('id',id);loadAprobPend();show('aprobaciones');}
 async function solAttach(id,input){ const f=input.files&&input.files[0]; if(!f)return; if(f.size>25*1024*1024){alert('El archivo supera 25 MB.');return;} const up=await solUpload(f,'cartas'); const {error}=await sb.from('solicitudes').update({archivo_url:up.url,archivo_nombre:up.nombre,archivo_path:up.path||null,estado:'Gestionada'}).eq('id',id); if(error){alert(error.message);return;} toast('✓ Documento adjuntado'); show('aprobaciones'); }
 async function pageNominasAdmin(){
   const [er,nr]=await Promise.all([
@@ -4490,8 +4490,8 @@ function reclCard(r){
     </div></div>`;
 }
 function reclCopy(){ const el=document.getElementById('reclLink'); if(!el)return; el.select(); try{document.execCommand('copy');}catch(e){} try{navigator.clipboard&&navigator.clipboard.writeText(el.value);}catch(e){} toast('✓ Enlace copiado'); }
-async function reclMove(id,estado){ const{error}=await sb.from('reclutamiento').update({estado,revisado_por:PROFILE.nombre}).eq('id',id); if(error){alert(error.message);return;} try{auditLog('Movió un candidato a '+reclStageLbl(estado),'reclutamiento');}catch(_){} toast('✓ Movido a '+reclStageLbl(estado)); show('reclutamiento'); }
-async function reclNota(id){ const r=RECL.find(x=>String(x.id)===String(id)); const v=prompt('Nota interna sobre el candidato:', r&&r.notas?r.notas:''); if(v===null)return; const{error}=await sb.from('reclutamiento').update({notas:v}).eq('id',id); if(error){alert(error.message);return;} toast('✓ Nota guardada'); show('reclutamiento'); }
+async function reclMove(id,estado){ if(typeof zonaRO==='function'&&zonaRO('reclutamiento')){ alert('Tienes esta sección en solo lectura.'); return; } const{error}=await sb.from('reclutamiento').update({estado,revisado_por:PROFILE.nombre}).eq('id',id); if(error){alert(error.message);return;} try{auditLog('Movió un candidato a '+reclStageLbl(estado),'reclutamiento');}catch(_){} toast('✓ Movido a '+reclStageLbl(estado)); show('reclutamiento'); }
+async function reclNota(id){ if(typeof zonaRO==='function'&&zonaRO('reclutamiento')){ alert('Tienes esta sección en solo lectura.'); return; } const r=RECL.find(x=>String(x.id)===String(id)); const v=prompt('Nota interna sobre el candidato:', r&&r.notas?r.notas:''); if(v===null)return; const{error}=await sb.from('reclutamiento').update({notas:v}).eq('id',id); if(error){alert(error.message);return;} toast('✓ Nota guardada'); show('reclutamiento'); }
 function reclEditAreas(id){
   const r=RECL.find(x=>String(x.id)===String(id)); if(!r)return; const cur=new Set(r.areas||[]);
   const checks=RECL_AREAS.map(a=>`<label style="display:flex;align-items:center;gap:9px;padding:9px 11px;border:1px solid var(--gris2);border-radius:9px;cursor:pointer;font-size:13.5px"><input type="checkbox" value="${esc(a)}" ${cur.has(a)?'checked':''} style="width:17px;height:17px"> ${esc(a)}</label>`).join('');
@@ -4505,8 +4505,8 @@ function reclEditAreas(id){
   document.body.appendChild(ov);
 }
 function reclCloseAreas(){ const o=document.getElementById('reclAreaOv'); if(o)o.remove(); }
-async function reclSaveAreas(id){ const box=document.getElementById('reclAreaChecks'); const areas=[...box.querySelectorAll('input:checked')].map(c=>c.value); const{error}=await sb.from('reclutamiento').update({areas}).eq('id',id); if(error){alert(error.message);return;} try{auditLog('Cambió las áreas de un candidato','reclutamiento');}catch(_){} reclCloseAreas(); toast('✓ Áreas actualizadas'); show('reclutamiento'); }
-async function reclDel(id){ if(!confirm('¿Eliminar este candidato y su CV? Esta acción no se puede deshacer.'))return; const r=RECL.find(x=>String(x.id)===String(id)); if(r&&r.cv_path){ try{await sb.storage.from('cv').remove([r.cv_path]);}catch(e){} } const{error}=await sb.from('reclutamiento').delete().eq('id',id); if(error){alert(error.message);return;} toast('✓ Eliminado'); show('reclutamiento'); }
+async function reclSaveAreas(id){ if(typeof zonaRO==='function'&&zonaRO('reclutamiento')){ alert('Tienes esta sección en solo lectura.'); return; } const box=document.getElementById('reclAreaChecks'); const areas=[...box.querySelectorAll('input:checked')].map(c=>c.value); const{error}=await sb.from('reclutamiento').update({areas}).eq('id',id); if(error){alert(error.message);return;} try{auditLog('Cambió las áreas de un candidato','reclutamiento');}catch(_){} reclCloseAreas(); toast('✓ Áreas actualizadas'); show('reclutamiento'); }
+async function reclDel(id){ if(typeof zonaRO==='function'&&zonaRO('reclutamiento')){ alert('Tienes esta sección en solo lectura.'); return; } if(!confirm('¿Eliminar este candidato y su CV? Esta acción no se puede deshacer.'))return; const r=RECL.find(x=>String(x.id)===String(id)); if(r&&r.cv_path){ try{await sb.storage.from('cv').remove([r.cv_path]);}catch(e){} } const{error}=await sb.from('reclutamiento').delete().eq('id',id); if(error){alert(error.message);return;} toast('✓ Eliminado'); show('reclutamiento'); }
 async function reclCV(path,nombre){
   if(!path){ alert('Este candidato no tiene CV adjunto.'); return; }
   let url='';
@@ -4875,7 +4875,7 @@ async function msgManage(){
   return `<div style="margin-bottom:14px;display:flex;gap:10px;flex-wrap:wrap;align-items:center"><button class="btn" onclick="tplNew()">+ Nueva plantilla</button><button class="btn ghost" onclick="tplExport()">⬇️ Descargar copia (Excel)</button><label class="btn ghost" style="cursor:pointer">⬆️ Importar copia<input type="file" accept=".xlsx,.xls" style="display:none" onchange="tplImport(this)"></label></div>
     <div class="panel"><h2>Plantillas (${(tpls||[]).length})</h2>${rows||'<div style="color:var(--suave)">Sin plantillas.</div>'}</div>`;
 }
-async function tplDelete(id){ if(!confirm('¿Eliminar esta plantilla de forma permanente?'))return; const{error}=await sb.from('plantillas').delete().eq('id',id); if(error){alert(error.message);return;} try{auditLog('Eliminó una plantilla','plantilla');}catch(e){} toast('Plantilla eliminada'); show('mensajes'); }
+async function tplDelete(id){ if(typeof zonaRO==='function'&&zonaRO('mensajes')){ alert('Tienes esta sección en solo lectura.'); return; } if(!confirm('¿Eliminar esta plantilla de forma permanente?'))return; const{error}=await sb.from('plantillas').delete().eq('id',id); if(error){alert(error.message);return;} try{auditLog('Eliminó una plantilla','plantilla');}catch(e){} toast('Plantilla eliminada'); show('mensajes'); }
 async function tplExport(){
   if(typeof XLSX==='undefined'){ alert('No se pudo cargar el lector de Excel.'); return; }
   const {data}=await sb.from('plantillas').select('*').order('id'); const list=data||[];
@@ -4907,7 +4907,7 @@ async function tplImport(input){
   }catch(e){ alert('No se pudo leer el archivo: '+((e&&e.message)||e)); }
 }
 let tplDraft={}, tplUnitsSel=[];
-function tplNew(){tplEditId=null;tplDraft={};tplUnitsSel=[];tplFormOpen=true;show('mensajes');}
+function tplNew(){ if(typeof zonaRO==='function'&&zonaRO('mensajes')){ alert('Tienes esta sección en solo lectura.'); return; }tplEditId=null;tplDraft={};tplUnitsSel=[];tplFormOpen=true;show('mensajes');}
 function tplEdit(t){tplEditId=t.id;tplDraft=t;tplFormOpen=true;show('mensajes');}
 async function tplDup(id){const{data}=await sb.from('plantillas').select('*').eq('id',id).single();if(!data)return;
   const{error}=await sb.from('plantillas').insert({titulo:data.titulo+' (copia)',cat:data.cat,cuerpo:data.cuerpo,unidades:data.unidades,autor_nombre:PROFILE.nombre});
@@ -4939,7 +4939,7 @@ async function tplForm(){
       <small style="color:var(--suave)">Vacío = toda la propiedad. Añade una o varias unidades si la plantilla solo aplica a algunas.</small></div>
     <div style="margin-top:14px"><button class="btn" type="submit">${tplEditId?'Guardar':'Crear plantilla'}</button> <button class="btn ghost" type="button" onclick="tplCancel()">Cancelar</button></div></form></div>`;
 }
-async function tplSave(e){e.preventDefault();
+async function tplSave(e){e.preventDefault(); if(typeof zonaRO==='function'&&zonaRO('mensajes')){ if(e&&e.preventDefault)e.preventDefault(); alert('Tienes esta sección en solo lectura.'); return false; }
   const prop=(document.getElementById('tProp')||{}).value||'';
   const entries=TPL_UNI.filter(u=>u.prop===prop); const whole=prop && entries.length===1 && entries[0].kind==='e';
   let unidades=[];
@@ -5861,7 +5861,7 @@ function msgwListHTML(term){
 }
 function msgwOpenConv(id,name){ msgwWith=id; msgwName=name; msgwRender(); }
 function msgwBack(){ msgwWith=null; msgwLoad().then(msgwRender); }
-async function msgwSend(){
+async function msgwSend(){ if(typeof zonaRO==='function'&&zonaRO('mensajes')){ alert('Tienes esta sección en solo lectura.'); return; }
   const i=document.getElementById('msgwIn'); const t=(i.value||'').trim(); if(!t||!msgwWith) return;
   i.value=''; i.focus();
   const {data,error}=await sb.from('mensajes').insert({de_id:ME.id,para_id:msgwWith,de_nombre:PROFILE.nombre,para_nombre:msgwName,texto:t,leido:false}).select().single();
@@ -6112,18 +6112,18 @@ async function pageKudos(){
       const acc=mio?`<span style="margin-left:auto;display:flex;gap:6px"><button class="btn ghost" style="padding:3px 9px" onclick="editKudo(${k.id})">✏️</button><button class="btn ghost" style="padding:3px 9px;color:#c0392b" onclick="delKudo(${k.id})">🗑️</button></span>`:'';
       return `<div style="padding:12px 0;border-bottom:1px solid var(--gris);font-size:14px"><div style="display:flex;align-items:center"><div><b>${esc(k.de_nombre)}</b> → <b style="color:var(--acento)">${esc(k.para_nombre)}</b> <small style="color:var(--suave)">· ${new Date(k.created_at).toLocaleDateString('es-ES')}</small></div>${acc}</div><div style="margin-top:4px" id="ktext_${k.id}">${esc(k.texto)}</div></div>`;}).join('')||'<div style="color:var(--suave)">Aún no hay reconocimientos. ¡Sé el primero!</div>'}</div>`;
 }
-async function editKudo(id){
+async function editKudo(id){ if(typeof zonaRO==='function'&&zonaRO('kudos')){ alert('Tienes esta sección en solo lectura.'); return; }
   const el=document.getElementById('ktext_'+id); const actual=el?el.textContent:'';
   const nuevo=prompt('Editar reconocimiento:',actual); if(nuevo===null)return; const t=nuevo.trim(); if(!t)return;
   const{error}=await sb.from('kudos').update({texto:t}).eq('id',id);
   if(error){alert('No se pudo editar: '+error.message);return;} show('kudos'); toast('✓ Editado');
 }
-async function delKudo(id){
+async function delKudo(id){ if(typeof zonaRO==='function'&&zonaRO('kudos')){ alert('Tienes esta sección en solo lectura.'); return; }
   if(!confirm('¿Eliminar este reconocimiento?'))return;
   const{error}=await sb.from('kudos').delete().eq('id',id);
   if(error){alert('No se pudo eliminar: '+error.message);return;} show('kudos'); toast('Eliminado');
 }
-async function createKudo(e){e.preventDefault();const para=document.getElementById('kPara').value;const t=document.getElementById('kT').value.trim();if(!t)return false;const{error}=await sb.from('kudos').insert({de_id:ME.id,de_nombre:PROFILE.nombre,para_nombre:para,texto:t});if(error){alert('Error: '+error.message);return false;}show('kudos');toast('✓ Reconocimiento enviado');return false;}
+async function createKudo(e){e.preventDefault(); if(typeof zonaRO==='function'&&zonaRO('kudos')){ if(e&&e.preventDefault)e.preventDefault(); alert('Tienes esta sección en solo lectura.'); return false; }const para=document.getElementById('kPara').value;const t=document.getElementById('kT').value.trim();if(!t)return false;const{error}=await sb.from('kudos').insert({de_id:ME.id,de_nombre:PROFILE.nombre,para_nombre:para,texto:t});if(error){alert('Error: '+error.message);return false;}show('kudos');toast('✓ Reconocimiento enviado');return false;}
 
 /* ---------------- INCIDENCIAS ---------------- */
 /* ================= MANTENIMIENTO · INCIDENCIAS (v2) ================= */
@@ -7240,30 +7240,45 @@ async function asgEliminar(id){ if(!confirm('¿Eliminar esta asignación publica
   const {error}=await sb.from('limpieza_pub').delete().eq('id',id); if(error){alert('Error: '+error.message);return;}
   if(ASG.pubId===id) ASG.pubId=null; show('asignaciones'); }
 function asgPDF(id){ const p=asgFind(id); if(p) asgBuildPDF(p); }
+let ASG_SHARE_BUSY=false;
+function asgShareSpin(){ if(document.getElementById('asgShareSpinCss'))return; const st=document.createElement('style'); st.id='asgShareSpinCss'; st.textContent='@keyframes asgspin{to{transform:rotate(360deg)}} .asg-ov{position:fixed;inset:0;background:rgba(15,30,55,.55);z-index:99999;display:flex;align-items:center;justify-content:center} .asg-ovbox{background:#fff;color:#1f4e79;padding:22px 24px;border-radius:14px;text-align:center;max-width:320px;box-shadow:0 12px 44px rgba(0,0,0,.32);font-family:inherit} .asg-spin{width:26px;height:26px;border:3px solid rgba(31,78,121,.18);border-top-color:#1f4e79;border-radius:50%;animation:asgspin .7s linear infinite;margin:0 auto 12px}'; document.head.appendChild(st); }
+function asgShareOverlay(){ let ov=document.getElementById('asgShareOv'); if(!ov){ ov=document.createElement('div'); ov.id='asgShareOv'; ov.className='asg-ov'; document.body.appendChild(ov); } ov.style.display='flex'; ov.onclick=(e)=>{ if(e.target===ov) ov.style.display='none'; }; return ov; }
 async function asgShare(id){
-  const d=asgFind(id); if(!d){ return; }
-  asgEnsureStyle();
+  if(ASG_SHARE_BUSY) return;
+  const d=asgFind(id); if(!d) return;
+  if(typeof html2pdf==='undefined'){ asgPDF(id); return; }
+  ASG_SHARE_BUSY=true;
+  asgEnsureStyle(); asgShareSpin();
+  const ov=asgShareOverlay();
+  ov.innerHTML='<div class="asg-ovbox"><div class="asg-spin"></div><div style="font-weight:700;font-size:15px">Preparando PDF…</div><div style="font-size:12.5px;color:#64748b;margin-top:4px">Un momento</div></div>';
   let wrap=document.getElementById('asgPrint'); if(!wrap){ wrap=document.createElement('div'); wrap.id='asgPrint'; document.body.appendChild(wrap); }
-  wrap.innerHTML=`<div class="apz-inner" style="width:1100px;background:#fff;padding:18px">${asgPrintHTML(d)}</div>`;
+  wrap.innerHTML=`<div class="apz-inner" style="width:1100px;background:#fff;padding:16px">${asgPrintHTML(d)}</div>`;
   wrap.setAttribute('style','position:fixed;left:-10000px;top:0;width:1100px;background:#fff');
   const el=wrap.querySelector('.apz-inner');
   const safe=fechaLarga(d.fecha).replace(/[\\/]+/g,'-').replace(/[^\wáéíóúñÁÉÍÓÚÑ0-9-]+/gi,'_').replace(/_+/g,'_').replace(/^_|_$/g,'');
-  const cleanup=()=>{ if(wrap){ wrap.innerHTML=''; wrap.setAttribute('style','position:absolute;left:-9999px;top:0'); } };
+  const cleanWrap=()=>{ wrap.innerHTML=''; wrap.setAttribute('style','position:absolute;left:-9999px;top:0'); };
+  let file=null;
   try{
-    if(typeof html2canvas==='undefined'){ cleanup(); asgPDF(id); return; }
-    toast('Generando imagen…');
-    const canvas=await html2canvas(el,{scale:2,backgroundColor:'#ffffff',windowWidth:1100,scrollX:0,scrollY:0});
-    const blob=await new Promise(res=>canvas.toBlob(res,'image/jpeg',0.95));
-    cleanup();
-    if(!blob){ alert('No se pudo generar la imagen.'); return; }
-    const file=new File([blob],`Asignaciones_${safe||'limpieza'}.jpg`,{type:'image/jpeg'});
-    if(navigator.canShare && navigator.canShare({files:[file]})){
-      try{ await navigator.share({files:[file], title:'Asignaciones de limpieza', text:'Asignaciones · '+fechaLarga(d.fecha)}); }catch(e){}
-    } else {
-      const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download=file.name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url),3000);
-      toast('Imagen descargada — adjúntala en WhatsApp');
-    }
-  }catch(e){ cleanup(); alert('No se pudo generar la imagen: '+((e&&e.message)||e)); }
+    const opt={margin:[6,6,6,6],image:{type:'jpeg',quality:0.98},html2canvas:{scale:2,backgroundColor:'#ffffff',windowWidth:1100,scrollX:0,scrollY:0,useCORS:true,imageTimeout:3000,logging:false},jsPDF:{unit:'mm',format:'a4',orientation:'landscape'},pagebreak:{mode:['avoid-all','css']}};
+    const blob=await html2pdf().set(opt).from(el).outputPdf('blob');
+    cleanWrap();
+    if(!blob){ ov.style.display='none'; ASG_SHARE_BUSY=false; alert('No se pudo generar el PDF.'); return; }
+    file=new File([blob],`Asignaciones_${safe||'limpieza'}.pdf`,{type:'application/pdf'});
+  }catch(e){ cleanWrap(); ov.style.display='none'; ASG_SHARE_BUSY=false; alert('No se pudo generar el PDF: '+((e&&e.message)||e)); return; }
+  ASG_SHARE_BUSY=false;
+  const titulo='Asignaciones de limpieza'; const texto='Asignaciones · '+fechaLarga(d.fecha);
+  const puedeArchivo = navigator.canShare && navigator.canShare({files:[file]});
+  asgShareReady(ov,file,d,titulo,texto,puedeArchivo);
+}
+function asgShareReady(ov,file,d,titulo,texto,puedeArchivo){
+  ov.innerHTML='<div class="asg-ovbox"><div style="font-weight:700;font-size:15.5px;margin-bottom:4px">PDF listo ✅</div><div style="font-size:12.5px;color:#64748b;margin-bottom:14px">Toca para enviarla al grupo</div>'
+    +(puedeArchivo?'<button id="asgGo" style="background:#0a8a3f;color:#fff;border:none;padding:14px 22px;border-radius:11px;font-weight:700;font-size:16px;font-family:inherit;cursor:pointer;width:100%">📲 Enviar por WhatsApp</button>':'')
+    +'<div style="margin-top:12px"><button id="asgDl" style="background:none;border:1px solid #cbd5e1;color:#475569;font-size:13px;padding:9px 16px;border-radius:9px;cursor:pointer;font-family:inherit">⬇️ Descargar PDF</button></div>'
+    +'<div style="margin-top:10px"><button id="asgCx" style="background:none;border:none;color:#94a3b8;font-size:12.5px;cursor:pointer;font-family:inherit">Cancelar</button></div></div>';
+  const dl=()=>{ const url=URL.createObjectURL(file); const a=document.createElement('a'); a.href=url; a.download=file.name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url),4000); ov.style.display='none'; };
+  const go=document.getElementById('asgGo'); if(go) go.onclick=async()=>{ try{ await navigator.share({files:[file],title:titulo,text:texto}); ov.style.display='none'; }catch(e){ if(e&&e.name==='AbortError'){ ov.style.display='none'; return; } dl(); } };
+  const dlb=document.getElementById('asgDl'); if(dlb) dlb.onclick=dl;
+  const cx=document.getElementById('asgCx'); if(cx) cx.onclick=()=>{ ov.style.display='none'; };
 }
 
 function asgPrintHTML(d){
