@@ -2152,7 +2152,7 @@ function horResumen(){
     <div style="font-weight:700;margin:14px 0 6px">Cobertura por día (personas trabajando)</div><div>${dayRows}</div>
     <div style="font-size:12px;color:var(--suave);margin-top:8px">⚠️ rojo = más de 48 h/semana, o día sin cobertura.</div></div>`;
 }
-async function horGuardar(){
+async function horGuardar(){ if(typeof zonaRO==='function'&&zonaRO('horarios')){ alert('Tienes esta sección en solo lectura.'); return; }
   const cells=[...document.querySelectorAll('.tcell2')];
   if(!cells.length){alert('No hay cuadrícula que guardar.');return;}
   const dayLoc={}; document.querySelectorAll('.uloc2').forEach(u=>{ dayLoc[u.dataset.emp+'|'+u.dataset.fecha]=u.value||null; });
@@ -2542,8 +2542,8 @@ function orgTeamsRender(){
   </div>`;
   ov.style.display='flex';
 }
-function orgTeamCreate(){ const i=document.getElementById('otNew'); const n=(i?i.value:'').trim(); if(!n)return; if(!orgTeamWork.includes(n))orgTeamWork.push(n); orgTeamsRender(); }
-async function orgTeamsSave(){
+function orgTeamCreate(){ if(typeof zonaRO==='function'&&zonaRO('organigrama')){ alert('Tienes esta sección en solo lectura.'); return; } const i=document.getElementById('otNew'); const n=(i?i.value:'').trim(); if(!n)return; if(!orgTeamWork.includes(n))orgTeamWork.push(n); orgTeamsRender(); }
+async function orgTeamsSave(){ if(typeof zonaRO==='function'&&zonaRO('organigrama')){ alert('Tienes esta sección en solo lectura.'); return; }
   const ups=[]; for(const id in orgTeamAssign){ const p=ORG_PEOPLE.find(x=>x.id===id); if(p && (p.org_equipo||'')!==(orgTeamAssign[id]||'')) ups.push({id,val:orgTeamAssign[id]||null}); }
   for(const u of ups){ const{error}=await sb.from('profiles').update({org_equipo:u.val}).eq('id',u.id); if(error){alert('No se pudo guardar: '+error.message);return;} }
   orgCoClose(); pageOrganigrama();
@@ -2551,16 +2551,16 @@ async function orgTeamsSave(){
 function orgDragStart(e,id){ orgDragId=id; e.dataTransfer.effectAllowed='move'; e.dataTransfer.setData('text/plain',id); }
 function orgOver(e){ e.preventDefault(); e.dataTransfer.dropEffect='move'; e.currentTarget.classList.add('org-over'); }
 function orgLeave(e){ e.currentTarget.classList.remove('org-over'); }
-async function orgSetJefe(id,jefe){ const{error}=await sb.from('profiles').update({jefe_id:jefe,fuera_org:false,colider_id:null}).eq('id',id); if(error){alert('No se pudo guardar: '+error.message);return;} orgDragId=null; pageOrganigrama(); }
-function orgAddColider(pid){
+async function orgSetJefe(id,jefe){ if(typeof zonaRO==='function'&&zonaRO('organigrama')){ alert('Tienes esta sección en solo lectura.'); return; } const{error}=await sb.from('profiles').update({jefe_id:jefe,fuera_org:false,colider_id:null}).eq('id',id); if(error){alert('No se pudo guardar: '+error.message);return;} orgDragId=null; pageOrganigrama(); }
+function orgAddColider(pid){ if(typeof zonaRO==='function'&&zonaRO('organigrama')){ alert('Tienes esta sección en solo lectura.'); return; }
   const cands=ORG_PEOPLE.filter(p=>p.id!==pid && p.colider_id!==pid && p.role!=='propietario');
   let ov=document.getElementById('orgCoOverlay'); if(!ov){ ov=document.createElement('div'); ov.id='orgCoOverlay'; ov.className='oco-ov'; ov.onclick=function(e){ if(e.target===ov) orgCoClose(); }; document.body.appendChild(ov); }
   ov.innerHTML=`<div class="oco-box"><h3 style="margin:0 0 8px">Añadir co-líder</h3><p style="font-size:13px;color:var(--suave);margin:0 0 12px">Se colocará al mismo nivel y compartirá el equipo que cuelga debajo.</p><select id="ocoSel" style="width:100%;padding:9px 11px;border:1px solid var(--gris2);border-radius:8px;font-family:inherit;margin-bottom:14px">${cands.map(c=>`<option value="${c.id}">${esc(c.nombre)} · ${esc(c.dept||c.area||'')}</option>`).join('')||'<option value="">No hay candidatos</option>'}</select><div style="display:flex;gap:8px;justify-content:flex-end"><button class="btn ghost" onclick="orgCoClose()">Cancelar</button><button class="btn" onclick="orgCoConfirm('${pid}')">Emparejar</button></div></div>`;
   ov.style.display='flex';
 }
 function orgCoClose(){ const ov=document.getElementById('orgCoOverlay'); if(ov) ov.style.display='none'; }
-async function orgCoConfirm(pid){ const sel=document.getElementById('ocoSel'); const xid=sel&&sel.value; orgCoClose(); if(!xid)return; const{error}=await sb.from('profiles').update({colider_id:pid,jefe_id:null,fuera_org:false}).eq('id',xid); if(error){alert('No se pudo: '+error.message);return;} pageOrganigrama(); }
-async function orgUnColider(xid){ const{error}=await sb.from('profiles').update({colider_id:null}).eq('id',xid); if(error){alert('No se pudo: '+error.message);return;} pageOrganigrama(); }
+async function orgCoConfirm(pid){ if(typeof zonaRO==='function'&&zonaRO('organigrama')){ alert('Tienes esta sección en solo lectura.'); return; } const sel=document.getElementById('ocoSel'); const xid=sel&&sel.value; orgCoClose(); if(!xid)return; const{error}=await sb.from('profiles').update({colider_id:pid,jefe_id:null,fuera_org:false}).eq('id',xid); if(error){alert('No se pudo: '+error.message);return;} pageOrganigrama(); }
+async function orgUnColider(xid){ if(typeof zonaRO==='function'&&zonaRO('organigrama')){ alert('Tienes esta sección en solo lectura.'); return; } const{error}=await sb.from('profiles').update({colider_id:null}).eq('id',xid); if(error){alert('No se pudo: '+error.message);return;} pageOrganigrama(); }
 async function orgDrop(e,targetId){
   e.preventDefault(); e.stopPropagation(); e.currentTarget.classList.remove('org-over');
   const id=orgDragId; if(!id||id===targetId) return;
@@ -2568,7 +2568,7 @@ async function orgDrop(e,targetId){
   await orgSetJefe(id,targetId);
 }
 async function orgDropRoot(e){ e.preventDefault(); e.currentTarget.classList.remove('org-over'); const id=orgDragId; if(!id)return; await orgSetJefe(id,null); }
-async function orgDropAside(e){ e.preventDefault(); e.stopPropagation(); e.currentTarget.classList.remove('org-over'); const id=orgDragId; if(!id)return;
+async function orgDropAside(e){ if(typeof zonaRO==='function'&&zonaRO('organigrama')){ if(e&&e.preventDefault)e.preventDefault(); alert('Tienes esta sección en solo lectura.'); return false; } e.preventDefault(); e.stopPropagation(); e.currentTarget.classList.remove('org-over'); const id=orgDragId; if(!id)return;
   const{error}=await sb.from('profiles').update({fuera_org:true,jefe_id:null,colider_id:null}).eq('id',id); if(error){alert('No se pudo guardar: '+error.message);return;} orgDragId=null; pageOrganigrama(); }
 
 /* ---------------- IMPORTAR EXCEL (Dirección/Admin/Propietario) ---------------- */
@@ -2713,7 +2713,7 @@ async function pageProveedores(){
     ${tblSearch('provBody')}
     <div class="panel"><div style="overflow-x:auto"><table class="tbl-compact"><thead><tr><th>Nombre proveedor</th><th>Tipología</th><th>Concepto</th><th>RUC</th><th>Email</th><th>Teléfono</th><th>Banco</th><th>Tipo de cuenta</th><th>Nº de cuenta</th>${canEdit?'<th></th>':''}</tr></thead><tbody id="provBody">${rows||'<tr><td colspan="10" style="color:var(--suave)">Aún no hay proveedores.</td></tr>'}</tbody></table></div></div>`;
 }
-async function saveProv(e){e.preventDefault();
+async function saveProv(e){ if(typeof zonaRO==='function'&&zonaRO('proveedores')){ if(e&&e.preventDefault)e.preventDefault(); alert('Tienes esta sección en solo lectura.'); return false; }e.preventDefault();
   const row={nombre:val('pN'),tipologia:val('pTip'),concepto:val('pCon'),ruc:val('pR'),email:val('pE'),tel:val('pT'),banco:val('pB'),tipo_cuenta:val('pTC'),num_cuenta:val('pNC')};
   if(!row.nombre)return false;
   const{error}=provEditId?await sb.from('proveedores').update(row).eq('id',provEditId):await sb.from('proveedores').insert(row);
@@ -3203,7 +3203,7 @@ async function pageSuministros(){
     <div class="panel"><div style="overflow-x:auto"><table class="tbl-compact"><thead><tr><th>${refLbl}</th>${conMedidor?'<th>Nº medidor</th>':''}<th>A nombre de</th><th>Compañía</th><th>Propiedad</th><th>Nota</th>${canEdit?'<th></th>':''}</tr></thead>
       <tbody id="supBody">${rows||'<tr><td colspan="7" style="color:var(--suave)">Sin registros en esta categoría.</td></tr>'}</tbody></table></div></div>`;
 }
-async function saveSup(e){e.preventDefault();
+async function saveSup(e){ if(typeof zonaRO==='function'&&zonaRO('suministros')){ if(e&&e.preventDefault)e.preventDefault(); alert('Tienes esta sección en solo lectura.'); return false; }e.preventDefault();
   const row={tipo:supTab,referencia:val('sR'),medidor:supTab==='electricidad'?val('sMed'):null,titular:val('sT'),compania:val('sC'),propiedad:val('sP'),nota:val('sNota')};
   const{error}=supEditId?await sb.from('suministros').update(row).eq('id',supEditId):await sb.from('suministros').insert(row);
   if(error){alert('Error: '+error.message);return false;}
@@ -3231,14 +3231,14 @@ async function pageSugerencias(){
         <div><button class="btn" type="submit">Enviar</button></div></form></div>
     <div class="panel"><h2>📋 Sugerencias del equipo (${(data||[]).length})</h2>${list||'<div style="color:var(--suave);font-size:13.5px">Aún no hay sugerencias.</div>'}</div>`;
 }
-async function createSug(e){e.preventDefault();
+async function createSug(e){ if(typeof zonaRO==='function'&&zonaRO('sugerencias')){ if(e&&e.preventDefault)e.preventDefault(); alert('Tienes esta sección en solo lectura.'); return false; }e.preventDefault();
   const texto=val('sgT'); if(!texto)return false;
   const anon=document.getElementById('sgAnon').checked;
   const{error}=await sb.from('sugerencias').insert({autor_id:ME.id,autor_nombre:anon?'Anónimo':PROFILE.nombre,cat:val('sgCat'),texto,estado:'Pendiente'});
   if(error){alert('Error: '+error.message);return false;}
   show('sugerencias');return false;
 }
-async function setSugEstado(id,val2){await sb.from('sugerencias').update({estado:val2}).eq('id',id);show('sugerencias');}
+async function setSugEstado(id,val2){ if(typeof zonaRO==='function'&&zonaRO('sugerencias')){ alert('Tienes esta sección en solo lectura.'); return; }await sb.from('sugerencias').update({estado:val2}).eq('id',id);show('sugerencias');}
 
 /* ---------------- FICHAJE QR ---------------- */
 let fichScanOpen=false;
@@ -3305,7 +3305,7 @@ async function cambCrear(e){ e.preventDefault();
 }
 async function cambAceptar(id){ const c=CAMB.find(x=>String(x.id)===String(id)); if(!c)return; if(String(c.dest_id)!==String(ME.id)){alert('No es tu propuesta.');return;} const {error}=await sb.from('turno_cambios').update({estado:'pend_dir'}).eq('id',id); if(error){alert(error.message);return;} toast('✓ Aceptado. Pendiente de aprobación de Dirección.'); horTab='cambios'; show('horarios'); }
 async function cambRechazar(id){ if(!confirm('¿Rechazar/cancelar este cambio?'))return; const {error}=await sb.from('turno_cambios').update({estado:'rechazado'}).eq('id',id); if(error){alert(error.message);return;} horTab='cambios'; show('horarios'); }
-async function cambAprobar(id){ const c=CAMB.find(x=>String(x.id)===String(id)); if(!c)return; if(!cambDirector()){alert('Solo Dirección puede aprobar.');return;}
+async function cambAprobar(id){ if(typeof zonaRO==='function'&&zonaRO('horarios')){ alert('Tienes esta sección en solo lectura.'); return; } const c=CAMB.find(x=>String(x.id)===String(id)); if(!c)return; if(!cambDirector()){alert('Solo Dirección puede aprobar.');return;}
   const ra=await sb.from('turnos').select('*').eq('id',c.sol_turno_id); const rb=await sb.from('turnos').select('*').eq('id',c.dest_turno_id);
   const a=(ra.data||[])[0], b=(rb.data||[])[0];
   if(!a||!b){ alert('Uno de los turnos ya no existe (el horario cambió). Recházalo y que lo vuelvan a solicitar.'); return; }
@@ -3670,13 +3670,13 @@ function evForm(){const e=evDraft;const tipos=[['aviso','Aviso'],['evento','Even
     <label style="font-weight:700;color:var(--azul)">Dirigido a (alcance)</label>
     ${scopeSelects({a:'evArea',d:'evDept',e:'evEq'},e)}
     <div><button class="btn" type="submit">Guardar</button> <button class="btn ghost" type="button" onclick="evFormOpen=false;show('calendario')">Cancelar</button></div></form></div>`;}
-async function evSave(e){e.preventDefault();let ini=val('evI'),fin=val('evF')||val('evI');if(fin<ini)fin=ini;
+async function evSave(e){ if(typeof zonaRO==='function'&&zonaRO('calendario')){ if(e&&e.preventDefault)e.preventDefault(); alert('Tienes esta sección en solo lectura.'); return false; }e.preventDefault();let ini=val('evI'),fin=val('evF')||val('evI');if(fin<ini)fin=ini;
   const row={titulo:val('evT'),ini,fin,tipo:document.getElementById('evTipo').value,
     area:(document.getElementById('evArea').value||null), dept:document.getElementById('evDept').value||'*', equipo:(document.getElementById('evEq').value||null)};
   if(!row.titulo)return false;
   const{error}=evEditId?await sb.from('eventos').update(row).eq('id',evEditId):await sb.from('eventos').insert(row);
   if(error){alert('Error: '+error.message);return false;}evFormOpen=false;show('calendario');return false;}
-async function evDel(id){if(!confirm('¿Eliminar evento?'))return;await sb.from('eventos').delete().eq('id',id);show('calendario');}
+async function evDel(id){ if(typeof zonaRO==='function'&&zonaRO('calendario')){ alert('Tienes esta sección en solo lectura.'); return; }if(!confirm('¿Eliminar evento?'))return;await sb.from('eventos').delete().eq('id',id);show('calendario');}
 function openComFromCal(id){ comSel=id; comFilter='todos'; comQuery=''; show('comunicados'); }
 
 /* ---------------- CUMPLEAÑOS ---------------- */
@@ -3879,7 +3879,7 @@ function cotPDF(){
   };
   if(document.fonts&&document.fonts.ready){ document.fonts.ready.then(()=>setTimeout(go,80)); } else setTimeout(go,80);
 }
-async function cotGuardar(){
+async function cotGuardar(){ if(typeof zonaRO==='function'&&zonaRO('cotizaciones')){ alert('Tienes esta sección en solo lectura.'); return; }
   if(!cotRows.some(r=>(r.texto||'').trim()||Number(r.sin)>0)){ alert('Añade al menos un concepto con descripción o monto.'); return; }
   const d=cotGather();
   if(cotEditId){
@@ -4085,21 +4085,21 @@ async function pageCatalogos(){
       <div style="font-size:12px;color:var(--suave);margin-top:10px">El alcance de Horarios está reforzado en la base de datos. En otras secciones aplica a nivel de menús y acciones.</div></div>`;
 }
 async function catReload(){ await loadCatalogos(); show('catalogos'); }
-async function addArea(){ const n=(val('nArea')||'').trim(); if(!n)return; const{error}=await sb.from('areas').insert({nombre:n}); if(error){alert(error.message);return;} toast('✓ Añadido'); catReload(); }
-async function delArea(n){ if(!confirm('¿Eliminar el área "'+n+'"?'))return; const{error}=await sb.from('areas').delete().eq('nombre',n); if(error){alert(error.message);return;} catReload(); }
-async function addDepto(){ const n=(val('nDepto')||'').trim(); const a=document.getElementById('nDeptoArea').value; if(!n)return; const{error}=await sb.from('departamentos').insert({nombre:n,area:a}); if(error){alert(error.message);return;} toast('✓ Añadido'); catReload(); }
-async function delDepto(n){ if(!confirm('¿Eliminar el departamento "'+n+'"?'))return; const{error}=await sb.from('departamentos').delete().eq('nombre',n); if(error){alert(error.message);return;} catReload(); }
-async function addPos(){ const n=(val('nPos')||'').trim(); if(!n)return; const{error}=await sb.from('posiciones').insert({nombre:n}); if(error){alert(error.message);return;} toast('✓ Añadido'); catReload(); }
-async function delPos(n){ if(!confirm('¿Eliminar la posición "'+n+'"?'))return; const{error}=await sb.from('posiciones').delete().eq('nombre',n); if(error){alert(error.message);return;} catReload(); }
-async function addEquipo(){ const n=(val('nEquipo')||'').trim(); if(!n)return; const{error}=await sb.from('equipos').insert({nombre:n}); if(error){alert(error.message);return;} toast('✓ Añadido'); catReload(); }
-async function delEquipo(n){ if(!confirm('¿Eliminar el equipo "'+n+'"?'))return; const{error}=await sb.from('equipos').delete().eq('nombre',n); if(error){alert(error.message);return;} catReload(); }
-async function addUbic(){ const n=(val('nUbic')||'').trim(); if(!n)return; const{error}=await sb.from('ubicaciones').insert({nombre:n}); if(error){alert(error.message);return;} toast('✓ Añadida'); catReload(); }
-async function delUbic(n){ if(!confirm('¿Eliminar la ubicación "'+n+'"?'))return; const{error}=await sb.from('ubicaciones').delete().eq('nombre',n); if(error){alert(error.message);return;} catReload(); }
+async function addArea(){ if(typeof zonaRO==='function'&&zonaRO('catalogos')){ alert('Tienes esta sección en solo lectura.'); return; } const n=(val('nArea')||'').trim(); if(!n)return; const{error}=await sb.from('areas').insert({nombre:n}); if(error){alert(error.message);return;} toast('✓ Añadido'); catReload(); }
+async function delArea(n){ if(typeof zonaRO==='function'&&zonaRO('catalogos')){ alert('Tienes esta sección en solo lectura.'); return; } if(!confirm('¿Eliminar el área "'+n+'"?'))return; const{error}=await sb.from('areas').delete().eq('nombre',n); if(error){alert(error.message);return;} catReload(); }
+async function addDepto(){ if(typeof zonaRO==='function'&&zonaRO('catalogos')){ alert('Tienes esta sección en solo lectura.'); return; } const n=(val('nDepto')||'').trim(); const a=document.getElementById('nDeptoArea').value; if(!n)return; const{error}=await sb.from('departamentos').insert({nombre:n,area:a}); if(error){alert(error.message);return;} toast('✓ Añadido'); catReload(); }
+async function delDepto(n){ if(typeof zonaRO==='function'&&zonaRO('catalogos')){ alert('Tienes esta sección en solo lectura.'); return; } if(!confirm('¿Eliminar el departamento "'+n+'"?'))return; const{error}=await sb.from('departamentos').delete().eq('nombre',n); if(error){alert(error.message);return;} catReload(); }
+async function addPos(){ if(typeof zonaRO==='function'&&zonaRO('catalogos')){ alert('Tienes esta sección en solo lectura.'); return; } const n=(val('nPos')||'').trim(); if(!n)return; const{error}=await sb.from('posiciones').insert({nombre:n}); if(error){alert(error.message);return;} toast('✓ Añadido'); catReload(); }
+async function delPos(n){ if(typeof zonaRO==='function'&&zonaRO('catalogos')){ alert('Tienes esta sección en solo lectura.'); return; } if(!confirm('¿Eliminar la posición "'+n+'"?'))return; const{error}=await sb.from('posiciones').delete().eq('nombre',n); if(error){alert(error.message);return;} catReload(); }
+async function addEquipo(){ if(typeof zonaRO==='function'&&zonaRO('catalogos')){ alert('Tienes esta sección en solo lectura.'); return; } const n=(val('nEquipo')||'').trim(); if(!n)return; const{error}=await sb.from('equipos').insert({nombre:n}); if(error){alert(error.message);return;} toast('✓ Añadido'); catReload(); }
+async function delEquipo(n){ if(typeof zonaRO==='function'&&zonaRO('catalogos')){ alert('Tienes esta sección en solo lectura.'); return; } if(!confirm('¿Eliminar el equipo "'+n+'"?'))return; const{error}=await sb.from('equipos').delete().eq('nombre',n); if(error){alert(error.message);return;} catReload(); }
+async function addUbic(){ if(typeof zonaRO==='function'&&zonaRO('catalogos')){ alert('Tienes esta sección en solo lectura.'); return; } const n=(val('nUbic')||'').trim(); if(!n)return; const{error}=await sb.from('ubicaciones').insert({nombre:n}); if(error){alert(error.message);return;} toast('✓ Añadida'); catReload(); }
+async function delUbic(n){ if(typeof zonaRO==='function'&&zonaRO('catalogos')){ alert('Tienes esta sección en solo lectura.'); return; } if(!confirm('¿Eliminar la ubicación "'+n+'"?'))return; const{error}=await sb.from('ubicaciones').delete().eq('nombre',n); if(error){alert(error.message);return;} catReload(); }
 function catSlug(s){ return (''+(s||'')).normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,'').slice(0,40)||('cat'+Date.now()); }
 async function addCat(){ const n=(val('nCat')||'').trim(); if(!n)return; const slug=catSlug(n); if((CAT.categorias||[]).some(c=>(c.slug||'')===slug)){alert('Ya existe una categoría parecida.');return;} const orden=(CAT.categorias||[]).length+1; const{error}=await sb.from('mant_categorias').insert({nombre:n,slug,orden}); if(error){alert(error.message);return;} toast('✓ Categoría añadida'); catReload(); }
 async function delCat(slug){ if(!confirm('¿Eliminar esta categoría? Las incidencias que ya la usaban la conservarán como texto.'))return; const{error}=await sb.from('mant_categorias').delete().eq('slug',slug); if(error){alert(error.message);return;} catReload(); }
-async function addEdif(){ const n=(val('nEdif')||'').trim(); if(!n)return; if((CAT.edificios||[]).includes(n)){alert('Ya existe un edificio con ese nombre.');return;} const cnt=Math.max(0,parseInt(val('nEdifNum'),10)||0); const{error}=await sb.from('mant_edificios').insert({nombre:n,orden:(CAT.edificios||[]).length+1}); if(error){alert(error.message);return;} const units=[{edificio:n,nombre:'Zona Común',tipo:'comun',orden:0}]; for(let k=1;k<=cnt;k++) units.push({edificio:n,nombre:''+k,tipo:'apartamento',orden:k}); const r=await sb.from('mant_unidades').insert(units); if(r.error){alert('Edificio creado, pero error al crear unidades: '+r.error.message);} toast('✓ Edificio creado'); catReload(); }
-async function renEdif(old){
+async function addEdif(){ if(typeof zonaRO==='function'&&zonaRO('catalogos')){ alert('Tienes esta sección en solo lectura.'); return; } const n=(val('nEdif')||'').trim(); if(!n)return; if((CAT.edificios||[]).includes(n)){alert('Ya existe un edificio con ese nombre.');return;} const cnt=Math.max(0,parseInt(val('nEdifNum'),10)||0); const{error}=await sb.from('mant_edificios').insert({nombre:n,orden:(CAT.edificios||[]).length+1}); if(error){alert(error.message);return;} const units=[{edificio:n,nombre:'Zona Común',tipo:'comun',orden:0}]; for(let k=1;k<=cnt;k++) units.push({edificio:n,nombre:''+k,tipo:'apartamento',orden:k}); const r=await sb.from('mant_unidades').insert(units); if(r.error){alert('Edificio creado, pero error al crear unidades: '+r.error.message);} toast('✓ Edificio creado'); catReload(); }
+async function renEdif(old){ if(typeof zonaRO==='function'&&zonaRO('catalogos')){ alert('Tienes esta sección en solo lectura.'); return; }
   const nv=(prompt('Nuevo nombre para el edificio:',old)||'').trim();
   if(!nv||nv===old) return;
   if((CAT.edificios||[]).includes(nv)){ alert('Ya existe un edificio con ese nombre.'); return; }
@@ -4107,10 +4107,10 @@ async function renEdif(old){
   if(error){ alert('No se pudo renombrar: '+error.message+'\n\n(¿Ejecutaste supabase_rename_edificio.sql? ¿Entraste como Dirección/Admin/Propietario?)'); return; }
   toast('✓ Edificio renombrado en toda la web'); catReload();
 }
-async function delEdif(n){ if(!confirm('¿Eliminar el edificio "'+n+'" y sus unidades?'))return; await sb.from('mant_unidades').delete().eq('edificio',n); const{error}=await sb.from('mant_edificios').delete().eq('nombre',n); if(error){alert(error.message);return;} const{data:chk}=await sb.from('mant_edificios').select('id').eq('nombre',n); if(chk&&chk.length){alert('No se pudo borrar (permisos). Ejecuta el SQL más reciente y entra como Propietario.');} catReload(); }
-async function addUni(){ const e=(val('nUniEdif')||'').trim(); const n=(val('nUniNom')||'').trim(); const t=document.getElementById('nUniTipo').value; if(!e){alert('Crea primero un edificio.');return;} if(!n)return; const{error}=await sb.from('mant_unidades').insert({edificio:e,nombre:n,tipo:t,orden:(CAT.unidades||[]).filter(u=>u.edificio===e).length+1}); if(error){alert(error.message);return;} toast('✓ Unidad añadida'); catReload(); }
-async function addUniTo(ed,i){ const el=document.getElementById('addUni_'+i); const n=(el?el.value:'').trim(); if(!n)return; const ts=document.getElementById('addUniTipo_'+i); const t=ts?ts.value:'apartamento'; const{error}=await sb.from('mant_unidades').insert({edificio:ed,nombre:n,tipo:t,orden:(CAT.unidades||[]).filter(u=>u.edificio===ed).length+1}); if(error){alert(error.message);return;} toast('✓ Unidad añadida'); catReload(); }
-async function delUni(e,n){ if(!confirm('¿Eliminar la unidad "'+n+'"?'))return; const{error}=await sb.from('mant_unidades').delete().eq('edificio',e).eq('nombre',n); if(error){alert(error.message);return;} const{data:chk}=await sb.from('mant_unidades').select('id').eq('edificio',e).eq('nombre',n); if(chk&&chk.length){alert('No se pudo borrar (permisos). Ejecuta el SQL más reciente y entra como Propietario.');} catReload(); }
+async function delEdif(n){ if(typeof zonaRO==='function'&&zonaRO('catalogos')){ alert('Tienes esta sección en solo lectura.'); return; } if(!confirm('¿Eliminar el edificio "'+n+'" y sus unidades?'))return; await sb.from('mant_unidades').delete().eq('edificio',n); const{error}=await sb.from('mant_edificios').delete().eq('nombre',n); if(error){alert(error.message);return;} const{data:chk}=await sb.from('mant_edificios').select('id').eq('nombre',n); if(chk&&chk.length){alert('No se pudo borrar (permisos). Ejecuta el SQL más reciente y entra como Propietario.');} catReload(); }
+async function addUni(){ if(typeof zonaRO==='function'&&zonaRO('catalogos')){ alert('Tienes esta sección en solo lectura.'); return; } const e=(val('nUniEdif')||'').trim(); const n=(val('nUniNom')||'').trim(); const t=document.getElementById('nUniTipo').value; if(!e){alert('Crea primero un edificio.');return;} if(!n)return; const{error}=await sb.from('mant_unidades').insert({edificio:e,nombre:n,tipo:t,orden:(CAT.unidades||[]).filter(u=>u.edificio===e).length+1}); if(error){alert(error.message);return;} toast('✓ Unidad añadida'); catReload(); }
+async function addUniTo(ed,i){ if(typeof zonaRO==='function'&&zonaRO('catalogos')){ alert('Tienes esta sección en solo lectura.'); return; } const el=document.getElementById('addUni_'+i); const n=(el?el.value:'').trim(); if(!n)return; const ts=document.getElementById('addUniTipo_'+i); const t=ts?ts.value:'apartamento'; const{error}=await sb.from('mant_unidades').insert({edificio:ed,nombre:n,tipo:t,orden:(CAT.unidades||[]).filter(u=>u.edificio===ed).length+1}); if(error){alert(error.message);return;} toast('✓ Unidad añadida'); catReload(); }
+async function delUni(e,n){ if(typeof zonaRO==='function'&&zonaRO('catalogos')){ alert('Tienes esta sección en solo lectura.'); return; } if(!confirm('¿Eliminar la unidad "'+n+'"?'))return; const{error}=await sb.from('mant_unidades').delete().eq('edificio',e).eq('nombre',n); if(error){alert(error.message);return;} const{data:chk}=await sb.from('mant_unidades').select('id').eq('edificio',e).eq('nombre',n); if(chk&&chk.length){alert('No se pudo borrar (permisos). Ejecuta el SQL más reciente y entra como Propietario.');} catReload(); }
 
 /* ---------------- REGISTROS PENDIENTES (aprobación) ---------------- */
 async function pageRegistros(){
@@ -4324,7 +4324,7 @@ function onAreaChange(area){
   if(userDraft.dept && !inArea.includes(userDraft.dept)) userDraft.dept='';  // si tenía depto de otra área, pasa a Ninguno
   show('admin');
 }
-async function crearCatInline(tipo){
+async function crearCatInline(tipo){ if(typeof zonaRO==='function'&&zonaRO('catalogos')){ alert('Tienes esta sección en solo lectura.'); return; }
   captureUserForm();
   const n=prompt('Nuevo '+(tipo==='posicion'?'posición':tipo)+':'); const v=(n||'').trim();
   if(!v){ show('admin'); return; }
@@ -4356,7 +4356,10 @@ async function userSave(e){e.preventDefault();
   const f=document.getElementById('uFoto').files[0];
   if(f){ row.foto=await fileToAvatar(f); }            // respaldo si no se usó el recorte
   else { row.foto = (userDraft.foto!==undefined ? userDraft.foto : null); }  // recorte aplicado, foto existente, o "Quitar foto"
-  const{error}=await sb.from('profiles').update(row).eq('id',userEditId);
+  Object.keys(row).forEach(k=>{ if(row[k]==='null'||row[k]==='undefined') row[k]=null; });
+  const targetId=userEditId||(userDraft&&userDraft.id)||null;
+  if(!targetId){ alert('No se pudo identificar al usuario. Cierra la ficha y vuelve a abrirla.'); return false; }
+  const{error}=await sb.from('profiles').update(row).eq('id',targetId);
   if(error){alert('Error: '+error.message);return false;}
   userFormOpen=false;show('admin');return false;}
 
@@ -5106,7 +5109,7 @@ function cpForm(){
       <div style="margin-top:14px"><button class="btn" type="submit">${cpEditId?'Guardar cambios':'Guardar cotización'}</button> <button class="btn ghost" type="button" onclick="cpFormOpen=false;show('cotiprov')">Cancelar</button></div>
     </form></div>`;
 }
-async function cpSave(e){ e.preventDefault();
+async function cpSave(e){ if(typeof zonaRO==='function'&&zonaRO('cotiprov')){ if(e&&e.preventDefault)e.preventDefault(); alert('Tienes esta sección en solo lectura.'); return false; } e.preventDefault();
   const g=id=>{const el=document.getElementById(id);return el?el.value:'';};
   const btn=e.target.querySelector('button[type=submit]'); if(btn){btn.disabled=true;btn.textContent='⏳ Guardando…';}
   try{
@@ -5137,7 +5140,7 @@ async function cpSave(e){ e.preventDefault();
   finally{ if(btn){btn.disabled=false;btn.textContent=cpEditId?'Guardar cambios':'Guardar cotización';} }
   return false;
 }
-async function cpBorrar(id){ if(!confirm('¿Eliminar esta cotización del historial?'))return; const {error}=await sb.from('coti_prov').delete().eq('id',id); if(error){alert(error.message);return;} show('cotiprov'); }
+async function cpBorrar(id){ if(typeof zonaRO==='function'&&zonaRO('cotiprov')){ alert('Tienes esta sección en solo lectura.'); return; } if(!confirm('¿Eliminar esta cotización del historial?'))return; const {error}=await sb.from('coti_prov').delete().eq('id',id); if(error){alert(error.message);return;} show('cotiprov'); }
 function cpComparador(){
   const props=[...new Set(CP.map(c=>c.propiedad).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
   if(cpCmpProp && !props.includes(cpCmpProp)) cpCmpProp='';
@@ -5780,7 +5783,7 @@ async function pageFormacion(){
     ${canEdit?`<div style="margin-bottom:14px"><button class="btn" onclick="forFormOpen=!forFormOpen;show('formacion')">${forFormOpen?'✕ Cerrar':'+ Nueva formación'}</button></div>${forFormOpen?`<div class="panel" style="max-width:560px"><form class="box" onsubmit="return forSave(event)" style="max-width:none"><label>Título</label><input id="fT" required><label>Tipo</label><select id="fTipo"><option>Obligatoria</option><option>Recomendada</option><option>Voluntaria</option></select><label>Fecha</label><input id="fF" placeholder="15 jun 2026 o Continuo"><div><button class="btn" type="submit">Guardar</button></div></form></div>`:''}`:''}
     <div class="panel"><table><thead><tr><th>Formación</th><th>Tipo</th><th>Fecha</th>${canEdit?'<th></th>':''}</tr></thead><tbody>${rows||'<tr><td colspan="4" style="color:var(--suave)">Sin formaciones.</td></tr>'}</tbody></table></div>`;
 }
-async function forSave(e){e.preventDefault();await sb.from('formaciones').insert({titulo:val('fT'),tipo:document.getElementById('fTipo').value,fecha:val('fF')});forFormOpen=false;show('formacion');return false;}
+async function forSave(e){ if(typeof zonaRO==='function'&&zonaRO('formacion')){ if(e&&e.preventDefault)e.preventDefault(); alert('Tienes esta sección en solo lectura.'); return false; }e.preventDefault();await sb.from('formaciones').insert({titulo:val('fT'),tipo:document.getElementById('fTipo').value,fecha:val('fF')});forFormOpen=false;show('formacion');return false;}
 
 /* ---------------- KPIs ---------------- */
 async function pageKpis(){
@@ -5940,15 +5943,15 @@ async function pageMarca(){
   const addSec = can? `<div class="panel"><h2 style="margin-top:0">➕ Nueva sección</h2><div class="cat-add"><input id="marcaNuevaSec" placeholder="Nombre (ej: 🏷️ Logos, Dossiers, Presentaciones…)"><button class="btn" onclick="marcaAddSeccion()">+ Crear sección</button></div></div>` : '';
   document.getElementById('main').innerHTML=`<div class="page-title">Marca y recursos</div><div class="page-sub">Logos, identidad gráfica, dossiers y presentaciones</div>${addSec}${secHTML}`;
 }
-async function marcaAddSeccion(){ if(!marcaCan())return; const v=(val('marcaNuevaSec')||'').trim(); if(!v)return; if(MARCA.some(x=>x.seccion===v)){alert('Ya existe esa sección.');return;} const {error}=await sb.from('marca_recursos').insert({seccion:v,icon:'📁',archivo:null,orden:(MARCA.length+1)}); if(error){alert(error.message);return;} toast('✓ Sección creada'); show('marca'); }
-async function marcaUpload(input,seccion){ if(!marcaCan()){alert('Sin permiso.');return;} const f=input.files[0]; input.value=''; if(!f)return;
+async function marcaAddSeccion(){ if(typeof zonaRO==='function'&&zonaRO('marca')){ alert('Tienes esta sección en solo lectura.'); return; } if(!marcaCan())return; const v=(val('marcaNuevaSec')||'').trim(); if(!v)return; if(MARCA.some(x=>x.seccion===v)){alert('Ya existe esa sección.');return;} const {error}=await sb.from('marca_recursos').insert({seccion:v,icon:'📁',archivo:null,orden:(MARCA.length+1)}); if(error){alert(error.message);return;} toast('✓ Sección creada'); show('marca'); }
+async function marcaUpload(input,seccion){ if(typeof zonaRO==='function'&&zonaRO('marca')){ alert('Tienes esta sección en solo lectura.'); return; } if(!marcaCan()){alert('Sin permiso.');return;} const f=input.files[0]; input.value=''; if(!f)return;
   const path=seccion.replace(/[^a-zA-Z0-9]/g,'_')+'/'+Date.now()+'_'+f.name.replace(/[^a-zA-Z0-9._-]/g,'_'); let url='';
   try{ const up=await sb.storage.from('marca').upload(path,f,{upsert:true}); if(!up.error){ const {data:pub}=sb.storage.from('marca').getPublicUrl(path); url=pub&&pub.publicUrl||''; } }catch(e){}
   if(!url){ try{ url=URL.createObjectURL(f); }catch(e){} }
   const {error}=await sb.from('marca_recursos').insert({seccion,icon:'📁',archivo:f.name,url,tipo:f.type||null}); if(error){alert('No se pudo guardar: '+error.message);return;}
   toast('✓ Archivo subido'); show('marca'); }
-async function marcaDelFile(id){ if(!marcaCan())return; if(!confirm('¿Eliminar este archivo?'))return; const {error}=await sb.from('marca_recursos').delete().eq('id',id); if(error){alert(error.message);return;} toast('Eliminado'); show('marca'); }
-async function marcaDelSeccion(n){ if(!marcaCan())return; if(!confirm('¿Eliminar la sección "'+n+'" y todos sus archivos?'))return; const {error}=await sb.from('marca_recursos').delete().eq('seccion',n); if(error){alert(error.message);return;} toast('Sección eliminada'); show('marca'); }
+async function marcaDelFile(id){ if(typeof zonaRO==='function'&&zonaRO('marca')){ alert('Tienes esta sección en solo lectura.'); return; } if(!marcaCan())return; if(!confirm('¿Eliminar este archivo?'))return; const {error}=await sb.from('marca_recursos').delete().eq('id',id); if(error){alert(error.message);return;} toast('Eliminado'); show('marca'); }
+async function marcaDelSeccion(n){ if(typeof zonaRO==='function'&&zonaRO('marca')){ alert('Tienes esta sección en solo lectura.'); return; } if(!marcaCan())return; if(!confirm('¿Eliminar la sección "'+n+'" y todos sus archivos?'))return; const {error}=await sb.from('marca_recursos').delete().eq('seccion',n); if(error){alert(error.message);return;} toast('Sección eliminada'); show('marca'); }
 const TUTS=[['🛎️','Check-in exprés','Nuevo flujo de recepción'],['🧹','Estándar de limpieza','Checklist de preparación'],['💬','Atención al cliente 5★','Gestión de incidencias y reseñas'],['📊','Motor de reservas','Uso del panel de reservas']];
 function pageTutoriales(){return `<div class="page-title">Tutoriales</div><div class="page-sub">Aprende cómo trabajamos en Amazinn Places</div>
   <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:16px">${TUTS.map(t=>`<div class="panel" style="margin:0;padding:0;overflow:hidden"><div style="height:110px;background:linear-gradient(135deg,var(--azul),var(--azul2));display:flex;align-items:center;justify-content:center;font-size:36px;color:#fff">${t[0]}</div><div style="padding:14px"><b>${t[1]}</b><p style="font-size:13px;color:var(--suave);margin-top:5px">${t[2]}</p></div></div>`).join('')}</div>`;
@@ -6568,17 +6571,21 @@ async function incCreate(e){ if(typeof zonaRO==='function'&&zonaRO('incidencias'
   const ins=await sb.from('mant_incidencias').insert(rows).select('id');
   if(ins.error){ alert('No se pudo crear: '+ins.error.message); if(btn){btn.disabled=false;btn.textContent='Crear incidencia';} return false; }
   const ids=(ins.data||[]).map(x=>x.id);
-  for(const id of ids){ await incUpload(id,(document.getElementById('iFotos')||{}).files||[],'reporte'); }
+  try{ for(const id of ids){ await incUpload(id,(document.getElementById('iFotos')||{}).files||[],'reporte'); } }catch(_e){}
   const uniTxt = unaSola? unis.join(', ') : (unis.length>1? unis.join(', ') : (unis[0]||''));
   const loc=(base.edificio||'—')+(uniTxt?' · '+uniTxt:'');
   const urgLbl=INC_URG[base.urgencia]?INC_URG[base.urgencia][0]:base.urgencia;
-  if(personaId && String(personaId)!==String(ME.id)){
-    try{ await sb.from('mensajes').insert({de_id:ME.id,para_id:personaId,de_nombre:PROFILE.nombre,para_nombre:persona?persona.nombre:'',texto:`🛠️ Se te ha asignado ${ids.length>1?ids.length+' incidencias':'una incidencia'} (${urgLbl}) en ${loc}: ${desc.slice(0,120)}`,leido:false}); }catch(e){}
-  } else if(!personaId && base.urgencia==='alta'){
-    await notifyTeam('Mantenimiento','🔴',`URGENTE sin asignar en ${loc} — ¡que alguien la tome!`,'incidencias');
-  }
-  if(afecta||fuera){ try{ await notifyTeam('Atención al cliente','🛎️',`Incidencia que afecta a ${loc}${fuera?' (FUERA DE SERVICIO)':''}`,'incidencias'); }catch(e){} }
-  incFormOpen=false; incNew=false; toast('✓ '+(ids.length>1?ids.length+' incidencias creadas':'Incidencia creada')); show('incidencias'); return false;
+  // Cerrar y avisar al usuario YA (las notificaciones no deben bloquear el guardado)
+  incFormOpen=false; incNew=false; toast('✓ '+(ids.length>1?ids.length+' incidencias creadas':'Incidencia creada')); show('incidencias');
+  (async()=>{ try{
+    if(personaId && String(personaId)!==String(ME.id)){
+      await sb.from('mensajes').insert({de_id:ME.id,para_id:personaId,de_nombre:PROFILE.nombre,para_nombre:persona?persona.nombre:'',texto:`🛠️ Se te ha asignado ${ids.length>1?ids.length+' incidencias':'una incidencia'} (${urgLbl}) en ${loc}: ${desc.slice(0,120)}`,leido:false});
+    } else if(!personaId && base.urgencia==='alta'){
+      await notifyTeam('Mantenimiento','🔴',`URGENTE sin asignar en ${loc} — ¡que alguien la tome!`,'incidencias');
+    }
+    if(afecta||fuera){ await notifyTeam('Atención al cliente','🛎️',`Incidencia que afecta a ${loc}${fuera?' (FUERA DE SERVICIO)':''}`,'incidencias'); }
+  }catch(_e){} })();
+  return false;
 }
 async function incUpload(incId, files, tipo){
   for(const f of (files||[])){
@@ -7811,7 +7818,7 @@ async function pagePermisos(){
 
 /* utilidades */
 function val(id){const el=document.getElementById(id);return el?el.value.trim():'';}
-async function delRow(table,id,page){if(!confirm('¿Eliminar este registro?'))return;const{error}=await sb.from(table).delete().eq('id',id);if(error){alert('Error: '+error.message);return;}show(page);}
+async function delRow(table,id,page){ if(typeof ZONA_RO!=='undefined'&&ZONA_RO){ alert('Tienes esta sección en solo lectura.'); return; }if(!confirm('¿Eliminar este registro?'))return;const{error}=await sb.from(table).delete().eq('id',id);if(error){alert('Error: '+error.message);return;}show(page);}
 
 function esc(t){return (t==null?'':''+t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
 </script>
