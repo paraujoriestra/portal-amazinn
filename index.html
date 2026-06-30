@@ -600,6 +600,9 @@
 table.hsched td.hedit .hcell2col{display:flex;flex-direction:column;gap:4px;white-space:normal;min-width:100px}
 table.hsched td.hedit select.uloc2{font-size:11.5px;padding:4px 5px;border:1px solid #cfd8e3;border-radius:5px;color:#243b53;background:#f4f7fb}
   table.hsched thead th .hsub{font-size:10px;font-weight:500;color:#cdd9ea}
+table.hsched thead th.th-extra{background:#7a4dd0}
+table.hsched thead th .hextra{font-size:9.5px;font-weight:700;color:#ffe08a;margin:2px 0;letter-spacing:.2px}
+table.hsched thead th .hextra span{cursor:pointer;color:#fff;background:rgba(255,255,255,.25);border-radius:8px;padding:0 5px;margin-left:3px}
   .pubbar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:4px 0 18px;padding:12px 16px;background:var(--azul-claro);border-radius:10px;font-size:13px}
   .pubbar .st{margin-left:auto;display:flex;gap:8px}
   .legend{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--suave);margin:14px 0 0}
@@ -1249,7 +1252,7 @@ const SHIFTS=[{v:"",l:"—",c:"#dfe3ea"},{v:"M",l:"Mañana 09–17",c:"#cfe0f2"}
 const SH=Object.fromEntries(SHIFTS.map(s=>[s.v,s]));
 // Horarios v2: catálogo de turnos
 let TURNOS_TIPO=[];
-let horW={area:'',dept:'',equipos:[],desde:'',hasta:'',turnos:null,gen:false};
+let horW={area:'',dept:'',equipos:[],desde:'',hasta:'',turnos:null,gen:false,extra:[],draft:null};
 function horToggleEquipo(name,on){ horW.equipos=horW.equipos||[]; if(on){ if(!horW.equipos.includes(name)) horW.equipos.push(name);} else horW.equipos=horW.equipos.filter(x=>x!==name);
   const c=document.getElementById('horEqCount'); if(c) c.textContent=horW.equipos.length?horW.equipos.length+' equipo(s) seleccionados':'Vacío = todos'; horW.gen=false; show('horarios'); }
 async function loadTurnosTipo(){ const{data}=await sb.from('turnos_tipo').select('*').order('orden').order('id'); TURNOS_TIPO=(data||[]).filter(t=>!/^partido$/i.test((t.nombre||'').trim())); if(horW.turnos===null) horW.turnos=TURNOS_TIPO.map(t=>t.id); }
@@ -1935,7 +1938,7 @@ function horToggleTurno(id,on){ id=Number(id); if(on){ if(!horW.turnos.includes(
 function horSetHora(id,which,v){ horW.horas=horW.horas||{}; horW.horas[id]=horW.horas[id]||{ini:'',fin:''}; horW.horas[id][which]=v; }
 function horHora(id){ const h=(horW.horas||{})[id]; if(h) return h; const t=turnoTipo(id); return {ini:(t&&t.hora_ini)||'',fin:(t&&t.hora_fin)||''}; }
 async function horGenerar(){ if(!horW.desde||!horW.hasta){alert('Elige las fechas (desde y hasta).');return;} if(horW.hasta<horW.desde){alert('La fecha final no puede ser anterior a la inicial.');return;} if(!horW.turnos.length){alert('Selecciona al menos un tipo de turno.');return;}
-  horW.gen=true; const steps=document.getElementById('horWizardSteps'); if(steps) steps.style.display='none';
+  horW.gen=true; horW.draft=null; horW.extra=[]; const steps=document.getElementById('horWizardSteps'); if(steps) steps.style.display='none';
   const b=document.getElementById('horGridBox'); if(!b){ show('horarios'); return; } b.innerHTML='<div class="panel" style="color:var(--suave)">Generando cuadrícula…</div>'; b.innerHTML=await horGrid(); window.scrollTo({top:0,behavior:'smooth'}); }
 function horDays(a,b){ const out=[]; let d=new Date(a+'T00:00:00'), end=new Date(b+'T00:00:00'); if(isNaN(d)||isNaN(end)||end<d) return out; let g=0; while(d<=end && g++<92){ out.push(new Date(d)); d.setDate(d.getDate()+1); } return out; }
 /* ----- Histórico de horarios publicados (filtro por departamento y equipo) ----- */
@@ -2023,14 +2026,19 @@ async function horCrear(){
 function horDeptOptionsHTML(){ const dep=CAT.deptos.filter(d=>!horW.area||d.area===horW.area);
   return `<option value="">Todos${horW.area?' los de '+esc(horW.area):''}</option>${dep.map(d=>`<option ${horW.dept===d.nombre?'selected':''}>${esc(d.nombre)}</option>`).join('')}`; }
 function horAreaChange(v){ horW.area=v; horW.dept=''; horW.gen=false; show('horarios'); }
-function horClearGrid(){ horW.gen=false; const steps=document.getElementById('horWizardSteps'); if(steps) steps.style.display=''; const b=document.getElementById('horGridBox'); if(b) b.innerHTML=''; }
+function horClearGrid(){ horW.gen=false; horW.extra=[]; horW.draft=null; const steps=document.getElementById('horWizardSteps'); if(steps) steps.style.display=''; const b=document.getElementById('horGridBox'); if(b) b.innerHTML=''; }
+function horSnapshot(){ const d={}; document.querySelectorAll('.tcell2').forEach(c=>{ const k=c.dataset.emp+'|'+c.dataset.fecha; (d[k]=d[k]||{}).tipo=c.value||''; }); document.querySelectorAll('.uloc2').forEach(u=>{ const k=u.dataset.emp+'|'+u.dataset.fecha; (d[k]=d[k]||{}).lugar=u.value||''; }); horW.draft=d; }
+async function horRegrid(){ const b=document.getElementById('horGridBox'); if(!b) return; b.innerHTML='<div class="panel" style="color:var(--suave)">Actualizando…</div>'; b.innerHTML=await horGrid(); window.scrollTo({top:0,behavior:'smooth'}); }
+function horAddExtra(id){ if(!id) return; horSnapshot(); horW.extra=horW.extra||[]; if(!horW.extra.some(x=>String(x)===String(id))) horW.extra.push(id); horRegrid(); }
+function horRemoveExtra(id){ horSnapshot(); horW.extra=(horW.extra||[]).filter(x=>String(x)!==String(id)); horRegrid(); }
 async function horGrid(){
   let q=sb.from('profiles').select('id,nombre,dept,area,equipo').eq('estado','aprobado');
   if(horW.area) q=q.eq('area',horW.area);
   if(horW.dept) q=q.eq('dept',horW.dept);
   if(horW.equipos&&horW.equipos.length) q=q.in('equipo',horW.equipos);
   const{data:ppl}=await q.order('nombre');
-  const people=ppl||[];
+  let people=ppl||[];
+  if(horW.extra&&horW.extra.length){ const have=new Set(people.map(p=>p.id)); const want=horW.extra.filter(id=>!have.has(id)); if(want.length){ const{data:ex}=await sb.from('profiles').select('id,nombre,dept,area,equipo').in('id',want).eq('estado','aprobado'); (ex||[]).forEach(p=>{p._extra=true; people.push(p);}); } }
   if(!people.length) return '<div class="panel">No hay personas aprobadas en ese alcance.</div>';
   const days=horDays(horW.desde,horW.hasta);
   if(!days.length) return '<div class="panel">Rango de fechas no válido.</div>';
@@ -2042,6 +2050,8 @@ async function horGrid(){
   ]);
   const map={}, locMap={}, locDayMap={};(exR.data||[]).forEach(t=>{map[t.empleado_id+'|'+t.fecha]=t.tipo_id; if(t.lugar){ locDayMap[t.empleado_id+'|'+t.fecha]=t.lugar; if(!locMap[t.empleado_id]) locMap[t.empleado_id]=t.lugar; }});
   const abs={};(solR.data||[]).forEach(s=>{ if(!s.desde)return; const esVac=s.tipo==='Vacaciones'; if(esVac&&s.estado!=='Aprobada')return; if(!esVac&&s.estado==='Rechazada')return; const tg=esVac?'vac':'baja'; let d=new Date(s.desde+'T00:00:00'); const hh=new Date((s.hasta||s.desde)+'T00:00:00'); let g=0; while(d<=hh&&g<400){ abs[s.user_id+'|'+isoD(d)]=tg; d.setDate(d.getDate()+1); g++; } });
+  if(horW.draft){ for(const k in horW.draft){ const v=horW.draft[k]; if(v.tipo!==undefined){ if(v.tipo==='') delete map[k]; else map[k]=v.tipo; } if(v.lugar!==undefined){ if(v.lugar==='') delete locDayMap[k]; else locDayMap[k]=v.lugar; } } }
+  const{data:_allP}=await sb.from('profiles').select('id,nombre,dept,area').eq('estado','aprobado').order('nombre');
   const chosen=TURNOS_TIPO.filter(t=>horW.turnos.includes(t.id));
   const turnoOpts=chosen.map(t=>`<option value="${t.id}">${esc(t.nombre)}</option>`).join('');
   const ubicOpts=cur=>`<option value="">— Ubicación —</option>${CAT.ubicaciones.map(u=>`<option ${cur===u?'selected':''}>${esc(u)}</option>`).join('')}`;
@@ -2049,7 +2059,7 @@ async function horGrid(){
   const ubicDayOpts=cur=>`<option value="">📍 Ubicación</option>${CAT.ubicaciones.map(u=>`<option ${cur===u?'selected':''}>${esc(u)}</option>`).join('')}`;
   const diaLibreSel=id=>`<select onchange="horFillDayOff('${id}',this.value)" class="hctrl"><option value="__">▾ día libre</option><option value="1">Lunes</option><option value="2">Martes</option><option value="3">Miércoles</option><option value="4">Jueves</option><option value="5">Viernes</option><option value="6">Sábado</option><option value="0">Domingo</option></select>`;
   // Cabecera: DÍA + una columna por persona (con sus controles)
-  const head=`<tr><th>DÍA</th>${people.map(p=>`<th><div>${esc(p.nombre)}</div><div class="hsub">${esc(p.dept||p.area||'')}</div>
+  const head=`<tr><th>DÍA</th>${people.map(p=>`<th${p._extra?' class="th-extra"':''}><div>${esc(p.nombre)}</div><div class="hsub">${esc(p.dept||p.area||'')}</div>${p._extra?`<div class="hextra">🔁 cobertura <span onclick="horRemoveExtra('${p.id}')" title="Quitar de este horario">✕</span></div>`:''}
     <select onchange="horFillRow('${p.id}',this.value)" class="hctrl"><option value="__">▾ Elige turno</option>${turnoOpts}<option value="">vaciar</option></select>
     ${diaLibreSel(p.id)}
     <select class="uloc hctrl" data-emp="${p.id}" onchange="horSetLocAll('${p.id}',this.value)" title="Aplica esta ubicación a todos los días">${ubicOptsAll(locMap[p.id]||'')}</select></th>`).join('')}</tr>`;
@@ -2066,6 +2076,7 @@ async function horGrid(){
       <button class="btn ghost" onclick="horResumen()">📊 Horas y cobertura</button>
       <button class="btn ghost" onclick="horClearGrid()">↩ Cambiar alcance/fechas</button>
       <button class="btn ghost" onclick="horPDF()">📥 Descargar PDF</button>
+      <select id="horAddPick" onchange="if(this.value){horAddExtra(this.value);this.value='';}" title="Añade a alguien de otro equipo para cubrir un turno" style="padding:8px 11px;border:1px solid var(--gris2);border-radius:8px;font-size:13px;font-family:inherit;background:#fff;max-width:250px;align-self:center"><option value="">➕ Añadir persona de otro equipo…</option>${(_allP||[]).filter(p=>!people.some(x=>x.id===p.id)).map(p=>`<option value="${p.id}">${esc(p.nombre)} · ${esc(p.dept||p.area||'')}</option>`).join('')}</select>
       <span style="font-size:12.5px;color:var(--suave);align-self:center">${people.length} persona(s) · ${days.length} día(s) · 🌴/🤕 = ausencia aprobada</span></div>
     <div id="horPrevBox"></div>
     <div id="horResumenBox"></div>
@@ -2123,7 +2134,7 @@ async function horGuardar(){
   for(const eid of empIds){ if(eid===ME.id) continue; const nm=(rows.find(r=>r.empleado_id===eid)||{}).empleado_nombre||''; try{ await sb.from('mensajes').insert({de_id:ME.id,para_id:eid,de_nombre:PROFILE.nombre,para_nombre:nm,texto:`📅 ${PROFILE.nombre} ha publicado tu horario. Revisa tus turnos.`,leido:false}); }catch(e){} }
   try{ const depts=[...new Set(rows.map(r=>r.dept).filter(d=>d&&d!=='—'))]; const fechas=rows.map(r=>r.fecha).filter(Boolean).sort();
     await sb.from('horarios_pub').insert({ area:horW.area||'', dept:(horW.dept||depts[0]||''), equipo:(horW.equipos||[]).join(', '), desde:fechas[0]||horW.desde||'', hasta:fechas[fechas.length-1]||horW.hasta||'', npers:new Set(rows.filter(r=>r.tipo_id).map(r=>r.empleado_id)).size, ndias:new Set(rows.map(r=>r.fecha)).size, creado_por:ME.id, creado_nombre:PROFILE.nombre||'' }); }catch(e){}
-  toast('✓ Horario publicado'); horW.gen=false; show('horarios');
+  toast('✓ Horario publicado'); horW.gen=false; horW.extra=[]; horW.draft=null; show('horarios');
 }
 async function horMine(days){
   const{data}=await sb.from('turnos').select('*').eq('empleado_id',ME.id).gte('fecha',isoD(days[0])).lte('fecha',isoD(days[days.length-1]));
@@ -7078,7 +7089,7 @@ function asgPClear(){ asgPFrom=asgPTo=asgPTipo=asgPUni=''; show('asignaciones');
 function asgPQuick(which){ const t=new Date(); const pad=n=>(''+n).padStart(2,'0'); const iso=d=>d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate()); if(which==='mes'){ asgPFrom=iso(new Date(t.getFullYear(),t.getMonth(),1)); asgPTo=iso(t); } else if(which==='15'){ const d=new Date(t); d.setDate(t.getDate()-14); asgPFrom=iso(d); asgPTo=iso(t); } show('asignaciones'); }
 let ASG={pubId:null,equipo:'',fecha:'',unidades:[],comunes:[]};
 let ASG_TRAB=[], ASG_TRAB_FULL=[], ASG_UNI=[], ASG_AREA=[], ASG_PUBS=[], ASG_EDIF=[], ASG_UNIS=[];
-function asgCan(){ return CAN_MANAGE.includes(PROFILE.role); }
+function asgCan(){ const r=PROFILE.role, d=normKey(PROFILE.dept||''); if(r==='direccion'||r==='admin'||r==='propietario') return true; if(r==='responsable') return d===normKey('Atención al cliente')||d===normKey('Limpieza'); if(r==='empleado') return d===normKey('Atención al cliente'); return false; }
 function asgTeamWorkers(){ return ASG_TRAB_FULL.filter(t=>!ASG.equipo||(t.equipo||'')===ASG.equipo).map(t=>t.nombre); }
 function asgSetEquipo(e){ ASG.equipo=e; show('asignaciones'); }
 function asgTipoLabel(t){ if(t==='entrada')t='limpieza_cortesia'; const o=ASG_TIPO.find(x=>x[0]===t); return o?o[1]:''; }
