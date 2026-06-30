@@ -6128,7 +6128,7 @@ async function createKudo(e){e.preventDefault(); if(typeof zonaRO==='function'&&
 /* ---------------- INCIDENCIAS ---------------- */
 /* ================= MANTENIMIENTO · INCIDENCIAS (v2) ================= */
 let incFormOpen=false, incTab='bandeja', incSel=null, incTimerInt=null, incEditOpen=false, incNew=false;
-let incFilters={ambito:'',edificio:'',unidad:'',urgencia:'',estado:'',q:'',categoria:'',afecta:''}; let incFiltersOpen=false; let incOrden='prioridad';
+let incFilters={ambito:'',edificio:'',unidad:'',urgencia:'',estado:'',q:'',categoria:'',afecta:'',trab:'',desde:'',hasta:''}; let incFiltersOpen=false; let incOrden='prioridad';
 const INC_STATS_EXCLUDE=new Set(['Aurelio Núñez','Oscar Naranjo Monroy','Deibis Palacio Melendez','Carlos Gabriel González']);
 function incToggleFilters(){ incFiltersOpen=!incFiltersOpen; show('incidencias'); }
 function incSetOrden(v){ incOrden=v; show('incidencias'); }
@@ -6141,6 +6141,9 @@ function incMatchesFilters(i){ const f=incFilters;
   if(f.categoria && (i.categoria||'')!==f.categoria) return false;
   if(f.afecta==='si' && !i.afecta_huesped) return false;
   if(f.q){ const q=f.q.toLowerCase(); const hay=((i.descripcion||'')+' '+(i.edificio||'')+' '+(i.unidad||'')+' '+incCatLabel(i.categoria)+' '+(i.creado_por_nombre||'')+' '+(i.tomada_por_nombre||'')+' '+(i.resuelto_por_nombre||'')).toLowerCase(); if(!hay.includes(q)) return false; }
+  if(f.trab){ const tn=f.trab.toLowerCase(); const who=[i.resuelto_por_nombre,i.tomada_por_nombre,i.asignado_a_nombre].map(x=>(x||'').toLowerCase()); if(!who.includes(tn)) return false; }
+  if(f.desde){ if(!i.resuelta_at || String(i.resuelta_at).slice(0,10) < f.desde) return false; }
+  if(f.hasta){ if(!i.resuelta_at || String(i.resuelta_at).slice(0,10) > f.hasta) return false; }
   return true; }
 function incOrderHTML(){ return `<select onchange="incSetOrden(this.value)" style="padding:7px 10px;border:1px solid var(--gris2);border-radius:8px;font-size:13px;font-family:inherit">
   <option value="" ${incOrden===''?'selected':''}>Orden: por defecto</option>
@@ -6284,7 +6287,7 @@ async function pageIncidencias(){
   else if(incSel!=null){ body=renderIncDetail(incSel); }
   else if(incTab==='panel'&&canManage){ const anyF=(incFilters.edificio||incFilters.unidad||incFilters.urgencia||incFilters.q||incFilters.categoria||incFilters.afecta); body=`<div style="margin-bottom:12px;display:flex;gap:8px;align-items:center;flex-wrap:wrap"><button class="inc-chip ${(incFiltersOpen||anyF)?'on':''}" onclick="incToggleFilters()">🔎 Filtros${anyF?' •':''}</button></div>${incFiltersOpen?incFiltersPanelHTML():''}`+renderIncPanel(INC.filter(incMatchesFilters)); }
   else if(incTab==='calendario'){ body=renderPrevCal(); }
-  else if(incTab==='historial'){ const anyF=(incFilters.edificio||incFilters.unidad||incFilters.urgencia||incFilters.q||incFilters.categoria||incFilters.afecta); body=`<div style="margin-bottom:10px;display:flex;gap:8px;align-items:center;flex-wrap:wrap"><button class="inc-chip ${(incFiltersOpen||anyF)?'on':''}" onclick="incToggleFilters()">🔎 Filtros${anyF?' •':''}</button>${incOrderHTML()}<button class="btn-sm ghost" onclick="incExportCSV()">⬇️ Exportar CSV (todas)</button></div>${incFiltersOpen?incFiltersPanelHTML():''}`+renderIncList(true); }
+  else if(incTab==='historial'){ const anyF=(incFilters.edificio||incFilters.unidad||incFilters.urgencia||incFilters.q||incFilters.categoria||incFilters.afecta); body=`<div style="margin-bottom:10px;display:flex;gap:8px;align-items:center;flex-wrap:wrap"><button class="inc-chip ${(incFiltersOpen||anyF)?'on':''}" onclick="incToggleFilters()">🔎 Filtros${anyF?' •':''}</button>${incOrderHTML()}<button class="btn-sm ghost" onclick="incExportCSV()">⬇️ Exportar CSV (todas)</button></div>${incFiltersOpen?incFiltersPanelHTML():''}`+incHistFiltroHTML()+renderIncList(true); }
   else { body=renderIncBandeja(); }
   const tools='';
   document.getElementById('main').innerHTML=`<div class="page-title">Incidencias y mantenimiento</div><div class="page-sub">Reporta y haz seguimiento de averías por edificio y apartamento</div>${fullScreen?'':tabs}${fullScreen?'':tools}${body}`;
@@ -6293,7 +6296,24 @@ async function pageIncidencias(){
 }
 function incSetAmbito(a){ incFilters.ambito=a; show('incidencias'); }
 function incSetFilter(k,v){ incFilters[k]=v; if(k==='edificio') incFilters.unidad=''; show('incidencias'); }
-function incClearFilters(){ incFilters.edificio='';incFilters.unidad='';incFilters.urgencia='';incFilters.estado='';incFilters.q='';incFilters.categoria='';incFilters.afecta=''; show('incidencias'); }
+function incClearFilters(){ incFilters.edificio='';incFilters.unidad='';incFilters.urgencia='';incFilters.estado='';incFilters.q='';incFilters.categoria='';incFilters.afecta='';incFilters.trab='';incFilters.desde='';incFilters.hasta=''; show('incidencias'); }
+function incHistFiltroHTML(){
+  const done=INC.filter(i=>i.estado==='terminada'||i.estado==='cancelada');
+  const names=[...new Set([].concat(MANT_STAFF.map(s=>s.nombre), done.flatMap(i=>[i.resuelto_por_nombre,i.tomada_por_nombre,i.asignado_a_nombre])).filter(Boolean))].sort((a,b)=>String(a).localeCompare(String(b)));
+  const f=incFilters; const n=incFilteredList(true).length;
+  const inp='padding:7px 10px;border:1px solid var(--gris2);border-radius:8px;font-family:inherit;font-size:13px';
+  return `<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;background:#f5f8fc;border:1px solid var(--gris2);border-radius:10px;padding:10px 12px;margin:0 0 12px">
+    <label style="display:flex;flex-direction:column;gap:3px;font-size:12px;font-weight:600;color:var(--suave)">👷 Trabajador
+      <select onchange="incSetFilter('trab',this.value)" style="${inp};min-width:180px"><option value="">Todos</option>${names.map(x=>`<option ${f.trab===x?'selected':''}>${esc(x)}</option>`).join('')}</select></label>
+    <label style="display:flex;flex-direction:column;gap:3px;font-size:12px;font-weight:600;color:var(--suave)">Desde
+      <input type="date" value="${esc(f.desde||'')}" onchange="incSetFilter('desde',this.value)" style="${inp}"></label>
+    <label style="display:flex;flex-direction:column;gap:3px;font-size:12px;font-weight:600;color:var(--suave)">Hasta
+      <input type="date" value="${esc(f.hasta||'')}" onchange="incSetFilter('hasta',this.value)" style="${inp}"></label>
+    ${(f.trab||f.desde||f.hasta)?`<button class="btn-sm ghost" onclick="incClearHist()" style="margin-bottom:1px">✕ Limpiar</button>`:''}
+    <span style="font-size:12.5px;color:var(--suave);margin-bottom:6px"><b>${n}</b> resultado(s)</span>
+  </div>`;
+}
+function incClearHist(){ incFilters.trab='';incFilters.desde='';incFilters.hasta=''; show('incidencias'); }
 function incExportCSV(){
   const cols=['Creada','Estado','Urgencia','Categoría','Edificio','Unidad','Descripción','Asignado','Realiza','Resuelta por','Resuelta','Tiempo(min)','Coste','Proveedor','Afecta huésped'];
   const q=v=>'"'+String(v==null?'':v).replace(/"/g,'""')+'"';
@@ -7510,13 +7530,15 @@ function asgUnidadRows(){
   const edit=asgCan();
   const edOpts=cur=>`<option value="">— Edificio —</option>${ASG_EDIF.map(e=>`<option ${cur===e?'selected':''}>${esc(e)}</option>`).join('')}`;
   const unOpts=(ed,cur)=>{ const us=ASG_UNIS.filter(x=>x.edificio===ed).sort((a,b)=>(a.orden||0)-(b.orden||0)||String(a.nombre).localeCompare(String(b.nombre))); return `<option value="">— Unidad —</option>${us.map(x=>`<option ${cur===x.nombre?'selected':''}>${esc(x.nombre)}</option>`).join('')}`; };
+  const edDL=`<datalist id="asgEdifDLglob">${ASG_EDIF.map(e=>`<option value="${esc(e)}"></option>`).join('')}</datalist>`;
+  const unDL=(ed)=>{ const us=ASG_UNIS.filter(x=>x.edificio===ed).sort((a,b)=>(a.orden||0)-(b.orden||0)||String(a.nombre).localeCompare(String(b.nombre))); return us.map(x=>`<option value="${esc(x.nombre)}"></option>`).join(''); };
   const rows=ASG.unidades.map((u,i)=>{
     if(u.edificio===undefined) u.edificio='';
     if(u.unidadNombre===undefined){ if(u.unidad && u.unidad.indexOf(' · ')>-1){ const pp=u.unidad.split(' · '); if(!u.edificio) u.edificio=pp[0]; u.unidadNombre=pp.slice(1).join(' · '); } else { u.unidadNombre=u.edificio?'':(u.unidad||''); } }
     return edit ? `<tr>
     <td class="asg-act"><button onclick="asgDupUnidad(${i})" title="Duplicar esta fila">⧉</button></td>
-    <td><select onchange="asgSetEdificio(${i},this.value)" class="asg-cell" style="min-width:120px">${edOpts(u.edificio)}</select></td>
-    <td><select onchange="asgSetUnidad(${i},this.value)" class="asg-cell" ${u.edificio?'':'disabled'} style="min-width:110px">${unOpts(u.edificio,u.unidadNombre)}</select></td>
+    <td><input list="asgEdifDLglob" value="${esc(u.edificio||'')}" placeholder="Edificio…" oninput="asgSetEdificioInput(${i},this.value)" onchange="asgRefreshUniDL(${i})" class="asg-cell" style="min-width:120px"></td>
+    <td><input list="asgUniDL_${i}" value="${esc(u.unidadNombre||'')}" placeholder="Unidad / Nº…" oninput="asgSetUnidadInput(${i},this.value)" class="asg-cell" style="min-width:110px"><datalist id="asgUniDL_${i}">${unDL(u.edificio)}</datalist></td>
     <td><input type="time" value="${esc(u.checkin||'')}" oninput="asgUpdU(${i},'checkin',this.value)" class="asg-cell asg-cell-s" title="Hora de check-in del huésped"></td>
     <td><select onchange="asgUpdU(${i},'tipo',this.value)" class="asg-cell">${ASG_TIPO.map(o=>`<option value="${o[0]}" ${u.tipo===o[0]?'selected':''}>${o[1]}</option>`).join('')}</select></td>
     <td><input value="${esc(u.cliente||'')}" placeholder="Cliente…" oninput="asgUpdU(${i},'cliente',this.value)" class="asg-cell"></td>
@@ -7527,10 +7549,13 @@ function asgUnidadRows(){
     <td class="asg-act"><button onclick="asgDelUnidad(${i})" title="Quitar fila">🗑</button></td></tr>`
     : `<tr><td></td><td>${esc(u.edificio||'')}</td><td><b>${esc(u.unidadNombre||u.unidad||'')}</b></td><td>${u.checkin?'🕐 '+esc(u.checkin):''}</td><td>${asgTipoLabel(u.tipo)}</td><td>${esc(u.cliente||'')}</td><td>${esc(u.pax)}</td><td>${u.extra?`<span class="asg-nota">📝 ${esc(u.extra)}</span>`:''}</td><td>${esc(asgWorkersOf(u).join(', '))}</td><td>${esc(u.supervisora)}</td></tr>`;
   }).join('');
-  return rows||`<tr><td colspan="${edit?11:10}" style="color:var(--suave)">Sin unidades. Añade una fila.</td></tr>`;
+  return (rows||`<tr><td colspan="${edit?11:10}" style="color:var(--suave)">Sin unidades. Añade una fila.</td></tr>`)+edDL;
 }
 function asgSetEdificio(i,v){ const u=ASG.unidades[i]; if(!u)return; u.edificio=v; u.unidadNombre=''; u.unidad=''; asgRenderUTbody(false); }
 function asgSetUnidad(i,v){ const u=ASG.unidades[i]; if(!u)return; u.unidadNombre=v; u.unidad=(u.edificio?u.edificio+' · ':'')+v; asgRefreshResumen(); }
+function asgSetEdificioInput(i,v){ const u=ASG.unidades[i]; if(!u)return; u.edificio=v; u.unidad=(v?v+' · ':'')+(u.unidadNombre||''); asgRefreshResumen(); }
+function asgSetUnidadInput(i,v){ const u=ASG.unidades[i]; if(!u)return; u.unidadNombre=v; u.unidad=(u.edificio?u.edificio+' · ':'')+v; asgRefreshResumen(); }
+function asgRefreshUniDL(i){ const u=ASG.unidades[i]; if(!u)return; const dl=document.getElementById('asgUniDL_'+i); if(!dl)return; const us=ASG_UNIS.filter(x=>x.edificio===u.edificio).sort((a,b)=>(a.orden||0)-(b.orden||0)||String(a.nombre).localeCompare(String(b.nombre))); dl.innerHTML=us.map(x=>`<option value="${esc(x.nombre)}"></option>`).join(''); }
 function asgDupUnidad(i){ const u=ASG.unidades[i]; if(!u)return; const copy=JSON.parse(JSON.stringify(u)); ASG.unidades.splice(i+1,0,copy); asgRenderUTbody(false); }
 function asgComunRows(){
   const edit=asgCan();
@@ -7558,7 +7583,6 @@ function asgRenderEditor(){
       <label style="font-weight:600;font-size:13px;margin-left:6px">📅 Día:</label>
       ${edit?`<input type="date" value="${esc(ASG.fecha)}" onchange="asgUpdFecha(this.value)" style="padding:8px 11px;border:1px solid var(--gris2);border-radius:8px;font-family:inherit">`:`<b>${esc(fechaLarga(ASG.fecha))}</b>`}
       ${ASG.pubId!=null?`<span class="asg-pill">Editando publicación</span>`:''}
-      ${edit?`<button class="btn ghost" onclick="asgCopyPrev()" title="Copiar el plan anterior de este equipo">📋 Copiar día anterior</button>`:''}
       ${edit?`<button class="btn ghost" style="margin-left:auto" onclick="asgCancelEdit()">✕ Cancelar</button><button class="btn" onclick="asgPublicar()">${ASG.pubId!=null?'💾 Actualizar publicación':'✓ Publicar'}</button>`:''}
     </div>
     <div class="panel"><h2 style="margin-top:0">🏠 Unidades</h2>
