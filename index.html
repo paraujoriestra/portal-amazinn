@@ -1279,23 +1279,41 @@ function lblD(x){const ds=['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'],ms=['ene
 function isWk(x){return x.getDay()===0||x.getDay()===6;}
 let horTab='mi', horOtherDept=null, horEditDept=null, horOtherEquipo='';
 let horHistDept='', horHistEq='';
-let ACCESS_DENY=new Set();  // ids de áreas ocultas para el usuario actual (config. de Permisos)
-async function loadAccesos(){ ACCESS_DENY=new Set(); if(isOwner()) return;   // el propietario siempre ve todo
+let ACCESS_DENY=new Set(), ACCESS_GRANT=new Set(), ACCESS_PDENY=new Set(), ACCESS_PGRANT=new Set();
+const PERM_V2=true;
+const ZONA_SISTEMA=['auditoria','permisos','registros','admin','backup'];
+function meId(){ try{ if(typeof ME!=='undefined' && ME && ME.id) return ME.id; }catch(e){} return (typeof PROFILE!=='undefined'&&PROFILE&&PROFILE.id)||''; }
+async function loadAccesos(){ ACCESS_DENY=new Set(); ACCESS_GRANT=new Set(); ACCESS_PDENY=new Set(); ACCESS_PGRANT=new Set(); if(isOwner()) return;
   try{ const {data}=await sb.from('accesos').select('item_id,visible').eq('dept',PROFILE.dept||'').eq('role',PROFILE.role);
-    (data||[]).forEach(r=>{ if(r.visible===false) ACCESS_DENY.add(r.item_id); }); }catch(e){} }
+    (data||[]).forEach(r=>{ if(r.visible===false) ACCESS_DENY.add(r.item_id); else if(r.visible===true) ACCESS_GRANT.add(r.item_id); }); }catch(e){}
+  try{ const {data}=await sb.from('acceso_persona').select('item_id,visible').eq('user_id',meId());
+    (data||[]).forEach(r=>{ if(r.visible===false) ACCESS_PDENY.add(r.item_id); else if(r.visible===true) ACCESS_PGRANT.add(r.item_id); }); }catch(e){} }
+function pagosCanFor(p){ const role=p&&p.role; if(role==='admin'||role==='propietario') return true; const a=(p&&p.area)||'',d=(p&&p.dept)||''; if(a==='Finanzas'||d==='Finanzas') return true; if(role==='direccion') return true; return false; }
+function accDefaultVisibleFor(p, it){
+  const role=(p&&p.role)||'empleado';
+  if(it.owner) return role==='propietario';
+  if(role==='propietario') return true;
+  if(it.id==='pagos') return pagosCanFor(p);
+  if(PERM_V2 && role==='direccion'){ if(it.id && ZONA_SISTEMA.includes(it.id)) return false; return true; }
+  if(it.roles && !it.roles.includes(role)) return false;
+  if(it.depts && !it.depts.includes(p&&p.dept) && role!=='admin' && !(it.seeRoles && it.seeRoles.includes(role))) return false;
+  return true;
+}
+function accDefaultVisible(it){ return accDefaultVisibleFor(PROFILE, it); }
+function navAllowed(it){
+  if(it.owner) return isOwner();
+  if(isOwner()) return true;
+  if(typeof isProvider==='function' && isProvider()) return !!(it.id && PROV_NAV_OK.includes(it.id));
+  if(typeof isConductor==='function' && isConductor()) return !!(it.id && CONDUCTOR_NAV_OK.includes(it.id));
+  if(it.id){ if(ACCESS_PDENY.has(it.id)) return false; if(ACCESS_PGRANT.has(it.id)) return true; if(ACCESS_DENY.has(it.id)) return false; if(ACCESS_GRANT.has(it.id)) return true; }
+  return accDefaultVisible(it);
+}
+function navItemAllowed(id){ const it=NAV.find(n=>n.id===id); return it? navAllowed(it) : true; }
 function navGroups(){
   const groups=[]; let cur=null;
   NAV.forEach(it=>{
-    if(it.owner && !isOwner()) return;
-    if(isProvider() && it.id && !PROV_NAV_OK.includes(it.id)) return;   // proveedor: solo incidencias/preventivo
-    if(isConductor() && it.id && !CONDUCTOR_NAV_OK.includes(it.id)) return;   // conductor: solo transfer
-    if(it.id==='pagos' && typeof pagosCan==='function' && !pagosCan()) return;   // pagos: finanzas/operaciones/admin
-    const er = PROFILE.role==='propietario' ? 'admin' : PROFILE.role;
-    if(it.roles && !it.roles.includes(er)) return;
-    if(it.depts && !it.depts.includes(PROFILE.dept) && !isAdmin() && !isProvider() && !isConductor() && !(it.seeRoles && it.seeRoles.includes(PROFILE.role))) return;
-    if(it.id && !isOwner() && ACCESS_DENY.has(it.id)) return;   // oculto por configuración de Permisos
-    if(it.grp){ cur={name:it.grp,items:[]}; groups.push(cur); }
-    else if(cur){ cur.items.push(it); }
+    if(it.grp){ cur = navAllowed(it) ? {name:it.grp,items:[]} : null; if(cur) groups.push(cur); return; }
+    if(cur && navAllowed(it)) cur.items.push(it);
   });
   return groups.filter(g=>g.items.length);
 }
@@ -1548,6 +1566,7 @@ function show(id){
   const ld=h=>{ if(!samePage) m.innerHTML=h; };   // placeholder solo al cambiar de página
   const _lk=NAV.find(n=>n.id===id);   // secciones "Próximamente" según el rol
   if(_lk && _lk.lockRoles && _lk.lockRoles.includes(PROFILE.role)){ m.innerHTML=`<div class="page-title">${esc(_lk.t)}</div><div class="panel" style="color:var(--suave)">🔒 La sección “${esc(_lk.t)}” estará disponible próximamente.</div>`; return; }
+  if(_lk && _lk.id && !isOwner() && typeof navItemAllowed==='function' && !navItemAllowed(id)){ m.innerHTML='<div class="page-title">'+esc(_lk.t||'')+'</div><div class="panel" style="color:var(--suave)">🔒 No tienes acceso a esta sección. Si crees que es un error, contacta con un administrador.</div>'; return; }
   if(id==='perfil'){ ld('<div class="page-title">Mi perfil</div><div class="page-sub">Cargando…</div>'); pagePerfil(); return; }
   if(id==='inicio'){ ld('<div class="page-sub">Cargando…</div>'); pageInicio(); return; }
   else if(id==='comunicados'){ ld('<div class="page-title">Comunicados</div><div class="page-sub">Cargando…</div>'); pageComunicados(); }
@@ -2747,7 +2766,7 @@ const PAG_MESES=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agost
 let RESUMENES=[], pagResSel='';
 let pagSyncResult=null;
 const PAG_RESUMEN_SHEETS=['Flujo Real Banco','Ganancia por propiedad','Flujo Mes'];
-function pagosCan(){ if(isAdmin()) return true; const a=(PROFILE.area||''),d=(PROFILE.dept||''); if(a==='Finanzas'||d==='Finanzas') return true; if(PROFILE.role==='direccion'&&(a==='Operaciones'||d==='Operaciones')) return true; return false; }
+function pagosCan(){ if(isAdmin()) return true; const a=(PROFILE.area||''),d=(PROFILE.dept||''); if(a==='Finanzas'||d==='Finanzas') return true; if(PROFILE.role==='direccion') return true; return false; }
 function pagMoney(n){ const x=parseFloat(n)||0; return '$'+x.toLocaleString('es-PA',{minimumFractionDigits:2,maximumFractionDigits:2}); }
 function pagSetView(v){ pagView=v; pagRender(); }
 function pagSet(k,v){ if(k==='mes')pagMes=v; else if(k==='cat')pagCat=v; else if(k==='prop')pagProp=v; else if(k==='estado')pagEstado=v; else if(k==='from')pagFrom=v; else if(k==='to')pagTo=v; pagRender(); }
@@ -7619,7 +7638,56 @@ async function permGuardar(){
   alert('✓ Cambios guardados. El usuario afectado los verá al volver a entrar.');
   show('permisos');
 }
+let permMode='persona', permPersonId='', permPersonState=null, permPersonSaved=null, PERM_PEOPLE=null;
+function permSetMode(m){ permMode=m; show('permisos'); }
+function permPersonSet(id,v){ if(!permPersonState) return; if(v==='') permPersonState.delete(id); else permPersonState.set(id,v); show('permisos'); }
+function permPersonPick(uid){ permPersonId=uid; permPersonState=null; permPersonSaved=null; show('permisos'); }
+function mapsEqual(a,b){ if(a.size!==b.size) return false; for(const [k,v] of a){ if(b.get(k)!==v) return false; } return true; }
+async function permPersonGuardar(){
+  const person=PERM_PEOPLE&&PERM_PEOPLE.find(p=>String(p.id)===String(permPersonId)); if(!person||!permPersonState) return;
+  const ups=[], dels=[];
+  permPersonState.forEach((v,id)=>{ ups.push({user_id:person.id,item_id:id,visible:v==='grant'}); });
+  if(permPersonSaved) permPersonSaved.forEach((v,id)=>{ if(!permPersonState.has(id)) dels.push(id); });
+  try{
+    if(ups.length){ const {error}=await sb.from('acceso_persona').upsert(ups,{onConflict:'user_id,item_id'}); if(error) throw error; }
+    for(const id of dels){ const {error}=await sb.from('acceso_persona').delete().eq('user_id',person.id).eq('item_id',id); if(error) throw error; }
+  }catch(e){ alert('Error al guardar: '+(e.message||e)); return; }
+  permPersonSaved=new Map(permPersonState);
+  if(String(person.id)===String(meId())){ await loadAccesos(); buildNav(); }
+  alert('✓ Accesos guardados. '+(person.nombre||'')+' los verá al volver a entrar.');
+  show('permisos');
+}
+async function pagePermisosPersona(tabs){
+  const main=document.getElementById('main');
+  if(!PERM_PEOPLE){ try{ const {data}=await sb.from('profiles').select('id,nombre,dept,area,role').eq('estado','aprobado').order('nombre'); PERM_PEOPLE=data||[]; }catch(e){ main.innerHTML=tabs+'<div class="panel">No se pudo cargar la lista de personas.</div>'; return; } }
+  const titulo='<div class="page-title">Permisos y accesos</div><div class="page-sub">Elige una <b>persona</b> y ajusta a qué zonas entra. “Por defecto” = lo que le toca por su rol. El <b>Propietario</b> siempre ve todo.</div>';
+  const picker='<div class="panel" style="margin-bottom:14px"><label style="display:block;font-size:12px;font-weight:600;color:var(--suave);margin-bottom:4px">Persona</label><select onchange="permPersonPick(this.value)" style="padding:8px 11px;border:1px solid var(--gris2);border-radius:8px;font-family:inherit;min-width:280px"><option value="">— elegir persona —</option>'+PERM_PEOPLE.map(p=>'<option value="'+p.id+'" '+(String(p.id)===String(permPersonId)?'selected':'')+'>'+esc(p.nombre)+' · '+esc(p.dept||p.area||'')+' · '+esc(p.role)+'</option>').join('')+'</select></div>';
+  const person=PERM_PEOPLE.find(p=>String(p.id)===String(permPersonId));
+  if(!person){ main.innerHTML=tabs+titulo+picker+'<div class="panel" style="color:var(--suave)">Selecciona una persona para configurar sus accesos.</div>'; return; }
+  if(person.role==='propietario'){ main.innerHTML=tabs+titulo+picker+'<div class="panel" style="color:var(--suave)">El Propietario siempre tiene acceso total; no se puede limitar.</div>'; return; }
+  if(permPersonState===null){
+    try{ const {data}=await sb.from('acceso_persona').select('item_id,visible').eq('user_id',person.id);
+      permPersonState=new Map(); (data||[]).forEach(r=>{ permPersonState.set(r.item_id, r.visible===false?'deny':'grant'); }); permPersonSaved=new Map(permPersonState);
+    }catch(e){ main.innerHTML=tabs+titulo+picker+'<div class="panel">No se pudo cargar. ¿Ejecutaste <b>supabase_acceso_persona.sql</b>?<br><small>'+esc(e.message||e)+'</small></div>'; return; }
+  }
+  const rows=permFullGroups().map(g=>{
+    const head='<tr class="perm-sec"><td colspan="2"><b>'+(GRP_ICON[g.name]||'')+' '+esc(g.name)+'</b></td></tr>';
+    const its=g.items.map(it=>{
+      const def=accDefaultVisibleFor(person,it);
+      const st=permPersonState.get(it.id)||'';
+      const sel='<select onchange="permPersonSet(\''+it.id+'\',this.value)" style="padding:5px 8px;border:1px solid var(--gris2);border-radius:7px;font-family:inherit;font-size:12.5px"><option value="">Por defecto ('+(def?'con acceso':'sin acceso')+')</option><option value="grant" '+(st==='grant'?'selected':'')+'>✓ Con acceso</option><option value="deny" '+(st==='deny'?'selected':'')+'>✕ Sin acceso</option></select>';
+      const eff = st==='grant'?true : st==='deny'?false : def;
+      return '<tr><td class="perm-area">'+(it.ic?it.ic+' ':'')+esc(it.t)+(eff?'':' <span style="color:#c0392b;font-size:11px">(oculto)</span>')+'</td><td>'+sel+'</td></tr>';
+    }).join('');
+    return head+its;
+  }).join('');
+  const dirty = permPersonSaved && !mapsEqual(permPersonState,permPersonSaved);
+  const saveBar='<div style="position:sticky;bottom:0;background:var(--gris);border:1px solid var(--gris2);border-radius:10px;padding:10px 14px;margin-top:14px;display:flex;gap:10px;align-items:center;flex-wrap:wrap"><button class="btn" onclick="permPersonGuardar()" '+(dirty?'':'disabled style="opacity:.5;cursor:default"')+'>💾 Guardar</button>'+(dirty?'<span style="color:#c47f17;font-size:12.5px;font-weight:600">● Cambios sin guardar</span>':'<span style="color:var(--suave);font-size:12.5px">Todo guardado.</span>')+'</div>';
+  main.innerHTML=tabs+titulo+picker+'<div class="panel"><h2 style="margin-top:0">Accesos de <span style="color:var(--azul)">'+esc(person.nombre)+'</span></h2><div style="overflow-x:auto"><table class="tbl-compact perm-tbl"><thead><tr><th>Zona</th><th>Acceso</th></tr></thead><tbody>'+rows+'</tbody></table></div>'+saveBar+'</div>';
+}
 async function pagePermisos(){
+  const tabs='<div class="panel" style="margin-bottom:14px;display:flex;gap:8px;flex-wrap:wrap"><button class="btn '+(permMode==='persona'?'':'ghost')+'" onclick="permSetMode(\'persona\')">👤 Por persona</button><button class="btn '+(permMode==='roldept'?'':'ghost')+'" onclick="permSetMode(\'roldept\')">🏷️ Por rol y departamento</button></div>';
+  if(permMode==='persona'){ return pagePermisosPersona(tabs); }
   const ROLES_SEL=[['empleado','Empleado'],['responsable','Responsable'],['direccion','Dirección'],['admin','Administrador']];
   const areas=(CAT.areas&&CAT.areas.length)?CAT.areas:[]; const deptos=permDeptos();
   if(permDept && !deptos.includes(permDept)) permDept='';
@@ -7631,7 +7699,7 @@ async function pagePermisos(){
     <div><label style="display:block;font-size:12px;font-weight:600;color:var(--suave);margin-bottom:4px">Rol</label>
       <select onchange="permSetRole(this.value)" style="padding:8px 11px;border:1px solid var(--gris2);border-radius:8px;font-family:inherit;min-width:150px"><option value="">— elegir —</option>${ROLES_SEL.map(([v,l])=>`<option value="${v}" ${v===permRole?'selected':''}>${l}</option>`).join('')}</select></div>
   </div>`;
-  const titulo=`<div class="page-title">Permisos y accesos</div><div class="page-sub">Elige <b>área, departamento y rol</b>, ajusta los accesos y pulsa <b>Guardar</b>. Solo afecta a esa combinación. El <b>Propietario</b> siempre ve todo.</div>`;
+  const titulo=tabs+`<div class="page-title">Permisos y accesos</div><div class="page-sub">Elige <b>área, departamento y rol</b>, ajusta los accesos y pulsa <b>Guardar</b>. Solo afecta a esa combinación. El <b>Propietario</b> siempre ve todo.</div>`;
   if(!permDept || !permRole){
     document.getElementById('main').innerHTML=titulo+selectors+`<div class="panel" style="color:var(--suave)">Selecciona un <b>departamento</b> y un <b>rol</b> para ver y configurar sus accesos.</div>`;
     return;
