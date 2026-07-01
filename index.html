@@ -6174,7 +6174,7 @@ function incMatchesFilters(i){ const f=incFilters;
   if(f.categoria && (i.categoria||'')!==f.categoria) return false;
   if(f.afecta==='si' && !i.afecta_huesped) return false;
   if(f.q){ const q=f.q.toLowerCase(); const hay=((i.descripcion||'')+' '+(i.edificio||'')+' '+(i.unidad||'')+' '+incCatLabel(i.categoria)+' '+(i.creado_por_nombre||'')+' '+(i.tomada_por_nombre||'')+' '+(i.resuelto_por_nombre||'')).toLowerCase(); if(!hay.includes(q)) return false; }
-  if(f.trab){ const _deb=s=>(''+s).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,''); const tn=_deb(f.trab); const who=[i.resuelto_por_nombre,i.tomada_por_nombre,i.asignado_a_nombre].join(',').split(/[,;]+/).map(x=>_deb(x.trim())).filter(Boolean); if(!who.includes(tn)) return false; }
+  if(f.trab){ const _deb=s=>(''+s).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,''); const tn=_deb(f.trab); const src=(Array.isArray(i.realizadores)&&i.realizadores.length)?i.realizadores:[i.resuelto_por_nombre,i.tomada_por_nombre]; const who=src.join(',').split(/[,;]+/).map(x=>_deb(x.trim())).filter(Boolean); if(!who.includes(tn)) return false; }
   if(f.desde){ if(!i.resuelta_at || String(i.resuelta_at).slice(0,10) < f.desde) return false; }
   if(f.hasta){ if(!i.resuelta_at || String(i.resuelta_at).slice(0,10) > f.hasta) return false; }
   return true; }
@@ -6332,7 +6332,7 @@ function incSetFilter(k,v){ incFilters[k]=v; if(k==='edificio') incFilters.unida
 function incClearFilters(){ incFilters.edificio='';incFilters.unidad='';incFilters.urgencia='';incFilters.estado='';incFilters.q='';incFilters.categoria='';incFilters.afecta='';incFilters.trab='';incFilters.desde='';incFilters.hasta=''; show('incidencias'); }
 function incHistFiltroHTML(){
   const done=INC.filter(i=>i.estado==='terminada'||i.estado==='cancelada');
-  const _splitN=s=>(''+(s||'')).split(/[,;]+/).map(x=>x.trim()).filter(Boolean); const _deb=s=>(''+s).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,''); const _nmap={}; [].concat(MANT_STAFF.map(s=>s.nombre), done.flatMap(i=>[].concat(_splitN(i.resuelto_por_nombre),_splitN(i.tomada_por_nombre),_splitN(i.asignado_a_nombre)))).filter(Boolean).forEach(nm=>{ const k=_deb(nm); if(!_nmap[k]) _nmap[k]=nm; }); const names=Object.values(_nmap).sort((a,b)=>String(a).localeCompare(String(b),'es'));
+  const _splitN=s=>(''+(s||'')).split(/[,;]+/).map(x=>x.trim()).filter(Boolean); const _deb=s=>(''+s).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,''); const _nmap={}; [].concat(MANT_STAFF.map(s=>s.nombre), done.flatMap(i=>[].concat(_splitN(i.resuelto_por_nombre),_splitN(i.tomada_por_nombre)))).filter(Boolean).forEach(nm=>{ const k=_deb(nm); if(!_nmap[k]) _nmap[k]=nm; }); const names=Object.values(_nmap).sort((a,b)=>String(a).localeCompare(String(b),'es'));
   const f=incFilters; const n=incFilteredList(true).length;
   const inp='padding:7px 10px;border:1px solid var(--gris2);border-radius:8px;font-family:inherit;font-size:13px';
   return `<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;background:#f5f8fc;border:1px solid var(--gris2);border-radius:10px;padding:10px 12px;margin:0 0 12px">
@@ -6510,6 +6510,7 @@ function incCardHTML(i){
   const nf=(INC_FOTOS[i.id]||[]).filter(x=>x.tipo!=='solucion').length;
   const asg = i.asignado_a_nombre? ('→ '+esc(i.asignado_a_nombre)) : (i.asignado_equipo==='*'?'→ Todos los equipos':(i.asignado_equipo?('→ '+esc(i.asignado_equipo)):'→ Sin asignar'));
   const tom = i.tomada_por_nombre?`<span class="inc-tom">· 🛠 ${esc(i.tomada_por_nombre)}</span>`:'';
+  const res = (i.estado==='terminada')?`<span class="inc-tom" style="color:#1e8a5a">· ✅ ${esc((typeof incResolvers==='function'?incResolvers(i):[i.resuelto_por_nombre||'—']).join(', '))}</span>`:'';
   const me=ME.id;
   const puedeTomar = incEsMant() && i.estado==='pendiente' && !i.asignado_a;
   const done=(i.estado==='terminada'||i.estado==='cancelada');
@@ -6518,7 +6519,7 @@ function incCardHTML(i){
     <div class="inc-card-top"><span class="badge ${u[1]}${alarm?' urg-alarm':''}">${alarm?'🚨':u[2]} ${u[0]}</span><span class="badge ${e[1]}">${i.timer_ini?'<span class="inc-dot"></span> ':''}${e[0]}</span>${incVencida(i)?'<span class="badge b-red">⏰ Vencida</span>':''}${i.afecta_huesped?'<span class="badge b-amber">🛎️ Huésped</span>':''}${i.fuera_servicio?'<span class="badge b-red">⛔ Fuera de servicio</span>':''}</div>
     <div class="inc-card-loc">🏠 ${esc(i.edificio||'—')}${i.unidad?' · '+esc(i.unidad):''}${i.categoria?` <span style="font-weight:400;color:var(--suave);font-size:12px">· ${incCatLabel(i.categoria)}</span>`:''}</div>
     <div class="inc-card-desc">${esc((i.descripcion||'').slice(0,140))}${(i.descripcion||'').length>140?'…':''}</div>
-    <div class="inc-card-meta">${asg} ${tom} ${nf?('· 📷 '+nf):''}</div>
+    <div class="inc-card-meta">${asg} ${tom} ${res} ${nf?('· 📷 '+nf):''}</div>
     <div class="inc-card-meta2">${new Date(i.created_at).toLocaleString('es-ES',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}${['en_curso','pausada','a_medias'].includes(i.estado)?' · ⏱ '+incFmtT(incElapsed(i)):''}</div>
     <div class="inc-card-actions">
       ${puedeTomar?`<button class="btn-sm" onclick="incTomar(${i.id})">✋ Tomar</button>`:''}
