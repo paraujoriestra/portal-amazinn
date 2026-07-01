@@ -1371,16 +1371,36 @@ const ICONS={
 function navIcon(id){return `<svg class="nic" viewBox="0 0 24 24" style="width:18px;height:18px">${ICONS[id]||'<circle cx="12" cy="12" r="8"/>'}</svg>`;}
 function toggleDark(){document.body.classList.toggle('dark');const b=document.getElementById('darkBtn');if(b)b.textContent=document.body.classList.contains('dark')?'☀️':'🌙';}
 function toggleSidebar(){document.body.classList.toggle('nav-open');}
+let _gsT=null;
 function globalSearch(){
-  const q=(document.getElementById('gSearch').value||'').toLowerCase().trim();
+  const q=((document.getElementById('gSearch')||{}).value||'').trim();
   const box=document.getElementById('gResults'); if(!box) return;
-  if(!q){box.style.display='none';return;}
-  const items=[];
-  try{navGroups().forEach(g=>g.items.forEach(it=>items.push({l:it.t,sub:'Sección',s:it.id})));}catch(e){}
-  const res=items.filter(i=>(i.l||'').toLowerCase().includes(q)).slice(0,8);
-  box.innerHTML=res.length?res.map(r=>`<div class="gr-item" onmousedown="goSearch('${r.s}')"><b>${r.l}</b><small>${r.sub}</small></div>`).join(''):'<div class="gr-empty">Sin resultados</div>';
+  if(!q){ box.style.display='none'; return; }
+  const ql=q.toLowerCase();
+  let secHTML=''; try{ const secs=[]; navGroups().forEach(g=>g.items.forEach(it=>{ if((it.t||'').toLowerCase().includes(ql)) secs.push(it); })); secHTML=secs.slice(0,6).map(it=>`<div class="gr-item" onmousedown="goSearch('${it.id}')"><b>${esc(it.t)}</b><small>Sección</small></div>`).join(''); }catch(e){}
+  box.dataset.sec=secHTML;
+  box.innerHTML=secHTML+(q.length>=2?`<div class="gr-empty" style="font-size:12px;color:var(--suave)">Buscando…</div>`:(secHTML?'':`<div class="gr-empty">Escribe para buscar…</div>`));
   box.style.display='block';
+  clearTimeout(_gsT);
+  if(q.length>=2) _gsT=setTimeout(()=>globalSearchEntities(q),260);
 }
+async function globalSearchEntities(q){
+  const box=document.getElementById('gResults'); if(!box) return;
+  const secHTML=box.dataset.sec||'';
+  const qs=q.replace(/[,%()*]/g,' ').trim(); if(qs.length<2) return; const like='%'+qs+'%';
+  const can=id=>{ try{ return (typeof navItemAllowed!=='function')||navItemAllowed(id); }catch(_){ return true; } };
+  const out=[]; const jobs=[];
+  if(can('incidencias')) jobs.push(sb.from('mant_incidencias').select('id,edificio,unidad,descripcion').or(`descripcion.ilike.${like},edificio.ilike.${like},unidad.ilike.${like}`).limit(5).then(r=>{ (r.data||[]).forEach(x=>out.push(`<div class="gr-item" onmousedown="goSearchInc('${x.id}')"><b>🛠️ ${esc((x.edificio||'—')+(x.unidad?' · '+x.unidad:''))}</b><small>${esc((x.descripcion||'').slice(0,45))}</small></div>`)); }).catch(()=>{}));
+  if(can('propietarios')) jobs.push(sb.from('propietarios').select('id,nombre,propiedad').or(`nombre.ilike.${like},propiedad.ilike.${like}`).limit(4).then(r=>{ (r.data||[]).forEach(x=>out.push(`<div class="gr-item" onmousedown="goSearch('propietarios')"><b>🏠 ${esc(x.nombre||'')}</b><small>Propietario${x.propiedad?' · '+esc(x.propiedad):''}</small></div>`)); }).catch(()=>{}));
+  if(can('transfer')) jobs.push(sb.from('transfers').select('id,cliente,destino').or(`cliente.ilike.${like},destino.ilike.${like}`).limit(4).then(r=>{ (r.data||[]).forEach(x=>out.push(`<div class="gr-item" onmousedown="goSearch('transfer')"><b>🚐 ${esc(x.cliente||'')}</b><small>Transfer${x.destino?' · '+esc(x.destino):''}</small></div>`)); }).catch(()=>{}));
+  if(can('catalogos')) jobs.push(sb.from('mant_unidades').select('id,edificio,nombre').or(`nombre.ilike.${like},edificio.ilike.${like}`).limit(4).then(r=>{ (r.data||[]).forEach(x=>out.push(`<div class="gr-item" onmousedown="goSearch('catalogos')"><b>🏢 ${esc((x.edificio||'')+' · '+(x.nombre||''))}</b><small>Unidad</small></div>`)); }).catch(()=>{}));
+  await Promise.all(jobs);
+  const box2=document.getElementById('gResults'); if(!box2) return;
+  const cur=((document.getElementById('gSearch')||{}).value||'').trim(); if(cur!==q) return;
+  box2.innerHTML=(secHTML||'')+(out.join('')||(secHTML?'':'<div class="gr-empty">Sin resultados</div>'));
+  box2.style.display='block';
+}
+function goSearchInc(id){ const b=document.getElementById('gResults'); if(b)b.style.display='none'; const i=document.getElementById('gSearch'); if(i)i.value=''; incSel=id; try{incNew=false;}catch(_e){} show('incidencias'); }
 function goSearch(s){const b=document.getElementById('gResults');if(b)b.style.display='none';const i=document.getElementById('gSearch');if(i)i.value='';show(s);}
 /* ---------------- NOTIFICACIONES (campana) ---------------- */
 let NOTIFS=[], NOTIF_READ=new Set();
