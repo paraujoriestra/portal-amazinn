@@ -7371,6 +7371,13 @@ function asgCan(){ if(typeof zonaRO==='function' && zonaRO('asignaciones')) retu
 function asgTeamWorkers(){ return ASG_TRAB_FULL.filter(t=>!ASG.equipo||(t.equipo||'')===ASG.equipo).map(t=>t.nombre); }
 function asgSetEquipo(e){ ASG.equipo=e; show('asignaciones'); }
 function asgTipoLabel(t){ if(t==='entrada')t='limpieza_cortesia'; const o=ASG_TIPO.find(x=>x[0]===t); return o?o[1]:''; }
+/* Etiqueta con color para el reporte/PDF publicado. Cubre TODOS los tipos (incl. retoque y el legacy 'entrada'). */
+function asgTipoPrint(t){ if(t==='entrada')t='limpieza_cortesia';
+  if(t==='salida') return '<span class="apz-out">Salida</span>';
+  if(t==='salida_entrada') return '<span class="apz-out">Salida</span> + <span class="apz-in">Entrada</span>';
+  if(t==='limpieza_cortesia') return '<span class="apz-in">Limpieza cortesía</span>';
+  if(t==='retoque') return '<span class="apz-ret">Retoque</span>';
+  return esc(asgTipoLabel(t)||''); }
 function fechaLarga(iso){ if(!iso) return ''; const d=new Date(iso+'T00:00:00'); if(isNaN(d)) return iso; const ds=['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado']; const dd=String(d.getDate()).padStart(2,'0'), mm=String(d.getMonth()+1).padStart(2,'0'); return `${ds[d.getDay()]} ${dd}/${mm}/${d.getFullYear()}`; }
 function asgWorkersOf(u){ if(Array.isArray(u.trabajadores)&&u.trabajadores.length) return u.trabajadores.map(x=>(''+x).trim()).filter(Boolean); const a=[]; if((''+(u.t1||'')).trim())a.push((''+u.t1).trim()); if((''+(u.t2||'')).trim())a.push((''+u.t2).trim()); return a; }
 function asgComputeResumen(d){ d=d||ASG; const m={};
@@ -7532,7 +7539,7 @@ function asgShareReady(ov,file,d,titulo,texto,puedeArchivo){
 }
 
 function asgPrintHTML(d){
-  const filasU=(d.unidades||[]).map(u=>`<tr><td><b>${esc(u.unidad)}</b></td><td>${u.checkin?esc(u.checkin):''}</td><td>${u.tipo==='salida'?'<span class="apz-out">Salida</span>':u.tipo==='limpieza_cortesia'?'<span class="apz-in">Limpieza cortesía</span>':'<span class="apz-out">Salida</span> + <span class="apz-in">Entrada</span>'}</td><td>${esc(u.cliente||'')}</td><td>${esc(u.pax)}</td><td>${esc(u.extra)}</td><td>${esc(asgWorkersOf(u).join(', '))}</td><td>${esc(u.supervisora)}</td></tr>`).join('');
+  const filasU=(d.unidades||[]).map(u=>`<tr><td><b>${esc(u.unidad)}</b></td><td>${u.checkin?esc(u.checkin):''}</td><td>${asgTipoPrint(u.tipo)}</td><td>${esc(u.cliente||'')}</td><td>${esc(u.pax)}</td><td>${esc(u.extra)}</td><td>${esc(asgWorkersOf(u).join(', '))}</td><td>${esc(u.supervisora)}</td></tr>`).join('');
   const filasC=(d.comunes||[]).map(c=>`<tr><td><b>${esc(c.area)}</b></td><td>${esc(asgWorkersOf(c).join(', '))}</td><td>${esc(c.nota||'')}</td></tr>`).join('');
   const r=asgComputeResumen(d);
   const resumen=r.length?`<h3 class="apz-h3">Personal llamado a trabajar (${r.length})</h3><div class="apz-res">${r.map((p,i)=>`<div>${i+1}. <b>${esc(p.nombre)}</b> <span style="color:#888">(${[p.u?p.u+' und':'',p.c?p.c+' z.común':''].filter(Boolean).join(' · ')})</span><div style="color:#555;font-size:11px;margin:1px 0 5px 12px">${[...p.unidades,...p.comunes].map(x=>esc(x)).join(' · ')}</div></div>`).join('')}</div>`:'';
@@ -7662,7 +7669,7 @@ function asgEnsureStyle(){ if(document.getElementById('asgStyle')) return; const
   .apz-table th{background:#1c1b18;color:#fff;text-align:left;padding:6px 9px;font-size:11px}
   .apz-table td{padding:5px 9px;border-bottom:1px solid #e7e0d3;word-wrap:break-word;overflow-wrap:break-word;vertical-align:top}
   .apz-table tr{page-break-inside:avoid}.apz-table thead{display:table-header-group}
-  .apz-out{color:#a23b2c;font-weight:700}.apz-in{color:#2c6b39;font-weight:700}
+  .apz-out{color:#a23b2c;font-weight:700}.apz-in{color:#2c6b39;font-weight:700}.apz-ret{color:#2a5db0;font-weight:700}
   .apz-h3{font-size:13px;text-transform:uppercase;letter-spacing:1px;color:#555;margin:10px 0 8px;font-weight:800}
   .apz-res{columns:3;font-size:12.5px;line-height:1.8}.apz-res div{break-inside:avoid}
   .kpi-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:16px}
