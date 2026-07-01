@@ -1187,6 +1187,7 @@ async function pinRecoverySave(e){
 const NAV=[
   {grp:'General'},
   {id:'inicio',ic:'🏠',t:'Inicio'},
+  {id:'hoy',ic:'📆',t:'Hoy'},
   {id:'horarios',ic:'📅',t:'Mis horarios'},
   {id:'fichaje',ic:'⏱️',t:'Fichaje', lockRoles:['empleado','responsable']},
   {id:'comunicados',ic:'📢',t:'Comunicados'},
@@ -1328,6 +1329,7 @@ function navGroups(){
 }
 function groupOf(id){let c=null;for(const it of NAV){if(it.grp)c=it.grp;else if(it.id===id)return c;}return null;}
 const ICONS={
+  hoy:'<rect x="3" y="4" width="18" height="17" rx="1"/><path d="M3 9h18M8 2v4M16 2v4M9 15l2 2 4-4"/>',
   inicio:'<path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V20h14V9.5"/>',
   horarios:'<rect x="3" y="4" width="18" height="17" rx="1"/><path d="M3 9h18M8 2v4M16 2v4"/>',
   fichaje:'<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
@@ -1602,6 +1604,7 @@ function show(id){
   try{ ZONA_RO = !!(_lk && _lk.id) && (typeof zonaRO==='function') && zonaRO(id); document.body.classList.toggle('zona-ro', !!ZONA_RO); }catch(e){}
   if(id==='perfil'){ ld('<div class="page-title">Mi perfil</div><div class="page-sub">Cargando…</div>'); pagePerfil(); return; }
   if(id==='inicio'){ ld('<div class="page-sub">Cargando…</div>'); pageInicio(); return; }
+  if(id==='hoy'){ ld('<div class="page-title">📆 Hoy</div><div class="page-sub">Cargando…</div>'); pageHoy(); return; }
   else if(id==='comunicados'){ ld('<div class="page-title">Comunicados</div><div class="page-sub">Cargando…</div>'); pageComunicados(); }
   else if(id==='horarios'){ ld('<div class="page-title">Horarios</div><div class="page-sub">Cargando…</div>'); pageHorarios(); }
   else if(id==='organigrama'){ ld('<div class="page-title">Organigrama</div><div class="page-sub">Cargando…</div>'); pageOrganigrama(); }
@@ -1649,6 +1652,42 @@ function show(id){
 }
 
 /* ---------------- INICIO ---------------- */
+async function pageHoy(){
+  const hoy=hoyISO(); const main=document.getElementById('main');
+  const can=id=>{ try{ return (typeof navItemAllowed!=='function')||navItemAllowed(id); }catch(_e){ return true; } };
+  const card=(title,body,go,goLbl)=>`<div class="panel" style="margin-bottom:14px"><div style="display:flex;align-items:center;gap:10px;margin-bottom:8px"><h2 style="margin:0;font-size:16px">${title}</h2>${go?`<button class="btn ghost" style="margin-left:auto;padding:5px 12px;font-size:12.5px" onclick="show('${go}')">${goLbl||'Ver'} →</button>`:''}</div>${body}</div>`;
+  main.innerHTML=`<div class="page-title">📆 Hoy</div><div class="page-sub">${esc(fechaLarga(hoy))}</div><div id="hoyBox"><div class="panel" style="color:var(--suave)">Cargando…</div></div>`;
+  const blocks=[];
+  if(can('asignaciones')){ try{
+    const {data:pubs}=await sb.from('limpieza_pub').select('id,equipo,fecha').eq('fecha',hoy);
+    if(pubs&&pubs.length){ const ids=pubs.map(p=>p.id);
+      const [ru,rc]=await Promise.all([ sb.from('limpieza_pub_unidades').select('pub_id,estado').in('pub_id',ids), sb.from('limpieza_pub_comunes').select('pub_id').in('pub_id',ids) ]);
+      const us=ru.data||[], cs=rc.data||[]; const done=us.filter(u=>u.estado==='hecho').length;
+      blocks.push(card('🧹 Limpiezas de hoy', `<div style="font-size:14px">${pubs.length} plan(es) · <b>${us.length}</b> unidad(es) (${done} terminadas) · <b>${cs.length}</b> zona(s) común</div>`, 'asignaciones','Ver'));
+    } else { blocks.push(card('🧹 Limpiezas de hoy', `<div style="color:var(--suave);font-size:13.5px">No hay asignaciones publicadas para hoy.</div>`, 'asignaciones','Crear')); }
+  }catch(e){} }
+  if(can('incidencias')){ try{
+    const {data}=await sb.from('mant_incidencias').select('id,estado,urgencia').not('estado','in','(terminada,cancelada)');
+    const arr=data||[]; const alta=arr.filter(i=>i.urgencia==='alta').length; const pend=arr.filter(i=>i.estado==='pendiente').length;
+    blocks.push(card('🛠️ Incidencias abiertas', `<div style="font-size:14px"><b>${arr.length}</b> abiertas · <span style="color:#c0392b"><b>${alta}</b> alta</span> · ${pend} pendientes por tomar</div>`, 'incidencias','Ver'));
+  }catch(e){} }
+  if(can('transfer')){ try{
+    const {data}=await sb.from('transfers').select('id,cliente,aeropuerto,destino,recogida,estado,conductor_nombre,fecha').eq('fecha',hoy).order('recogida');
+    const arr=data||[];
+    const rows=arr.slice(0,10).map(t=>`<div style="display:flex;gap:10px;font-size:13px;padding:5px 0;border-bottom:1px solid var(--gris)"><b style="min-width:48px">${esc((t.recogida||'').slice(0,5)||'—')}</b><span>${esc(t.cliente||'')} <span style="color:var(--suave)">· ${esc(t.aeropuerto||'')}→${esc(t.destino||'')}</span>${t.conductor_nombre?` · 🚗 ${esc(t.conductor_nombre)}`:` · <span style="color:#c47f17">sin conductor</span>`}</span></div>`).join('');
+    blocks.push(card('🚐 Transfers de hoy', arr.length?`<div style="font-size:14px;margin-bottom:4px"><b>${arr.length}</b> viaje(s)</div>${rows}`:`<div style="color:var(--suave);font-size:13.5px">No hay transfers para hoy.</div>`, 'transfer','Ver'));
+  }catch(e){} }
+  if(typeof isDireccion==='function'&&isDireccion()&&can('cierres')){ try{
+    const d30=new Date(Date.now()-30*864e5).toISOString().slice(0,10);
+    const {count}=await sb.from('cierres_caja').select('id',{count:'exact',head:true}).gte('fecha',d30).or('revisado.is.null,revisado.eq.false');
+    if(count) blocks.push(card('🧾 Cierres sin revisar', `<div style="font-size:14px"><b>${count}</b> cierre(s) de los últimos 30 días pendientes de revisión</div>`, 'cierres','Revisar'));
+  }catch(e){} }
+  if(can('aprobaciones')){ try{
+    const {count}=await sb.from('solicitudes').select('id',{count:'exact',head:true}).eq('estado','Pendiente');
+    if(count) blocks.push(card('📋 Solicitudes por aprobar', `<div style="font-size:14px"><b>${count}</b> solicitud(es) esperando aprobación</div>`, 'aprobaciones','Ver'));
+  }catch(e){} }
+  const box=document.getElementById('hoyBox'); if(box) box.innerHTML=blocks.join('')||`<div class="panel" style="color:var(--suave)">Nada pendiente para hoy. 🎉</div>`;
+}
 async function pageInicio(){
   const p=PROFILE, cargo=p.posicion||roleNice(p.role);
   const {data:bd}=await sb.from('profiles').select('nombre,dept,cumple').not('cumple','is',null);
