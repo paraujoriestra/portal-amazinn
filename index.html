@@ -2889,6 +2889,16 @@ let pagMatchEls=[], pagMatchIdx=-1;
 function pagUpdateMatches(){ const b=document.getElementById('pagBody'); pagMatchEls=b?Array.prototype.slice.call(b.querySelectorAll('mark')):[]; pagMatchIdx=pagMatchEls.length?0:-1; pagMatchPaint(false); }
 function pagMatchPaint(scroll){ for(let i=0;i<pagMatchEls.length;i++){ const m=pagMatchEls[i]; m.style.background=(i===pagMatchIdx)?'#ff9f1c':'#ffe680'; m.style.color=(i===pagMatchIdx)?'#fff':'inherit'; } const info=document.getElementById('pagMatchInfo'); const q=(pagSearch||'').trim(); if(info) info.textContent = q ? (pagMatchEls.length ? ((pagMatchIdx+1)+' / '+pagMatchEls.length) : 'sin resultados') : ''; if(scroll){ const cur=pagMatchEls[pagMatchIdx]; if(cur&&cur.scrollIntoView) cur.scrollIntoView({block:'center',inline:'center'}); } }
 function pagMatchGo(dir){ if(!pagMatchEls.length) return; pagMatchIdx=(pagMatchIdx+dir+pagMatchEls.length)%pagMatchEls.length; pagMatchPaint(true); }
+function pagExportCSV(){
+  const rows=(typeof pagFiltered==='function')?pagFiltered():[];
+  const q=v=>'"'+String(v==null?'':v).replace(/"/g,'""')+'"';
+  const cols=[['fecha','Fecha'],['mes','Mes'],['categoria','Categoria'],['subcategoria','Subcategoria'],['propiedad','Propiedad'],['empresa','Empresa'],['metodo','Metodo'],['estado','Estado'],['consecutivo','Consecutivo'],['cuenta','Cuenta'],['factura','Factura'],['base','Base'],['itbms','ITBMS'],['monto_total','Monto total']];
+  const lines=[cols.map(c=>c[1]).join(';')];
+  rows.forEach(p=>lines.push(cols.map(c=>q(p[c[0]])).join(';')));
+  const blob=new Blob(['﻿'+lines.join('\n')],{type:'text/csv;charset=utf-8'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='pagos'+(pagMes?'_'+pagMes:'')+'.csv'; document.body.appendChild(a); a.click(); a.remove();
+  try{ if(typeof toast==='function') toast('✓ '+rows.length+' pago(s) exportado(s)'); }catch(_e){}
+}
 function pagFiltros(){
   const cats=[...new Set(PAGOS.map(p=>p.categoria).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
   const props=[...new Set(PAGOS.map(p=>p.propiedad).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
@@ -2896,7 +2906,7 @@ function pagFiltros(){
   const inp='padding:7px 10px;border:1px solid var(--gris2);border-radius:8px;font-size:13px;font-family:inherit;background:#fff';
   const sel=(id,val,opts,ph)=>`<select onchange="pagSet('${id}',this.value)" style="${inp}"><option value="">${ph}</option>${opts.map(o=>`<option ${val===o?'selected':''}>${esc(o)}</option>`).join('')}</select>`;
   const any=(pagMes||pagCat||pagProp||pagEstado||pagFrom||pagTo);
-  const toggle=`<div style="margin-bottom:${pagFiltOpen?'10px':'14px'};display:flex;gap:8px;align-items:center;flex-wrap:wrap"><button class="cc-filt-btn ${(any||pagFiltOpen)?'on':''}" onclick="pagToggleFilt()">🔎 Filtros ${pagFiltOpen?'▲':'▼'}${any?' · activos':''}</button>${(any&&!pagFiltOpen)?`<button class="cc-filt-btn" onclick="pagClear()">✕ Limpiar</button>`:''}</div>`;
+  const toggle=`<div style="margin-bottom:${pagFiltOpen?'10px':'14px'};display:flex;gap:8px;align-items:center;flex-wrap:wrap"><button class="cc-filt-btn ${(any||pagFiltOpen)?'on':''}" onclick="pagToggleFilt()">🔎 Filtros ${pagFiltOpen?'▲':'▼'}${any?' · activos':''}</button>${(any&&!pagFiltOpen)?`<button class="cc-filt-btn" onclick="pagClear()">✕ Limpiar</button>`:''}<button class="cc-filt-btn" onclick="pagExportCSV()">⬇️ Exportar CSV</button></div>`;
   if(!pagFiltOpen) return toggle;
   return toggle+`<div class="panel" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:14px">
     ${sel('mes',pagMes,meses,'Todos los meses')}
@@ -4635,8 +4645,19 @@ function ccSetLugarFiltro(v){ ccLugarFiltro=v; show('cierres'); }
 function ccSetCtrlLugar(v){ ccCtrlLugar=v; show('cierres'); }
 function ccLugarSelectHTML(){ const ls=[...new Set(CCAJA.map(c=>c.lugar).filter(Boolean))]; const opts=CC_LUGARES.filter(L=>ls.includes(L)); if(!opts.length) return ''; const inp='padding:6px 10px;border:1px solid var(--gris2);border-radius:8px;font-size:13px;font-family:inherit;background:#fff'; return `<select onchange="ccSetLugarFiltro(this.value)" style="${inp}"><option value="">📍 Todas las ubicaciones</option>${opts.map(L=>`<option ${ccLugarFiltro===L?'selected':''}>${esc(L)}</option>`).join('')}</select>`; }
 function ccFiltered(){ return CCAJA.filter(c=>{ const f=c.fecha||''; if(ccFrom && f<ccFrom)return false; if(ccTo && f>ccTo)return false; if(ccSoloPend && c.revisado)return false; if(ccLugarFiltro && (c.lugar||'')!==ccLugarFiltro)return false; return true; }); }
+function ccExportCSV(){
+  const rows=ccFiltered(); const mk=(typeof CC_METODOS!=='undefined'?CC_METODOS:[]).map(m=>m[0]);
+  const q=v=>'"'+String(v==null?'':v).replace(/"/g,'""')+'"';
+  const head=['Fecha','Ubicacion','Turno','Responsable',...mk.map(k=>'Ing. '+k),'Ventas total','Fondo inicial','Gastos','Reposicion','Contado','Esperado','Diferencia','Revisado','Registrado','Creado por'];
+  const lines=[head.join(';')];
+  rows.forEach(c=>{ const m=c.metodos||{}; lines.push([c.fecha||'',c.lugar||'',c.turno||'',c.responsable||'',...mk.map(k=>m[k]!=null?m[k]:''),c.ventas_total!=null?c.ventas_total:'',c.fondo_inicial!=null?c.fondo_inicial:'',c.gastos!=null?c.gastos:'',c.reposicion!=null?c.reposicion:'',c.contado!=null?c.contado:'',c.esperado!=null?c.esperado:'',c.diferencia!=null?c.diferencia:'',c.revisado?'Si':'No',c.created_at?new Date(c.created_at).toLocaleString('es-ES'):'',c.creado_por_nombre||''].map(q).join(';')); });
+  const per=(ccFrom||ccTo)?('_'+(ccFrom||'inicio')+'_'+(ccTo||'hoy')):'';
+  const blob=new Blob(['﻿'+lines.join('\n')],{type:'text/csv;charset=utf-8'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='cierres_caja'+per+'.csv'; document.body.appendChild(a); a.click(); a.remove();
+  try{ if(typeof toast==='function') toast('✓ '+rows.length+' cierre(s) exportado(s)'); }catch(_e){}
+}
 function ccFiltBar(){ const anyF=ccFrom||ccTo; const inp='padding:7px 10px;border:1px solid var(--gris2);border-radius:8px;font-size:13px;font-family:inherit';
-  return `<div style="margin-bottom:12px;display:flex;gap:8px;align-items:center;flex-wrap:wrap"><button class="cc-filt-btn ${(ccFiltOpen||anyF)?'on':''}" onclick="ccToggleFilt()">🔎 Filtros${anyF?' •':''}</button>${isDireccion()?`<button class="cc-filt-btn ${ccSoloPend?'on':''}" onclick="ccTogglePend()">⏳ Solo pendientes</button>`:''}${ccLugarSelectHTML()}</div>
+  return `<div style="margin-bottom:12px;display:flex;gap:8px;align-items:center;flex-wrap:wrap"><button class="cc-filt-btn ${(ccFiltOpen||anyF)?'on':''}" onclick="ccToggleFilt()">🔎 Filtros${anyF?' •':''}</button>${isDireccion()?`<button class="cc-filt-btn ${ccSoloPend?'on':''}" onclick="ccTogglePend()">⏳ Solo pendientes</button>`:''}${ccLugarSelectHTML()}<button class="cc-filt-btn" onclick="ccExportCSV()">⬇️ Exportar CSV</button></div>
   ${ccFiltOpen?`<div class="inc-filters" style="align-items:center"><label style="font-size:12.5px;color:var(--suave);display:flex;gap:6px;align-items:center">Desde <input type="date" value="${esc(ccFrom)}" onchange="ccSetFilt('from',this.value)" style="${inp}"></label><label style="font-size:12.5px;color:var(--suave);display:flex;gap:6px;align-items:center">Hasta <input type="date" value="${esc(ccTo)}" onchange="ccSetFilt('to',this.value)" style="${inp}"></label>${anyF?`<button class="inc-clear" onclick="ccClearFilt()">✕ Limpiar</button>`:''}</div>`:''}`;
 }
 async function pageCierres(){
