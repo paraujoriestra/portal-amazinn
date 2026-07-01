@@ -5906,6 +5906,7 @@ let chatOpen=false, chatMsgs=[];
 const SUGS=['Mi horario','¿Hay comunicados?','Teléfono de un proveedor','¿Cuándo son los cumpleaños?','¿Cómo pido vacaciones?'];
 /* ===== Widget de MENSAJERÍA en el botón flotante (sustituye al asistente) ===== */
 let msgwOpen=false, msgwWith=null, msgwName='';
+let SUPPORT_UID=null;
 async function toggleChat(){
   msgwOpen=!msgwOpen;
   const w=document.getElementById('chatWin');
@@ -5917,8 +5918,8 @@ async function toggleChat(){
   window._msgwPoll=setInterval(msgwPoll,3000);
 }
 async function msgwLoad(){
-  const {data:profs}=await sb.from('profiles').select('id,nombre,color,foto,last_seen').neq('id',ME.id).order('nombre');
-  MSG_CONTACTS=profs||[];
+  const {data:profs}=await sb.from('profiles').select('id,nombre,color,foto,last_seen,role').neq('id',ME.id).order('nombre');
+  MSG_CONTACTS=profs||[]; SUPPORT_UID=((MSG_CONTACTS.find(c=>c.role==='propietario'))||{}).id||null;
   const {data:msgs}=await sb.from('mensajes').select('*').order('created_at'); MSG_ALL=msgs||[];
 }
 function msgwRender(){
@@ -5938,9 +5939,18 @@ function msgwRender(){
   }
 }
 function msgwRenderList(term){ const l=document.getElementById('msgwList'); if(l) l.innerHTML=msgwListHTML(term); }
+function supportPinHTML(openFn,term){
+  if(!SUPPORT_UID || String(ME.id)===String(SUPPORT_UID)) return '';
+  term=(term||'').toLowerCase(); if(term && !('soporte atencion atención ayuda usuario problema duda'.includes(term))) return '';
+  const conv=MSG_ALL.filter(m=>(m.de_id===ME.id&&m.para_id===SUPPORT_UID)||(m.de_id===SUPPORT_UID&&m.para_id===ME.id));
+  const noLeidos=conv.filter(m=>m.de_id===SUPPORT_UID&&m.para_id===ME.id&&!m.leido).length;
+  return `<div class="mc" style="background:#f1faf4;border-bottom:1px solid #d7ecdd" onclick="${openFn}('${SUPPORT_UID}','🛟 Soporte · Atención al usuario')"><div style="width:34px;height:34px;border-radius:50%;background:#0a8a3f;color:#fff;display:flex;align-items:center;justify-content:center;font-size:17px;flex-shrink:0">🛟</div><div style="overflow:hidden;flex:1"><b style="display:block;font-size:13.5px">Soporte · Atención al usuario</b><small style="color:var(--suave);display:block">¿Dudas o problemas? Escríbenos</small></div>${noLeidos?`<span class="mc-dot">${noLeidos>99?'99+':noLeidos}</span>`:''}</div>`;
+}
+
 function msgwListHTML(term){
   term=(term||'').trim().toLowerCase();
-  const ord=MSG_CONTACTS.map(c=>{const conv=MSG_ALL.filter(m=>(m.de_id===ME.id&&m.para_id===c.id)||(m.de_id===c.id&&m.para_id===ME.id));const last=[...conv].reverse()[0];return {c,t:last?new Date(last.created_at).getTime():0};}).sort((a,b)=>b.t-a.t||(a.c.nombre||'').localeCompare(b.c.nombre||'')).map(x=>x.c);
+  const _hide=SUPPORT_UID&&String(ME.id)!==String(SUPPORT_UID); const _src=_hide?MSG_CONTACTS.filter(c=>String(c.id)!==String(SUPPORT_UID)):MSG_CONTACTS;
+  const ord=_src.map(c=>{const conv=MSG_ALL.filter(m=>(m.de_id===ME.id&&m.para_id===c.id)||(m.de_id===c.id&&m.para_id===ME.id));const last=[...conv].reverse()[0];return {c,t:last?new Date(last.created_at).getTime():0};}).sort((a,b)=>b.t-a.t||(a.c.nombre||'').localeCompare(b.c.nombre||'')).map(x=>x.c);
   const rows=ord.map(c=>{
     const conv=MSG_ALL.filter(m=>(m.de_id===ME.id&&m.para_id===c.id)||(m.de_id===c.id&&m.para_id===ME.id));
     const last=[...conv].reverse()[0];
@@ -5949,7 +5959,7 @@ function msgwListHTML(term){
     const sub=last?(last.texto?esc(last.texto):(last.adj_path?'📎 archivo':'—')):'Sin mensajes aún';
     return `<div class="mc" onclick="msgwOpenConv('${c.id}','${(c.nombre||'').replace(/'/g,"\\'")}')">${avP(c.nombre,c.color,34,c.foto,c.last_seen)}<div style="overflow:hidden;flex:1"><b style="display:block;font-size:13.5px">${esc(c.nombre)}</b><small style="color:var(--suave);display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:200px">${sub}</small></div>${noLeidos?`<span class="mc-dot">${noLeidos>99?'99+':noLeidos}</span>`:''}</div>`;
   }).filter(Boolean).join('');
-  return rows||`<div style="padding:16px;color:var(--suave);font-size:13px">${term?'Sin resultados para "'+esc(term)+'"':'No hay otros usuarios todavía.'}</div>`;
+  const _pin=supportPinHTML('msgwOpenConv',term); return (_pin+rows)||`<div style="padding:16px;color:var(--suave);font-size:13px">${term?'Sin resultados para "'+esc(term)+'"':'No hay otros usuarios todavía.'}</div>`;
 }
 function msgwOpenConv(id,name){ msgwWith=id; msgwName=name; msgwRender(); }
 function msgwBack(){ msgwWith=null; msgwLoad().then(msgwRender); }
@@ -6054,7 +6064,7 @@ function pageDepto(){return `<div class="page-title">Área de ${esc(PROFILE.dept
 /* ---------------- MENSAJERÍA (datos reales) ---------------- */
 let chatWithId=null, chatWithName=null, chatLastId=0;
 async function pageMensajeria(){
-  const {data:profs}=await sb.from('profiles').select('id,nombre,color,foto,last_seen').neq('id',ME.id).order('nombre');
+  const {data:profs}=await sb.from('profiles').select('id,nombre,color,foto,last_seen,role').neq('id',ME.id).order('nombre');
   const contacts=profs||[];
   const {data:msgs}=await sb.from('mensajes').select('*').order('created_at');
   const MS=msgs||[];
@@ -6064,7 +6074,7 @@ async function pageMensajeria(){
     await sb.from('mensajes').update({leido:true}).eq('para_id',ME.id).eq('de_id',chatWithId).eq('leido',false);
     loadMsgUnread();
   }
-  MSG_CONTACTS=contacts; MSG_ALL=MS;
+  MSG_CONTACTS=contacts; MSG_ALL=MS; SUPPORT_UID=((contacts.find(c=>c.role==='propietario'))||{}).id||null;
   const lista=buildContactList('');
   setTimeout(()=>{const t=document.getElementById('msgThread');if(t)t.scrollTop=t.scrollHeight;},40);
   document.getElementById('main').innerHTML=`<div class="page-title">Mensajería interna</div><div class="page-sub">Habla con tus compañeros de equipo</div><div class="msg-layout"><div class="msg-contacts"><div class="msg-search"><input id="msgSearch" placeholder="🔍 Buscar persona o palabra…" oninput="msgSearch(this.value)"></div><div id="contactList">${lista}</div></div><div id="msgConvWrap" style="min-width:0;min-height:0;display:flex;flex-direction:column">${convHTML()}</div></div>`;
@@ -6136,7 +6146,8 @@ let MSG_CONTACTS=[], MSG_ALL=[];
 function buildContactList(term){
   term=(term||'').trim().toLowerCase();
   // Ordenar por conversación más reciente (los que tienen mensajes, arriba)
-  const ordenados=MSG_CONTACTS.map(c=>{
+  const _hide=SUPPORT_UID&&String(ME.id)!==String(SUPPORT_UID); const _src=_hide?MSG_CONTACTS.filter(c=>String(c.id)!==String(SUPPORT_UID)):MSG_CONTACTS;
+  const ordenados=_src.map(c=>{
     const conv=MSG_ALL.filter(m=>(m.de_id===ME.id&&m.para_id===c.id)||(m.de_id===c.id&&m.para_id===ME.id));
     const last=[...conv].reverse()[0];
     return {c, t: last?new Date(last.created_at).getTime():0};
@@ -6155,8 +6166,8 @@ function buildContactList(term){
     const sub=(term && msgHit)?esc(msgHit.texto):preview(last);
     return `<div class="mc ${c.id===chatWithId?'on':''}" onclick="openChat('${c.id}','${(c.nombre||'').replace(/'/g,"\\'")}')">${avP(c.nombre,c.color,34,c.foto,c.last_seen)}<div style="overflow:hidden"><b style="display:block">${esc(c.nombre)}</b><small style="color:var(--suave);display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:170px">${sub}</small></div>${dot}</div>`;
   }).filter(Boolean).join('');
-  if(!rows) return `<div style="padding:14px;color:var(--suave);font-size:13px">${term?'Sin resultados para "'+esc(term)+'"':'No hay otros usuarios todavía.'}</div>`;
-  return rows;
+  const _pin=supportPinHTML('openChat',term); if(!rows&&!_pin) return `<div style="padding:14px;color:var(--suave);font-size:13px">${term?'Sin resultados para "'+esc(term)+'"':'No hay otros usuarios todavía.'}</div>`;
+  return _pin+rows;
 }
 function msgSearch(v){const l=document.getElementById('contactList');if(l)l.innerHTML=buildContactList(v);}
 async function openChat(id,name){
