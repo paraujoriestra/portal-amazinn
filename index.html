@@ -1081,6 +1081,7 @@ async function enterApp(user){
   if(PROFILE.pin_temporal){ showForcePin(); return; }   // PIN temporal → obligar a cambiarlo
   await loadCatalogos();
   await loadAccesos();
+  await loadCandados();
   document.getElementById('login').style.display='none';
   document.getElementById('app').style.display='block';
   document.getElementById('uname').textContent = PROFILE.nombre || user.email;
@@ -1283,6 +1284,12 @@ let horHistDept='', horHistEq='';
 let ACCESS_DENY=new Set(), ACCESS_GRANT=new Set(), ACCESS_VIEW=new Set(), ACCESS_PDENY=new Set(), ACCESS_PGRANT=new Set(), ACCESS_PVIEW=new Set(); let ZONA_RO=false;
 const PERM_V2=true;
 const ZONA_SISTEMA=['auditoria','permisos','registros','admin','backup'];
+/* ===== Candados configurables desde el Mapa de candados (tabla config) =====
+   candado_<id> = 'panel'  -> ese candado respeta "Permisos y accesos"
+   ausente o 'fijo'        -> usa la regla de siempre escrita a mano */
+let CANDADOS_CFG={};
+async function loadCandados(){ CANDADOS_CFG={}; try{ const {data}=await sb.from('config').select('clave,valor').like('clave','candado_%'); (data||[]).forEach(r=>{ CANDADOS_CFG[r.clave.replace('candado_','')]=r.valor; }); }catch(_e){} }
+function candadoPanel(id){ return CANDADOS_CFG[id]==='panel'; }
 function meId(){ try{ if(typeof ME!=='undefined' && ME && ME.id) return ME.id; }catch(e){} return (typeof PROFILE!=='undefined'&&PROFILE&&PROFILE.id)||''; }
 async function loadAccesos(){ ACCESS_DENY=new Set(); ACCESS_GRANT=new Set(); ACCESS_VIEW=new Set(); ACCESS_PDENY=new Set(); ACCESS_PGRANT=new Set(); ACCESS_PVIEW=new Set(); if(isOwner()) return;
   const nivelDe=r=> r.nivel || (r.visible===false?'none':'full');
@@ -2838,7 +2845,7 @@ const PAG_MESES=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agost
 let RESUMENES=[], pagResSel='';
 let pagSyncResult=null;
 const PAG_RESUMEN_SHEETS=['Flujo Real Banco','Ganancia por propiedad','Flujo Mes'];
-function pagosCan(){ if(isAdmin()) return true; const a=(PROFILE.area||''),d=(PROFILE.dept||''); if(a==='Finanzas'||d==='Finanzas') return true; if(PROFILE.role==='direccion') return true; return false; }
+function pagosCan(){ if(isAdmin()) return true; if(candadoPanel('pagos')) return navItemAllowed('pagos'); const a=(PROFILE.area||''),d=(PROFILE.dept||''); if(a==='Finanzas'||d==='Finanzas') return true; if(PROFILE.role==='direccion') return true; return false; }
 function pagMoney(n){ const x=parseFloat(n)||0; return '$'+x.toLocaleString('es-PA',{minimumFractionDigits:2,maximumFractionDigits:2}); }
 function pagSetView(v){ pagView=v; pagRender(); }
 function pagSet(k,v){ if(k==='mes')pagMes=v; else if(k==='cat')pagCat=v; else if(k==='prop')pagProp=v; else if(k==='estado')pagEstado=v; else if(k==='from')pagFrom=v; else if(k==='to')pagTo=v; pagRender(); }
@@ -4627,9 +4634,24 @@ function ccSyncGastos(){ ccGastos.forEach((g,i)=>{ const m=document.getElementBy
 function ccAddGasto(){ ccSyncGastos(); ccGastos.push({monto:'',motivo:'',just:false}); const b=document.getElementById('ccGastosBox'); if(b)b.innerHTML=ccGastosRows(); try{ccCalc();}catch(e){} }
 function ccDelGasto(i){ ccSyncGastos(); ccGastos.splice(i,1); const b=document.getElementById('ccGastosBox'); if(b)b.innerHTML=ccGastosRows(); try{ccCalc();}catch(e){} }
 function ccM(n){ return '$'+((parseFloat(n)||0).toFixed(2)); }
-function ccAllowedNow(){ if(isAdmin())return true; if(PROFILE.role==='direccion')return true; const nk=s=>(''+(s||'')).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim(); const dep=nk(PROFILE.dept),area=nk(PROFILE.area); if(dep==='finanzas'||area==='finanzas')return true; if(dep==='atencion al cliente')return true; try{ if(typeof navItemAllowed==='function' && navItemAllowed('cierres')) return true; }catch(_e){} return false; }
+function ccAllowedNow(){ if(isAdmin())return true; if(candadoPanel('cierres')) return navItemAllowed('cierres'); if(PROFILE.role==='direccion')return true; const nk=s=>(''+(s||'')).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim(); const dep=nk(PROFILE.dept),area=nk(PROFILE.area); if(dep==='finanzas'||area==='finanzas')return true; if(dep==='atencion al cliente')return true; try{ if(typeof navItemAllowed==='function' && navItemAllowed('cierres')) return true; }catch(_e){} return false; }
 function ccCan(){ if(typeof zonaRO==='function' && zonaRO('cierres')) return false; return ccAllowedNow(); }
-function ccDid(v){ return 'cc_d_'+(''+v).replace('.','_'); }
+/* Arqueo por denominación con TIPO (b=billete, m=moneda) para que el billete de $1
+   y la moneda de $1 no compartan id ni clave. id DOM: cc_d_<tipo>_<valor>; clave guardada: <tipo>_<valor>. */
+const CC_DENOMS=[['b',100],['b',50],['b',20],['b',10],['b',5],['b',1],['m',1],['m',0.50],['m',0.25],['m',0.10],['m',0.05],['m',0.01]];
+function ccDid(tipo,v){ return 'cc_d_'+tipo+'_'+(''+v).replace('.','_'); }
+/* Lee el arqueo guardado en cualquiera de los dos formatos: nuevo (b_/m_) o antiguo (clave=valor). */
+function ccArqEntries(arq){ arq=arq||{}; const out=[];
+  const nuevo=Object.keys(arq).some(k=>/^[bm]_/.test(k));
+  if(nuevo){ CC_DENOMS.forEach(([t,v])=>{ const q=parseInt(arq[t+'_'+v])||0; if(q) out.push({v:v,q:q}); }); }
+  else { Object.keys(arq).forEach(k=>{ const q=parseInt(arq[k])||0; const v=parseFloat(k); if(q&&!isNaN(v)) out.push({v:v,q:q}); }); out.sort((a,b)=>b.v-a.v); }
+  return out; }
+/* Prefill de un campo al editar: usa formato nuevo si existe; si es antiguo, el $1 va al billete. */
+function ccArqPrefill(ed,tipo,v){ if(!ed||!ed.arqueo) return ''; const arq=ed.arqueo;
+  if(Object.keys(arq).some(k=>/^[bm]_/.test(k))){ return arq[tipo+'_'+v]?esc(arq[tipo+'_'+v]):''; }
+  const esBillete=CC_BILLETES.includes(v);
+  if((tipo==='b'&&esBillete)||(tipo==='m'&&!esBillete)) return arq[v]?esc(arq[v]):'';
+  return ''; }
 function ccSetTab(t){ ccEditId=null; ccEditRec=null; ccTab=t; ccView=null; if(t==='nuevo'){ccGastos=[];ccLugar='';} show('cierres'); }
 function ccOpen(id){ ccView=id; show('cierres'); }
 function ccBack(){ ccView=null; ccEditId=null; ccEditRec=null; show('cierres'); }
@@ -4758,7 +4780,7 @@ function ccForm(){
     return back+`<div class="cc-cols"><div class="panel"><h2 style="margin-top:0">Cierre · ${esc(lugar)}</h2>
       <p style="font-size:12px;color:var(--suave);margin:-4px 0 8px">Sin turno, fondo de caja ni gastos. Solo registro de ingresos.</p>
       <div class="row"><div><label>Ubicación</label>${lugarSel}</div><div><label>Fecha</label>${fechaInput}</div></div>
-      <label>Responsable</label><input id="cc_resp" value="${esc((ed?ed.responsable:PROFILE.nombre)||'')}" style="${ss}">
+      <label>Responsable</label><input id="cc_resp" value="${esc((ed?ed.responsable:PROFILE.nombre)||'')}" readonly style="${ss};background:#eef2f7;color:#243b53;font-weight:600;cursor:not-allowed"><div style="font-size:12px;color:var(--suave);margin-top:4px">🔒 Se rellena con tu nombre automáticamente. No editable.</div>
       <h2 style="margin:16px 0 6px">Ingresos por método de pago</h2><div class="row" style="flex-wrap:wrap;gap:10px">${metRows}</div>
       <label style="margin-top:10px;display:block">Observaciones</label><textarea id="cc_obs" rows="2" style="${ss}" placeholder="Notas…">${ed?esc(ed.observaciones||''):''}</textarea>
       <div id="ccResumen" style="margin-top:14px"></div>
@@ -4771,14 +4793,14 @@ function ccForm(){
   const defFondo=esMag?100:200;
   let fondoBlock=(ccSaldoAnt!=null)
     ? `<input id="cc_fondo" type="number" value="${ccSaldoAnt}" readonly style="${ss};background:#eef2f7;color:#243b53;font-weight:700;cursor:not-allowed"><div style="font-size:12px;color:var(--suave);margin-top:4px">🔒 Saldo del cierre anterior de ${esc(lugar)} (${esc(fechaLarga(ccPrev.fecha))}${ccPrev.turno?' · '+esc(ccPrev.turno):''}): fondo inicial + reposición − gastos. No editable.</div>`
-    : `<input id="cc_fondo" type="number" min="0" step="0.01" value="${defFondo}" placeholder="0.00" oninput="ccCalc()" style="${ss}"><div style="font-size:12px;color:var(--suave);margin-top:4px">Primer cierre de ${esc(lugar)}: fondo inicial ${ccM(defFondo)}.</div>`;
+    : `<input id="cc_fondo" type="number" value="${defFondo}" readonly style="${ss};background:#eef2f7;color:#243b53;font-weight:700;cursor:not-allowed"><div style="font-size:12px;color:var(--suave);margin-top:4px">🔒 Primer cierre de ${esc(lugar)}: fondo inicial ${ccM(defFondo)} (fijo). No editable. A partir del siguiente turno se hereda del cierre anterior. Si el fondo real es otro, un Director puede corregirlo editando.</div>`;
   if(ed){ fondoBlock=`<input id="cc_fondo" type="number" min="0" step="0.01" value="${esc(ed.fondo_inicial!=null?ed.fondo_inicial:'')}" oninput="ccCalc()" style="${ss}"><div style="font-size:12px;color:#b9770e;margin-top:4px">✏️ Editando — fondo editable.</div>`; }
   const cambioBlock=esMag?`<label>Caja de cambio (fija)</label><input id="cc_cambio" type="number" value="100" readonly style="${ss};background:#eef2f7;font-weight:700;cursor:not-allowed"><div style="font-size:12px;color:var(--suave);margin-top:4px">🔒 $100 solo para dar cambio. No entra en el cuadre de la caja chica.</div>`:'';
-  const denomRow=(arr,titulo)=>`<div style="font-weight:600;font-size:12.5px;margin:8px 0 4px">${titulo}</div><div class="cc-denoms">${arr.map(v=>`<div class="cc-den"><span>${ccM(v)}</span><input id="${ccDid(v)}" type="number" min="0" step="1" value="${ed&&ed.arqueo&&ed.arqueo[v]?esc(ed.arqueo[v]):''}" placeholder="0" oninput="ccCalc()"></div>`).join('')}</div>`;
+  const denomRow=(tipo,arr,titulo)=>`<div style="font-weight:600;font-size:12.5px;margin:8px 0 4px">${titulo}</div><div class="cc-denoms">${arr.map(v=>`<div class="cc-den"><span>${ccM(v)}</span><input id="${ccDid(tipo,v)}" type="number" min="0" step="1" value="${ccArqPrefill(ed,tipo,v)}" placeholder="0" oninput="ccCalc()"></div>`).join('')}</div>`;
   return back+`<div class="cc-cols">
     <div class="panel"><h2 style="margin-top:0">Datos del turno · ${esc(lugar)}</h2>
       <div class="row"><div><label>Ubicación</label>${lugarSel}</div><div><label>Turno</label><select id="cc_turno" style="${ss}">${['Mañana','Tarde','Noche'].map(tt=>`<option ${(ed&&ed.turno?ed.turno:'Tarde')===tt?'selected':''}>${tt}</option>`).join('')}</select></div></div>
-      <div class="row"><div><label>Fecha</label>${fechaInput}</div><div><label>Responsable de caja</label><input id="cc_resp" value="${esc((ed?ed.responsable:PROFILE.nombre)||'')}" style="${ss}"></div></div>
+      <div class="row"><div><label>Fecha</label>${fechaInput}</div><div><label>Responsable de caja</label><input id="cc_resp" value="${esc((ed?ed.responsable:PROFILE.nombre)||'')}" readonly style="${ss};background:#eef2f7;color:#243b53;font-weight:600;cursor:not-allowed"><div style="font-size:12px;color:var(--suave);margin-top:4px">🔒 Tu nombre, automático. No editable.</div></div></div>
       ${cambioBlock}
       <label>Fondo de caja inicial${esMag?' (caja chica)':''} (USD)</label>${fondoBlock}
       <h2 style="margin:16px 0 6px">Ingresos por método de pago</h2>
@@ -4792,7 +4814,7 @@ function ccForm(){
     </div>
     <div class="panel"><h2 style="margin-top:0">Arqueo de efectivo (USD)</h2>
       <p style="font-size:12px;color:var(--suave);margin:-4px 0 8px">Cuenta los billetes y monedas reales en caja${esMag?' (caja chica)':''}.</p>
-      ${denomRow(CC_BILLETES,'Billetes')}${denomRow(CC_MONEDAS,'Monedas')}
+      ${denomRow('b',CC_BILLETES,'Billetes')}${denomRow('m',CC_MONEDAS,'Monedas')}
       ${esMag?`<div style="border-top:1px solid var(--gris2);margin-top:10px;padding-top:8px"><label>Arqueo caja de cambio — total contado (USD)</label><input id="cc_cambio_cont" type="number" min="0" step="0.01" value="${ed&&ed.caja_cambio_contado!=null?esc(ed.caja_cambio_contado):''}" placeholder="Cuenta los $100 de la caja de cambio" oninput="ccCalc()" style="${ss}"><div id="ccCambioChk" style="font-size:12px;margin-top:4px;color:var(--suave)">Cuenta la caja de cambio (debe ser $100).</div></div>`:''}
       <div id="ccResumen" style="margin-top:14px"></div>
       <div style="margin-top:14px"><button class="btn" onclick="ccSave()">${ed?'💾 Actualizar cierre':'💾 Guardar cierre'}</button></div>
@@ -4807,8 +4829,8 @@ function ccCalc(){
   if(!document.getElementById('cc_fondo')){ box.innerHTML=`<div style="border-top:1px solid var(--gris2);padding-top:8px">${line('Ventas totales del turno',ccM(ventas),true)}</div>`; return; }
   const fondo=g('cc_fondo'), efec=g('cc_m_efectivo'), repo=g('cc_repo');
   let gastos=0; document.querySelectorAll('[id^="cc_g_monto_"]').forEach(el=>{ gastos+=parseFloat(el.value)||0; });
-  let contado=0; [...CC_BILLETES,...CC_MONEDAS].forEach(v=>{ contado+=v*(parseInt((document.getElementById(ccDid(v))||{}).value)||0); });
-  const esperado=fondo+efec+repo-gastos; const dif=Math.round((contado-esperado)*100)/100;
+  let contado=0; CC_DENOMS.forEach(([t,v])=>{ contado+=v*(parseInt((document.getElementById(ccDid(t,v))||{}).value)||0); }); contado=Math.round(contado*100)/100;
+  const esperado=Math.round((fondo+efec+repo-gastos)*100)/100; const dif=Math.round((contado-esperado)*100)/100;
   const cambioEl=document.getElementById('cc_cambio_cont'); if(cambioEl){ const dchk=document.getElementById('ccCambioChk'); const cont=parseFloat(cambioEl.value)||0; if(dchk){ if(cambioEl.value===''){ dchk.style.color='var(--suave)'; dchk.innerHTML='Cuenta la caja de cambio (debe ser $100).'; } else if(Math.abs(cont-100)<0.001){ dchk.style.color='#1e8a5a'; dchk.innerHTML='✓ Caja de cambio cuadra ($100)'; } else { dchk.style.color='#c0392b'; dchk.innerHTML='⚠ Caja de cambio: '+ccM(cont)+' (esperado $100, '+(cont>100?'+':'')+ccM(cont-100)+')'; } } }
   const col=dif===0?'#1e8a5a':(dif>0?'#b9770e':'#c0392b'); const lbl=dif===0?'✅ Caja cuadrada':(dif>0?'⚠ Sobrante':'⚠ Faltante');
   box.innerHTML=`<div style="border-top:1px solid var(--gris2);padding-top:8px">
@@ -4830,7 +4852,7 @@ async function ccSave(){ if(typeof zonaRO==='function' && zonaRO('cierres')){ al
   if(!ccEditId && fechaSel!==hoyISO() && fechaSel!==ccAyerISO()){ alert('La fecha solo puede ser el día de hoy o el de ayer.'); return; }
   const metodos={}; CC_METODOS.forEach(([k])=>metodos[k]=gn('cc_m_'+k));
   let ventas=0; for(const k in metodos) ventas+=metodos[k];
-  const base={ lugar, fecha:fechaSel, responsable:g('cc_resp')||PROFILE.nombre, metodos, ventas_total:ventas, observaciones:g('cc_obs')||null, creado_por:ME.id, creado_por_nombre:PROFILE.nombre, created_at:new Date().toISOString() };
+  const base={ lugar, fecha:fechaSel, responsable:(ccEditId?(g('cc_resp')||PROFILE.nombre):PROFILE.nombre), metodos, ventas_total:ventas, observaciones:g('cc_obs')||null, creado_por:ME.id, creado_por_nombre:PROFILE.nombre, created_at:new Date().toISOString() };
   let row;
   if(!esCaja){
     row=Object.assign({}, base, { turno:null, fondo_inicial:null, caja_cambio:null, gastos:0, gastos_items:[], gastos_motivo:null, reposicion:0, reposicion_motivo:null, arqueo:{}, contado:null, esperado:null, diferencia:null });
@@ -4838,9 +4860,8 @@ async function ccSave(){ if(typeof zonaRO==='function' && zonaRO('cierres')){ al
     ccSyncGastos();
     const gItems=ccGastos.map(x=>({monto:Math.round((parseFloat(x.monto)||0)*100)/100, motivo:(x.motivo||'').trim()||null, justificante:!!x.just})).filter(x=>x.monto>0||x.motivo);
     const gastos=gItems.reduce((s,x)=>s+x.monto,0);
-    const arqueo={}; [...CC_BILLETES,...CC_MONEDAS].forEach(v=>{ const q=parseInt((document.getElementById(ccDid(v))||{}).value)||0; if(q) arqueo[v]=q; });
-    let contado=0; for(const v in arqueo) contado+=parseFloat(v)*arqueo[v];
-    const fondo=gn('cc_fondo'), repo=gn('cc_repo'); const esperado=fondo+metodos.efectivo+repo-gastos; const dif=Math.round((contado-esperado)*100)/100;
+    const arqueo={}; let contado=0; CC_DENOMS.forEach(([t,v])=>{ const q=parseInt((document.getElementById(ccDid(t,v))||{}).value)||0; if(q){ arqueo[t+'_'+v]=q; contado+=v*q; } }); contado=Math.round(contado*100)/100;
+    const fondo=gn('cc_fondo'), repo=gn('cc_repo'); const esperado=Math.round((fondo+metodos.efectivo+repo-gastos)*100)/100; const dif=Math.round((contado-esperado)*100)/100;
     row=Object.assign({}, base, { turno:g('cc_turno'), fondo_inicial:fondo, caja_cambio:esMag?100:null, caja_cambio_contado:esMag?gn('cc_cambio_cont'):null, gastos:gastos, gastos_items:gItems, gastos_motivo:gItems.map(x=>x.motivo).filter(Boolean).join(' · ')||null, reposicion:repo, reposicion_motivo:g('cc_repo_motivo')||null, arqueo:arqueo, contado:contado, esperado:esperado, diferencia:dif });
   }
   let error;
@@ -4855,7 +4876,7 @@ function ccDetail(id){
   const esCaja=ccEsCaja(c.lugar)||(c.fondo_inicial!=null);
   const dif=parseFloat(c.diferencia)||0; const col=dif===0?'#1e8a5a':(dif>0?'#b9770e':'#c0392b'); const lbl=dif===0?'✅ Caja cuadrada':(dif>0?'⚠ Sobrante':'⚠ Faltante');
   const metRows=CC_METODOS.filter(([k])=>met[k]).map(([k,l])=>`<div style="display:flex;justify-content:space-between;padding:3px 0;font-size:13.5px"><span>${l}</span><b>${ccM(met[k])}</b></div>`).join('')||'<div style="color:var(--suave);font-size:13px">—</div>';
-  const arqRows=[...CC_BILLETES,...CC_MONEDAS].filter(v=>arq[v]).map(v=>`<div style="display:flex;justify-content:space-between;padding:2px 0;font-size:13px"><span>${ccM(v)} × ${arq[v]}</span><b>${ccM(parseFloat(v)*arq[v])}</b></div>`).join('')||'<div style="color:var(--suave);font-size:13px">—</div>';
+  const arqRows=ccArqEntries(arq).map(e=>`<div style="display:flex;justify-content:space-between;padding:2px 0;font-size:13px"><span>${ccM(e.v)} × ${e.q}</span><b>${ccM(e.v*e.q)}</b></div>`).join('')||'<div style="color:var(--suave);font-size:13px">—</div>';
   const items=Array.isArray(c.gastos_items)?c.gastos_items:[];
   const faltaJust=items.some(x=>(parseFloat(x.monto)||0)>0 && !x.justificante);
   const gastosBlock=items.length
@@ -5337,7 +5358,7 @@ function trfEnsureStyle(){ if(document.getElementById('trfStyle'))return; const 
 }
 `; document.head.appendChild(s); }
 const TRF_EST={pendiente:{lbl:'Pendiente de asignar',c:'#b9770e',b:'#fdf3e2'},asignado:{lbl:'Asignado',c:'#2563aa',b:'#e7eff8'},realizado:{lbl:'Viaje realizado',c:'#1e8a5a',b:'#e4f5ec'},cancelado:{lbl:'Cancelado',c:'#7f8c8d',b:'#eef0f2'}};
-function trfCanManage(){ return isAdmin()||PROFILE.role==='direccion'||PROFILE.dept==='Atención al cliente'; }
+function trfCanManage(){ if(isAdmin())return true; if(candadoPanel('transfer')) return navItemAllowed('transfer'); return PROFILE.role==='direccion'||PROFILE.dept==='Atención al cliente'; }
 function trfEstBadge(e){const o=TRF_EST[e]||TRF_EST.pendiente;return `<span style="background:${o.b};color:${o.c};padding:3px 11px;border-radius:20px;font-size:11px;font-weight:700;white-space:nowrap">${o.lbl}</span>`;}
 function trfMoney(n){ return '$'+((parseFloat(n)||0).toFixed(2)); }
 function trfFechaHora(s){ if(!s) return '—'; const d=new Date(/T/.test(s)?s:s.replace(' ','T')); if(isNaN(d)) return esc(s); return d.toLocaleString('es-ES',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}); }
@@ -6308,11 +6329,11 @@ function incCatLabel(c){ const f=INC_CAT.find(x=>x[0]===c); return f?f[1]:(c||'S
 const SLA_H={alta:24,media:72,baja:168};
 function incVencida(i){ if(['terminada','cancelada'].includes(i.estado))return false; const lim=SLA_H[i.urgencia]||72; return (Date.now()-new Date(i.created_at).getTime())/3600000 > lim; }
 function incMoney(n){ const v=Number(n); return isNaN(v)?'—':('$'+v.toLocaleString('es-ES',{minimumFractionDigits:0,maximumFractionDigits:2})); }
-function incCan(){ if(typeof zonaRO==='function'&&zonaRO('incidencias')) return false; return CAN_MANAGE.includes(PROFILE.role); }
+function incCan(){ if(typeof zonaRO==='function'&&zonaRO('incidencias')) return false; if(candadoPanel('incidencias')) return navItemAllowed('incidencias'); return CAN_MANAGE.includes(PROFILE.role); }
 function incEsMant(){ return PROFILE.dept==='Mantenimiento' || incCan(); }
 // Quién puede CREAR/EDITAR/BORRAR mantenimientos preventivos:
 // admin/propietario, Director del área Operaciones, o Responsable del depto. Mantenimiento.
-function prevCanManage(){ if(typeof zonaRO==='function'&&zonaRO('preventivo')) return false; if(isAdmin())return true; const role=PROFILE.role, dept=(PROFILE.dept||''); if(role==='direccion')return true; if(role==='responsable'&&dept==='Mantenimiento')return true; return false; }
+function prevCanManage(){ if(typeof zonaRO==='function'&&zonaRO('preventivo')) return false; if(isAdmin())return true; if(candadoPanel('preventivo')) return navItemAllowed('preventivo'); const role=PROFILE.role, dept=(PROFILE.dept||''); if(role==='direccion')return true; if(role==='responsable'&&dept==='Mantenimiento')return true; return false; }
 // ¿La persona s pertenece al equipo t? (incluye supervisores con varios equipos: s.equipos = ['*'] o lista)
 function mantInTeam(s,t){ if(!t||t==='*')return true; const ex=Array.isArray(s.equipos)?s.equipos:[]; return s.team===t || ex.includes('*') || ex.includes(t); }
 function incMyTeam(){ return PROFILE.org_equipo||PROFILE.equipo||''; }
@@ -7346,7 +7367,7 @@ function asgPClear(){ asgPFrom=asgPTo=asgPTipo=asgPUni=''; show('asignaciones');
 function asgPQuick(which){ const t=new Date(); const pad=n=>(''+n).padStart(2,'0'); const iso=d=>d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate()); if(which==='mes'){ asgPFrom=iso(new Date(t.getFullYear(),t.getMonth(),1)); asgPTo=iso(t); } else if(which==='15'){ const d=new Date(t); d.setDate(t.getDate()-14); asgPFrom=iso(d); asgPTo=iso(t); } show('asignaciones'); }
 let ASG={pubId:null,equipo:'',fecha:'',unidades:[],comunes:[]};
 let ASG_TRAB=[], ASG_TRAB_FULL=[], ASG_UNI=[], ASG_AREA=[], ASG_PUBS=[], ASG_EDIF=[], ASG_UNIS=[];
-function asgCan(){ if(typeof zonaRO==='function' && zonaRO('asignaciones')) return false; const r=PROFILE.role, d=normKey(PROFILE.dept||''); if(r==='direccion'||r==='admin'||r==='propietario') return true; if(r==='responsable') return d===normKey('Atención al cliente')||d===normKey('Limpieza'); if(r==='empleado') return d===normKey('Atención al cliente'); return false; }
+function asgCan(){ if(typeof zonaRO==='function' && zonaRO('asignaciones')) return false; if(candadoPanel('asignaciones')) return navItemAllowed('asignaciones'); const r=PROFILE.role, d=normKey(PROFILE.dept||''); if(r==='direccion'||r==='admin'||r==='propietario') return true; if(r==='responsable') return d===normKey('Atención al cliente')||d===normKey('Limpieza'); if(r==='empleado') return d===normKey('Atención al cliente'); return false; }
 function asgTeamWorkers(){ return ASG_TRAB_FULL.filter(t=>!ASG.equipo||(t.equipo||'')===ASG.equipo).map(t=>t.nombre); }
 function asgSetEquipo(e){ ASG.equipo=e; show('asignaciones'); }
 function asgTipoLabel(t){ if(t==='entrada')t='limpieza_cortesia'; const o=ASG_TIPO.find(x=>x[0]===t); return o?o[1]:''; }
@@ -7977,8 +7998,58 @@ async function pagePermisosPersona(tabs){
   const saveBar='<div style="position:sticky;bottom:0;background:var(--gris);border:1px solid var(--gris2);border-radius:10px;padding:10px 14px;margin-top:14px;display:flex;gap:10px;align-items:center;flex-wrap:wrap"><button class="btn" onclick="permPersonGuardar()" '+(dirty?'':'disabled style="opacity:.5;cursor:default"')+'>💾 Guardar</button>'+(dirty?'<span style="color:#c47f17;font-size:12.5px;font-weight:600">● Cambios sin guardar</span>':'<span style="color:var(--suave);font-size:12.5px">Todo guardado.</span>')+'</div>';
   main.innerHTML=tabs+titulo+picker+'<div class="panel"><h2 style="margin-top:0">Accesos de <span style="color:var(--azul)">'+esc(person.nombre)+'</span></h2><div style="overflow-x:auto"><table class="tbl-compact perm-tbl"><thead><tr><th>Zona</th><th>Acceso</th></tr></thead><tbody>'+rows+'</tbody></table></div>'+saveBar+'</div>';
 }
+/* ===== Mapa de candados ===== */
+const CANDADOS_LIST=[
+  {id:'pagos', ic:'💵', t:'Pagos / P&L', tipo:'Entrada', fija:'Admin, Propietario, área o departamento Finanzas y Dirección.'},
+  {id:'cierres', ic:'🧾', t:'Cierres de caja', tipo:'Entrada', fija:'Admin, Dirección, Finanzas y Atención al cliente.'},
+  {id:'asignaciones', ic:'🧹', t:'Asignaciones (limpieza)', tipo:'Edición', fija:'Dirección/Admin; Responsable de Atención al cliente o Limpieza; Empleado de Atención al cliente.'},
+  {id:'incidencias', ic:'🔧', t:'Incidencias (gestionar)', tipo:'Edición', fija:'Responsable, Dirección y Admin.'},
+  {id:'preventivo', ic:'🛠️', t:'Preventivo (gestionar)', tipo:'Edición', fija:'Admin, Dirección y Responsable de Mantenimiento.'},
+  {id:'transfer', ic:'🚐', t:'Transfer (gestionar)', tipo:'Edición', fija:'Admin, Dirección y departamento Atención al cliente.'}
+];
+async function candadoSet(id,mode){
+  try{ const {error}=await sb.from('config').upsert([{clave:'candado_'+id,valor:mode}],{onConflict:'clave'}); if(error) throw error; }
+  catch(e){ alert('No se pudo guardar (¿ejecutaste supabase_config.sql?): '+((e&&e.message)||e)); return; }
+  await loadCandados(); try{ if(typeof toast==='function') toast('✓ Candado actualizado'); }catch(_e){}
+  show('permisos');
+}
+function candadoResumenDefecto(it){
+  if(it.owner) return 'Solo Propietario';
+  if(it.id==='pagos') return 'Admin, Propietario, Finanzas y Dirección';
+  if(it.id && ZONA_SISTEMA.includes(it.id)) return 'Solo Admin y Propietario';
+  const p=[];
+  if(it.roles) p.push('Roles: '+it.roles.join(' / '));
+  if(it.depts) p.push('Deptos: '+it.depts.join(', ')+(it.seeRoles?(' (+ '+it.seeRoles.join('/')+')'):''));
+  if(!p.length) return 'Todos (Dirección y superiores lo ven siempre)';
+  return p.join(' · ');
+}
+async function pagePermisosMapa(tabs){
+  const main=document.getElementById('main');
+  const titulo='<div class="page-title">Permisos y accesos</div><div class="page-sub">Mapa de todos los <b>candados</b>. Arriba, los candados especiales que puedes poner a que <b>respeten este panel</b> o mantengan su <b>regla fija</b>. Abajo, quién ve cada sección por defecto. El <b>Propietario</b> siempre ve y edita todo.</div>';
+  const cand=CANDADOS_LIST.map(c=>{
+    const panel=candadoPanel(c.id);
+    const badge=c.tipo==='Entrada'?'<span style="font-size:10.5px;background:#fdecea;color:#c0392b;padding:2px 6px;border-radius:20px;font-weight:600">bloquea la sección</span>':'<span style="font-size:10.5px;background:#eef3fb;color:#1F4E79;padding:2px 6px;border-radius:20px;font-weight:600">limita editar</span>';
+    const btnFijo='<button class="btn '+(panel?'ghost':'')+'" style="padding:5px 10px;font-size:12px" onclick="candadoSet(\''+c.id+'\',\'fijo\')">🔒 Regla fija</button>';
+    const btnPanel='<button class="btn '+(panel?'':'ghost')+'" style="padding:5px 10px;font-size:12px" onclick="candadoSet(\''+c.id+'\',\'panel\')">🎛️ Respetar el panel</button>';
+    const estado=panel?'<span style="color:#1e7e34;font-weight:600;font-size:12px">● Respeta el panel</span>':'<span style="color:#b26a00;font-weight:600;font-size:12px">● Regla fija</span>';
+    return '<tr><td class="perm-area"><b>'+c.ic+' '+esc(c.t)+'</b><br>'+badge+'</td><td style="font-size:12px;color:var(--suave)">'+esc(c.fija)+'</td><td>'+estado+'<div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap">'+btnFijo+btnPanel+'</div></td></tr>';
+  }).join('');
+  const tblCand='<div class="panel"><h2 style="margin-top:0">🔐 Candados especiales</h2><p style="font-size:12.5px;color:var(--suave);margin:0 0 12px;line-height:1.6"><b>Regla fija</b> = el candado usa su lista escrita a mano (ignora este panel). <b>Respetar el panel</b> = manda lo que pongas en “Por persona” o “Por rol y departamento”.</p><div style="overflow-x:auto"><table class="tbl-compact perm-tbl"><thead><tr><th>Candado</th><th>Regla fija (por defecto)</th><th>Estado / cambiar</th></tr></thead><tbody>'+cand+'</tbody></table></div></div>';
+  const candIds=CANDADOS_LIST.map(c=>c.id);
+  const rows=permFullGroups().map(g=>{
+    const head='<tr class="perm-sec"><td colspan="2"><b>'+(GRP_ICON[g.name]||'')+' '+esc(g.name)+'</b></td></tr>';
+    const its=g.items.map(it=>{
+      const esp=it.id&&candIds.includes(it.id)?' <span title="Tiene candado especial (arriba)" style="color:#c0392b">⚠️</span>':'';
+      return '<tr><td class="perm-area">'+(it.ic?it.ic+' ':'')+esc(it.t)+esp+'</td><td style="font-size:12px;color:var(--suave)">'+esc(candadoResumenDefecto(it))+'</td></tr>';
+    }).join('');
+    return head+its;
+  }).join('');
+  const tblMapa='<div class="panel"><h2 style="margin-top:0">🗺️ Quién ve cada sección (por defecto)</h2><p style="font-size:12.5px;color:var(--suave);margin:0 0 12px">Punto de partida antes de tus ajustes del panel. ⚠️ = además tiene un candado especial (arriba).</p><div style="overflow-x:auto"><table class="tbl-compact perm-tbl"><thead><tr><th>Sección / Zona</th><th>Ve por defecto</th></tr></thead><tbody>'+rows+'</tbody></table></div></div>';
+  main.innerHTML=tabs+titulo+tblCand+tblMapa;
+}
 async function pagePermisos(){
-  const tabs='<div class="panel" style="margin-bottom:14px;display:flex;gap:8px;flex-wrap:wrap"><button class="btn '+(permMode==='persona'?'':'ghost')+'" onclick="permSetMode(\'persona\')">👤 Por persona</button><button class="btn '+(permMode==='roldept'?'':'ghost')+'" onclick="permSetMode(\'roldept\')">🏷️ Por rol y departamento</button></div>';
+  const tabs='<div class="panel" style="margin-bottom:14px;display:flex;gap:8px;flex-wrap:wrap"><button class="btn '+(permMode==='persona'?'':'ghost')+'" onclick="permSetMode(\'persona\')">👤 Por persona</button><button class="btn '+(permMode==='roldept'?'':'ghost')+'" onclick="permSetMode(\'roldept\')">🏷️ Por rol y departamento</button><button class="btn '+(permMode==='mapa'?'':'ghost')+'" onclick="permSetMode(\'mapa\')">🔐 Mapa de candados</button></div>';
+  if(permMode==='mapa'){ return pagePermisosMapa(tabs); }
   if(permMode==='persona'){ return pagePermisosPersona(tabs); }
   const ROLES_SEL=[['empleado','Empleado'],['responsable','Responsable'],['direccion','Dirección'],['admin','Administrador']];
   const areas=(CAT.areas&&CAT.areas.length)?CAT.areas:[]; const deptos=permDeptos();
