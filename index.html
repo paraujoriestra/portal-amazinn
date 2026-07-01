@@ -6373,6 +6373,7 @@ async function pageIncidencias(){
     <button class="asg-tab ${incTab==='historial'?'on':''}" onclick="setIncTab('historial')">📜 Realizadas</button>
     <button class="asg-tab ${incTab==='calendario'?'on':''}" onclick="setIncTab('calendario')">📅 Calendario</button>
     ${canManage?`<button class="asg-tab ${incTab==='panel'?'on':''}" onclick="setIncTab('panel')">📊 Panel</button>`:''}
+    ${canManage?`<button class="asg-tab ${incTab==='informe'?'on':''}" onclick="setIncTab('informe')">📋 Informe</button>`:''}
     <button class="btn btn-orange" style="margin-left:auto;align-self:center" onclick="incNuevaOpen()">+ Nueva incidencia</button></div>`;
   let body; const fullScreen=(incSel!=null||incNew);
   if(incNew){ body=renderIncForm(); }
@@ -6380,6 +6381,7 @@ async function pageIncidencias(){
   else if(incTab==='panel'&&canManage){ const anyF=(incFilters.edificio||incFilters.unidad||incFilters.urgencia||incFilters.q||incFilters.categoria||incFilters.afecta); body=`<div style="margin-bottom:12px;display:flex;gap:8px;align-items:center;flex-wrap:wrap"><button class="inc-chip ${(incFiltersOpen||anyF)?'on':''}" onclick="incToggleFilters()">🔎 Filtros${anyF?' •':''}</button></div>${incFiltersOpen?incFiltersPanelHTML():''}`+renderIncPanel(INC.filter(incMatchesFilters)); }
   else if(incTab==='calendario'){ body=renderPrevCal(); }
   else if(incTab==='historial'){ const anyF=(incFilters.edificio||incFilters.unidad||incFilters.urgencia||incFilters.q||incFilters.categoria||incFilters.afecta); body=`<div style="margin-bottom:10px;display:flex;gap:8px;align-items:center;flex-wrap:wrap"><button class="inc-chip ${(incFiltersOpen||anyF)?'on':''}" onclick="incToggleFilters()">🔎 Filtros${anyF?' •':''}</button>${incOrderHTML()}<button class="btn-sm ghost" onclick="incExportCSV()">⬇️ Exportar CSV (todas)</button></div>${incFiltersOpen?incFiltersPanelHTML():''}`+incHistFiltroHTML()+renderIncList(true); }
+  else if(incTab==='informe'&&canManage){ body=renderIncInforme(); }
   else { body=renderIncBandeja(); }
   const tools='';
   document.getElementById('main').innerHTML=`<div class="page-title">Incidencias y mantenimiento</div><div class="page-sub">Reporta y haz seguimiento de averías por edificio y apartamento</div>${fullScreen?'':tabs}${fullScreen?'':tools}${body}`;
@@ -6490,6 +6492,42 @@ async function incImportExcel(input){
     if(error){ alert('Error al importar: '+error.message); return; }
     toast('✓ '+mapped.length+' incidencia(s) importadas'); incTab='bandeja'; show('incidencias');
   }catch(e){ alert('No se pudo leer el Excel: '+((e&&e.message)||e)); }
+}
+let incInfMes='';
+function incSetInfMes(v){ incInfMes=v; show('incidencias'); }
+function incInformeData(){
+  const mes=incInfMes||new Date().toISOString().slice(0,7);
+  const done=(INC||[]).filter(i=>i.estado==='terminada' && (''+(i.resuelta_at||'')).slice(0,7)===mes);
+  const map={};
+  done.forEach(i=>{ const secs=i.tiempo_seg||0; const coste=(i.coste!=null&&i.coste!=='')?(Number(i.coste)||0):0; (typeof incResolvers==='function'?incResolvers(i):[i.resuelto_por_nombre||'—']).forEach(nm=>{ nm=(''+nm).trim(); if(!nm||nm==='—')return; const o=map[nm]||(map[nm]={nombre:nm,n:0,seg:0,coste:0}); o.n++; o.seg+=secs; o.coste+=coste; }); });
+  return {mes, rows:Object.values(map).sort((a,b)=>b.n-a.n)};
+}
+function incFmtHoras(secs){ const m=Math.round((secs||0)/60); const h=Math.floor(m/60); return h?(h+'h '+(m%60)+'m'):(m+'m'); }
+function renderIncInforme(){
+  const {mes,rows}=incInformeData();
+  const totN=rows.reduce((s,r)=>s+r.n,0);
+  const money=v=>'$'+(Math.round((v||0)*100)/100).toLocaleString('es-ES');
+  const trs=rows.map(r=>`<tr><td><b>${esc(r.nombre)}</b></td><td style="text-align:center">${r.n}</td><td style="text-align:center">${incFmtHoras(r.seg)}</td><td style="text-align:center">${r.n?incFmtHoras(Math.round(r.seg/r.n)):'—'}</td><td style="text-align:right">${money(r.coste)}</td></tr>`).join('')||`<tr><td colspan="5" style="color:var(--suave)">Sin incidencias resueltas en ese mes.</td></tr>`;
+  return `<div class="panel">
+    <div style="display:flex;gap:12px;align-items:end;flex-wrap:wrap;margin-bottom:12px">
+      <div><label style="font-size:12px;font-weight:600;color:var(--suave);display:block;margin-bottom:3px">Mes</label><input type="month" value="${esc(mes)}" onchange="incSetInfMes(this.value)" style="padding:8px 11px;border:1px solid var(--gris2);border-radius:8px;font-family:inherit"></div>
+      <button class="btn ghost" onclick="incInformeCSV()">⬇️ Exportar Excel/CSV</button>
+      <span style="margin-left:auto;color:var(--suave);font-size:13px">${totN} resuelta(s) · ${rows.length} trabajador(es)</span>
+    </div>
+    <div style="overflow-x:auto"><table class="tbl-compact" style="width:100%">
+      <thead><tr><th>Trabajador</th><th style="text-align:center">Resueltas</th><th style="text-align:center">Tiempo total</th><th style="text-align:center">Tiempo medio</th><th style="text-align:right">Coste</th></tr></thead>
+      <tbody>${trs}</tbody></table></div>
+    <p style="font-size:12px;color:var(--suave);margin-top:10px">Cuenta cada incidencia <b>terminada</b> en el mes para cada persona que participó en resolverla. Tiempo y coste se atribuyen a cada participante.</p>
+  </div>`;
+}
+function incInformeCSV(){
+  const {mes,rows}=incInformeData();
+  const q=v=>'"'+String(v==null?'':v).replace(/"/g,'""')+'"';
+  const lines=[['Trabajador','Resueltas','Tiempo total (min)','Tiempo medio (min)','Coste'].join(';')];
+  rows.forEach(r=>lines.push([r.nombre, r.n, Math.round(r.seg/60), r.n?Math.round(r.seg/60/r.n):0, (Math.round((r.coste||0)*100)/100)].map(q).join(';')));
+  const blob=new Blob(['﻿'+lines.join('\n')],{type:'text/csv;charset=utf-8'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='informe_incidencias_'+mes+'.csv'; document.body.appendChild(a); a.click(); a.remove();
+  try{ if(typeof toast==='function') toast('✓ Informe exportado'); }catch(_e){}
 }
 function renderIncBandeja(){
   const f=incFilters;
