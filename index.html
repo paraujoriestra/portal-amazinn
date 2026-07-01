@@ -6737,7 +6737,7 @@ function incCardHTML(i){
   const done=(i.estado==='terminada'||i.estado==='cancelada');
   const alarm=(i.urgencia==='alta'&&!done);
   return `<div class="inc-card urg-${i.urgencia}${done?' done':''}">
-    <div class="inc-card-top"><span class="badge ${u[1]}${alarm?' urg-alarm':''}">${alarm?'🚨':u[2]} ${u[0]}</span><span class="badge ${e[1]}">${i.timer_ini?'<span class="inc-dot"></span> ':''}${e[0]}</span>${incVencida(i)?'<span class="badge b-red">⏰ Vencida</span>':''}${i.afecta_huesped?'<span class="badge b-amber">🛎️ Huésped</span>':''}${i.fuera_servicio?'<span class="badge b-red">⛔ Fuera de servicio</span>':''}</div>
+    <div class="inc-card-top"><span class="badge ${u[1]}${alarm?' urg-alarm':''}">${alarm?'🚨':u[2]} ${u[0]}</span><span class="badge ${e[1]}">${i.timer_ini?'<span class="inc-dot"></span> ':''}${e[0]}</span>${incVencida(i)?'<span class="badge b-red">⏰ Vencida</span>':''}${i.afecta_huesped?'<span class="badge b-amber">🛎️ Huésped</span>':''}${i.fuera_servicio?'<span class="badge b-red">⛔ Unidad no ocupada</span>':''}</div>
     <div class="inc-card-loc">🏠 ${esc(i.edificio||'—')}${i.unidad?' · '+esc(i.unidad):''}${i.categoria?` <span style="font-weight:400;color:var(--suave);font-size:12px">· ${incCatLabel(i.categoria)}</span>`:''}</div>
     <div class="inc-card-desc">${esc((i.descripcion||'').slice(0,140))}${(i.descripcion||'').length>140?'…':''}</div>
     <div class="inc-card-meta">${asg} ${tom} ${res} ${nf?('· 📷 '+nf):''}</div>
@@ -6762,7 +6762,7 @@ function incFormHTML(){
   return `<div class="panel" style="max-width:680px"><form class="box" style="max-width:none" onsubmit="return incCreate(event)">
     <div class="row">
       <div><label>Vía de aviso</label><select id="iVia"><option value="cliente_ota">🌐 Cliente (OTA)</option><option value="limpieza">🧹 Personal de limpieza</option><option value="personal" selected>👤 Personal interno</option></select></div>
-      <div><label>Urgencia</label><select id="iUrg"><option value="alta">🔴 Alta · hoy mismo</option><option value="media" selected>🟠 Media · lo antes posible</option><option value="baja">🟢 Baja · cuando convenga</option></select></div>
+      <div><label>Urgencia</label><select id="iUrg" onchange="incUrgToggle('i')"><option value="alta">🔴 Alta · hoy mismo</option><option value="media" selected>🟠 Media · lo antes posible</option><option value="baja">🟢 Baja · cuando convenga</option></select></div>
     </div>
     <label>Categoría de la avería</label>
     <select id="iCat"><option value="">— Sin categoría —</option>${INC_CAT.map(([v,l])=>`<option value="${v}">${l}</option>`).join('')}</select>
@@ -6777,7 +6777,7 @@ function incFormHTML(){
     <textarea id="iDesc" rows="3" required placeholder="Describe el problema con el máximo detalle"></textarea>
     <label>Fotos / vídeo (opcional)</label>
     <input id="iFotos" type="file" accept="image/*,video/*" multiple>
-    <div style="display:flex;gap:10px;flex-wrap:wrap;margin:12px 0 4px"><label class="inc-chk"><input type="checkbox" id="iAfecta"><span>🛎️ Afecta a reserva activa</span></label><label class="inc-chk danger"><input type="checkbox" id="iFuera"><span>⛔ Unidad fuera de servicio</span></label></div>
+    <div id="iAltaWrap" style="display:none"><div style="font-size:12px;color:var(--suave);margin:6px 0 2px">Solo para prioridad Alta:</div><div style="display:flex;gap:10px;flex-wrap:wrap;margin:2px 0 4px"><label class="inc-chk"><input type="checkbox" id="iAfecta"><span>🛎️ Afecta a reserva activa</span></label><label class="inc-chk danger"><input type="checkbox" id="iFuera"><span>⛔ Unidad no ocupada</span></label></div></div>
     <div class="row">
       <div><label>Asignar a equipo</label><select id="iEquipo" onchange="incFormEquipo()">${teamOpts}</select></div>
       <div><label>Asignar a persona(s) <small style="color:var(--suave);font-weight:400">(una o varias)</small></label>
@@ -6920,6 +6920,7 @@ async function incCancelar(id){
 }
 function incToggleEdit(){ incEditOpen=!incEditOpen; show('incidencias'); }
 function incEditEquipo(){ const t=(document.getElementById('eEquipo')||{}).value||'*'; const per=document.getElementById('ePersona'); if(!per)return; const list=MANT_STAFF.filter(s=> mantInTeam(s,t)); per.innerHTML=`<option value="">Todo el equipo (que alguien la tome)</option>`+list.map(s=>`<option value="${s.id}">${esc(s.nombre)}</option>`).join(''); }
+function incUrgToggle(pre){ const u=document.getElementById(pre+'Urg'); const w=document.getElementById(pre+'AltaWrap'); if(u&&w) w.style.display=(u.value==='alta')?'':'none'; }
 async function incSaveEdit(id){ if(typeof zonaRO==='function'&&zonaRO('incidencias')){ alert('Tienes esta sección en solo lectura.'); return; } 
   const i=INC.find(x=>String(x.id)===String(id)); if(!i)return;
   const g=x=>{const el=document.getElementById(x);return el?el.value:'';};
@@ -6927,7 +6928,7 @@ async function incSaveEdit(id){ if(typeof zonaRO==='function'&&zonaRO('incidenci
   const personaId=g('ePersona')||null; const persona=personaId?MANT_STAFF.find(s=>String(s.id)===String(personaId)):null;
   const costeV=g('eCoste'); const afecta=!!(document.getElementById('eAfecta')||{}).checked, fuera=!!(document.getElementById('eFuera')||{}).checked;
   await sb.from('mant_incidencias').update({urgencia:g('eUrg'),categoria:g('eCat')||null,descripcion:desc,asignado_equipo:g('eEquipo')||'*',asignado_a:personaId||null,asignado_a_nombre:persona?persona.nombre:null,coste:(costeV===''||costeV==null)?null:Number(costeV),proveedor:(g('eProv')||'').trim()||null,afecta_huesped:afecta,fuera_servicio:fuera,historial:incLog(i,'Editada / reasignada'),updated_at:new Date().toISOString()}).eq('id',id);
-  incEditOpen=false; toast('✓ Cambios guardados'); show('incidencias');
+  incEditOpen=false; toast('✓ Cambios guardados'); show('incidencias'); if(g('eUrg')==='alta'){ try{ incWAModal('Incidencia de alta prioridad', '🔴 Incidencia de ALTA prioridad\n📍 '+((i.edificio||'—')+(i.unidad?(' · '+i.unidad):''))+'\n📝 '+desc+'\n👤 Reportada por: '+(i.creado_por_nombre||PROFILE.nombre||'')); }catch(_e){} }
 }
 async function incDelete(id){
   if(!confirm('¿Eliminar esta incidencia de forma permanente?'))return;
@@ -6959,14 +6960,14 @@ function renderIncDetail(id){
     const perList=MANT_STAFF.filter(s=> mantInTeam(s,curTeam));
     const perOpts=`<option value="">Todo el equipo (que alguien la tome)</option>`+perList.map(s=>`<option value="${s.id}" ${String(i.asignado_a)===String(s.id)?'selected':''}>${esc(s.nombre)}</option>`).join('');
     return `<div class="panel"><h3 class="inc-h3">✏️ Editar / reasignar</h3>
-      <div class="row"><div><label>Urgencia</label><select id="eUrg"><option value="alta" ${i.urgencia==='alta'?'selected':''}>🔴 Alta</option><option value="media" ${i.urgencia==='media'?'selected':''}>🟠 Media</option><option value="baja" ${i.urgencia==='baja'?'selected':''}>🟢 Baja</option></select></div>
+      <div class="row"><div><label>Urgencia</label><select id="eUrg" onchange="incUrgToggle('e')"><option value="alta" ${i.urgencia==='alta'?'selected':''}>🔴 Alta</option><option value="media" ${i.urgencia==='media'?'selected':''}>🟠 Media</option><option value="baja" ${i.urgencia==='baja'?'selected':''}>🟢 Baja</option></select></div>
       <div><label>Categoría</label><select id="eCat"><option value="">— Sin categoría —</option>${INC_CAT.map(([v,l])=>`<option value="${v}" ${i.categoria===v?'selected':''}>${l}</option>`).join('')}</select></div></div>
       <label>Descripción</label><textarea id="eDesc" class="inc-note">${esc(i.descripcion||'')}</textarea>
       <div class="row"><div><label>Equipo</label><select id="eEquipo" onchange="incEditEquipo()">${teamOpts}</select></div>
       <div><label>Persona</label><select id="ePersona">${perOpts}</select></div></div>
       <div class="row"><div><label>Coste (opcional)</label><input id="eCoste" type="number" min="0" step="0.01" value="${i.coste!=null?i.coste:''}"></div>
       <div><label>Proveedor (opcional)</label><input id="eProv" value="${esc(i.proveedor||'')}"></div></div>
-      <div style="display:flex;gap:10px;flex-wrap:wrap;margin:12px 0 4px"><label class="inc-chk"><input type="checkbox" id="eAfecta" ${i.afecta_huesped?'checked':''}><span>🛎️ Afecta a reserva activa</span></label><label class="inc-chk danger"><input type="checkbox" id="eFuera" ${i.fuera_servicio?'checked':''}><span>⛔ Unidad fuera de servicio</span></label></div>
+      <div id="eAltaWrap" style="display:${i.urgencia==='alta'?'block':'none'}"><div style="font-size:12px;color:var(--suave);margin:6px 0 2px">Solo para prioridad Alta:</div><div style="display:flex;gap:10px;flex-wrap:wrap;margin:2px 0 4px"><label class="inc-chk"><input type="checkbox" id="eAfecta" ${i.afecta_huesped?'checked':''}><span>🛎️ Afecta a reserva activa</span></label><label class="inc-chk danger"><input type="checkbox" id="eFuera" ${i.fuera_servicio?'checked':''}><span>⛔ Unidad no ocupada</span></label></div></div>
       <div class="inc-final"><button class="btn-ok" onclick="incSaveEdit(${i.id})">Guardar cambios</button><button class="btn-sm ghost" onclick="incToggleEdit()">Cancelar</button></div></div>`;
   })() : '';
   return `
@@ -6979,7 +6980,7 @@ function renderIncDetail(id){
     <div class="inc-card-top"><span class="badge ${u[1]}">${u[2]} ${u[0]}</span><span class="badge ${e[1]}">${running?'<span class="inc-dot"></span> ':''}${e[0]}</span>${incVencida(i)?'<span class="badge b-red">⏰ Fuera de plazo</span>':''}</div>
     <h2 style="margin:8px 0 2px">🏠 ${esc(i.edificio||'—')}${i.unidad?' · '+esc(i.unidad):''}</h2>
     <p style="font-size:15px;white-space:pre-wrap;margin:6px 0 0">${esc(i.descripcion||'')}</p>
-    ${(i.afecta_huesped||i.fuera_servicio)?`<div class="inc-kv" style="margin-top:8px">${i.afecta_huesped?'<span class="badge b-amber">🛎️ Afecta a reserva activa</span> ':''}${i.fuera_servicio?'<span class="badge b-red">⛔ Unidad fuera de servicio</span>':''}</div>`:''}
+    ${(i.afecta_huesped||i.fuera_servicio)?`<div class="inc-kv" style="margin-top:8px">${i.afecta_huesped?'<span class="badge b-amber">🛎️ Afecta a reserva activa</span> ':''}${i.fuera_servicio?'<span class="badge b-red">⛔ Unidad no ocupada</span>':''}</div>`:''}
     <details class="inc-more" style="margin-top:12px"><summary style="cursor:pointer;font-weight:600;color:var(--azul);font-size:13.5px">ℹ️ Ver más detalles de la incidencia</summary>
       <div style="margin-top:10px">
         <div class="inc-kv"><b>Categoría:</b> ${incCatLabel(i.categoria)}</div>
