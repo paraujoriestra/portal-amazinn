@@ -6518,7 +6518,20 @@ function renderIncInforme(){
       <thead><tr><th>Trabajador</th><th style="text-align:center">Resueltas</th><th style="text-align:center">Tiempo total</th><th style="text-align:center">Tiempo medio</th><th style="text-align:right">Coste</th></tr></thead>
       <tbody>${trs}</tbody></table></div>
     <p style="font-size:12px;color:var(--suave);margin-top:10px">Cuenta cada incidencia <b>terminada</b> en el mes para cada persona que participó en resolverla. Tiempo y coste se atribuyen a cada participante.</p>
-  </div>`;
+  </div>${incInformeSLA(mes)}`;
+}
+function incInformeSLA(mes){
+  const slaH=(typeof SLA_H!=='undefined'&&SLA_H)?SLA_H:{alta:24,media:72,baja:168};
+  const doneMes=(INC||[]).filter(i=>i.estado==='terminada' && (''+(i.resuelta_at||'')).slice(0,7)===mes && i.created_at && i.resuelta_at);
+  const P=['alta','media','baja']; const lbl={alta:'🔴 Alta',media:'🟠 Media',baja:'🟢 Baja'};
+  const agg={alta:{n:0,h:0,ok:0},media:{n:0,h:0,ok:0},baja:{n:0,h:0,ok:0}};
+  doneMes.forEach(i=>{ const a=agg[i.urgencia]||agg.media; const hrs=(new Date(i.resuelta_at)-new Date(i.created_at))/3600000; if(hrs<0)return; a.n++; a.h+=hrs; if(hrs<=(slaH[i.urgencia]||72)) a.ok++; });
+  const openArr=(INC||[]).filter(i=>!['terminada','cancelada'].includes(i.estado)); const stuck={alta:0,media:0,baja:0}; openArr.forEach(i=>{ if(typeof incVencida==='function'&&incVencida(i)&&stuck[i.urgencia]!==undefined) stuck[i.urgencia]++; });
+  const fmtH=h=>{ if(h==null||isNaN(h))return '—'; if(h<48) return Math.round(h)+' h'; return (h/24).toFixed(1)+' días'; };
+  const rows=P.map(p=>{ const a=agg[p]; const avg=a.n?a.h/a.n:null; const pct=a.n?Math.round(a.ok/a.n*100):null; const col=pct==null?'':(pct>=80?'#1e8a5a':(pct>=50?'#c47f17':'#c0392b')); return `<tr><td><b>${lbl[p]}</b></td><td style="text-align:center">${a.n}</td><td style="text-align:center">${fmtH(avg)}</td><td style="text-align:center;color:${col};font-weight:700">${pct==null?'—':pct+'%'}</td><td style="text-align:center;color:${stuck[p]?'#c0392b':'inherit'};font-weight:${stuck[p]?'700':'400'}">${stuck[p]}</td><td style="text-align:center;color:var(--suave);font-size:12px">${slaH[p]||'—'} h</td></tr>`; }).join('');
+  return `<div class="panel"><h2 style="margin-top:0;font-size:16px">⏱️ Tiempos de respuesta (SLA) · ${esc(mes)}</h2>
+    <div style="overflow-x:auto"><table class="tbl-compact" style="width:100%"><thead><tr><th>Prioridad</th><th style="text-align:center">Resueltas</th><th style="text-align:center">Tiempo medio a resolver</th><th style="text-align:center">Dentro de plazo</th><th style="text-align:center">Estancadas ahora</th><th style="text-align:center">Objetivo</th></tr></thead><tbody>${rows}</tbody></table></div>
+    <p style="font-size:12px;color:var(--suave);margin-top:10px">"Tiempo a resolver" = desde que se creó hasta que se marcó terminada. "Dentro de plazo" = resueltas antes del objetivo de su prioridad. "Estancadas ahora" = abiertas que ya superan su objetivo.</p></div>`;
 }
 function incInformeCSV(){
   const {mes,rows}=incInformeData();
