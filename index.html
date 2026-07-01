@@ -1091,7 +1091,7 @@ async function enterApp(user){
   buildNav();
   document.getElementById('chatFab').style.display = isConductor()?'none':'flex';
   loadNotifs();
-  refreshBadges(); ping(); refreshIncBell(); loadCambBadge(); loadContratoAlertas();
+  refreshBadges(); ping(); refreshIncBell(); loadCambBadge(); loadContratoAlertas(); incWALoad();
   if(window._msgPoll) clearInterval(window._msgPoll);
   window._msgPoll = setInterval(()=>{refreshBadges();ping();refreshIncBell();loadCambBadge();loadContratoAlertas();}, 20000);
   chatMsgs=[{from:'bot',msg:`¡Hola, ${(PROFILE.nombre||'').split(' ')[0]||''}! 🤖 Soy <b>Wally</b>, el asistente de Amazinn Places. Pregúntame cómo encontrar algo.`}];
@@ -1232,7 +1232,6 @@ const NAV=[
   {id:'depto',ic:'🗂️',t:'Área de equipo', lockRoles:['empleado','responsable']},
   {grp:'Finanzas'},
   {id:'pagos',ic:'💵',t:'Pagos'},
-  {id:'airbnb',ic:'🏠',t:'Ingresos Airbnb'},
   {grp:'Dirección', roles:['direccion','admin']},
   {id:'kpis',ic:'📊',t:'Tablero de KPIs', roles:['direccion','admin']},
   {id:'auditoria',ic:'🔒',t:'Auditoría', roles:['admin']},
@@ -1298,7 +1297,7 @@ function accDefaultVisibleFor(p, it){
   const role=(p&&p.role)||'empleado';
   if(it.owner) return role==='propietario';
   if(role==='propietario') return true;
-  if(it.id==='pagos'||it.id==='airbnb') return pagosCanFor(p);
+  if(it.id==='pagos') return pagosCanFor(p);
   if(PERM_V2 && role==='direccion'){ if(it.id && ZONA_SISTEMA.includes(it.id)) return false; return true; }
   if(it.roles && !it.roles.includes(role)) return false;
   if(it.depts && !it.depts.includes(p&&p.dept) && role!=='admin' && !(it.seeRoles && it.seeRoles.includes(role))) return false;
@@ -1632,7 +1631,6 @@ function show(id){
   else if(id==='bitacora'){ ld('<div class="page-title">Bitácora</div><div class="page-sub">Cargando…</div>'); pageBitacora(); }
   else if(id==='cierres'){ ld('<div class="page-title">Cierres de caja</div><div class="page-sub">Cargando…</div>'); pageCierres(); }
   else if(id==='pagos'){ ld('<div class="page-title">💵 Pagos</div><div class="page-sub">Cargando…</div>'); pagePagos(); }
-  else if(id==='airbnb'){ ld('<div class="page-title">🏠 Ingresos Airbnb</div><div class="page-sub">Cargando…</div>'); pageAirbnb(); }
   else if(id==='glosario'){ pageGlosario(); }
   else if(id==='reclutamiento'){ ld('<div class="page-title">Reclutamiento</div><div class="page-sub">Cargando…</div>'); pageReclutamiento(); }
   else if(id==='formacion'){ ld('<div class="page-title">Formaciones</div><div class="page-sub">Cargando…</div>'); pageFormacion(); }
@@ -2840,76 +2838,6 @@ const PAG_MESES=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agost
 let RESUMENES=[], pagResSel='';
 let pagSyncResult=null;
 const PAG_RESUMEN_SHEETS=['Flujo Real Banco','Ganancia por propiedad','Flujo Mes'];
-let AB_ROWS=[], abMes='', abEspacio='', abTipo='';
-function abM(v){ v=Number(v)||0; return '$'+(Math.round(v*100)/100).toLocaleString('es-ES',{minimumFractionDigits:2,maximumFractionDigits:2}); }
-function abDate(s){ s=(''+(s||'')).trim(); if(!s) return null; const m=s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/); if(m){ let y=m[3]; if(y.length===2) y='20'+y; return y+'-'+('0'+m[1]).slice(-2)+'-'+('0'+m[2]).slice(-2); } if(/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0,10); return null; }
-function abNum(v){ v=(''+(v==null?'':v)).replace(/[^0-9.\-]/g,''); if(v==='') return null; const n=parseFloat(v); return isNaN(n)?null:n; }
-function abIsPayout(r){ return /payout|transfer/i.test(r.tipo||''); }
-async function abLoad(){ AB_ROWS=[]; let from=0; for(let i=0;i<40;i++){ const {data,error}=await sb.from('airbnb_tx').select('*').order('fecha',{ascending:false}).range(from,from+999); if(error) throw error; AB_ROWS=AB_ROWS.concat(data||[]); if(!data||data.length<1000) break; from+=1000; } }
-function abFiltered(){ return AB_ROWS.filter(r=>{ if(abMes && (''+(r.fecha||'')).slice(0,7)!==abMes) return false; if(abEspacio && (r.espacio||'')!==abEspacio) return false; if(abTipo==='reservas' && abIsPayout(r)) return false; if(abTipo==='payouts' && !abIsPayout(r)) return false; return true; }); }
-function abSet(k,v){ if(k==='mes')abMes=v; else if(k==='espacio')abEspacio=v; else if(k==='tipo')abTipo=v; abRender(); }
-async function pageAirbnb(){
-  if(typeof pagosCan==='function' && !pagosCan()){ document.getElementById('main').innerHTML='<div class="page-title">🏠 Ingresos Airbnb</div><div class="panel" style="color:var(--suave)">No tienes acceso a esta sección.</div>'; return; }
-  try{ await abLoad(); }catch(e){ document.getElementById('main').innerHTML='<div class="page-title">🏠 Ingresos Airbnb</div><div class="panel">No se pudo cargar. ¿Ejecutaste <b>supabase_airbnb.sql</b> en Supabase?<br><small style="color:var(--suave)">'+esc((e&&e.message)||e)+'</small></div>'; return; }
-  abRender();
-}
-function abRender(){
-  const rows=abFiltered();
-  const meses=[...new Set(AB_ROWS.map(r=>(''+(r.fecha||'')).slice(0,7)).filter(Boolean))].sort().reverse();
-  const espacios=[...new Set(AB_ROWS.map(r=>r.espacio).filter(Boolean))].sort((a,b)=>String(a).localeCompare(String(b)));
-  const res=rows.filter(r=>!abIsPayout(r)); const pay=rows.filter(abIsPayout);
-  const sum=(a,k)=>a.reduce((s,x)=>s+(Number(x[k])||0),0);
-  const bruto=sum(res,'ingresos_brutos'), neto=sum(res,'monto'), tarifas=sum(res,'tarifa_servicio')+sum(res,'tarifa_pago_rapido')+sum(res,'tarifa_limpieza')+sum(res,'tarifa_mascotas'), imp=sum(res,'impuesto'), payouts=sum(pay,'ingresos_recibidos');
-  const noches=res.reduce((s,x)=>s+(Number(x.noches)||0),0);
-  const inp='padding:7px 10px;border:1px solid var(--gris2);border-radius:8px;font-size:13px;font-family:inherit;background:#fff';
-  const sel=(id,val,opts,ph)=>`<select onchange="abSet('${id}',this.value)" style="${inp}"><option value="">${ph}</option>${opts.map(o=>`<option ${val===o?'selected':''}>${esc(o)}</option>`).join('')}</select>`;
-  const kpi=(l,v,c)=>`<div style="background:var(--gris);border-radius:10px;padding:12px 14px;min-width:145px"><div style="font-size:12px;color:var(--suave)">${l}</div><div style="font-size:19px;font-weight:800;color:${c||'#243b53'}">${v}</div></div>`;
-  const trs=rows.slice(0,400).map(r=>`<tr><td>${esc((''+(r.fecha||'')).split('-').reverse().join('/'))}</td><td>${abIsPayout(r)?'<span class="badge b-blue">Payout</span>':'<span class="badge b-green">Reserva</span>'}</td><td>${esc(r.espacio||'')}</td><td>${esc(r.huesped||'')}</td><td style="text-align:center">${r.noches||''}</td><td style="text-align:right">${r.ingresos_brutos!=null?abM(r.ingresos_brutos):''}</td><td style="text-align:right">${r.monto!=null?abM(r.monto):''}</td><td style="text-align:right">${abIsPayout(r)&&r.ingresos_recibidos!=null?abM(r.ingresos_recibidos):''}</td><td style="font-size:11px">${esc(r.confirmacion||r.referencia||'')}</td></tr>`).join('')||`<tr><td colspan="9" style="color:var(--suave)">Sin datos todavía. Importa el CSV de Airbnb con el botón de arriba.</td></tr>`;
-  document.getElementById('main').innerHTML=`<div class="page-title">🏠 Ingresos Airbnb</div><div class="page-sub">Historial de transacciones importado desde Airbnb (Pagos e ingresos → Historial de transacciones → Exportar CSV).</div>
-    <div class="panel" style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:14px">
-      <label class="btn" style="cursor:pointer">📥 Importar CSV de Airbnb<input type="file" accept=".csv" style="display:none" onchange="abImport(this)"></label>
-      ${sel('mes',abMes,meses,'Todos los meses')} ${sel('espacio',abEspacio,espacios,'Todos los alojamientos')}
-      <select onchange="abSet('tipo',this.value)" style="${inp}"><option value="" ${abTipo===''?'selected':''}>Todo</option><option value="reservas" ${abTipo==='reservas'?'selected':''}>Solo reservas</option><option value="payouts" ${abTipo==='payouts'?'selected':''}>Solo payouts</option></select>
-      <button class="btn ghost" onclick="abExportCSV()">⬇️ Exportar</button>
-      <span style="margin-left:auto;color:var(--suave);font-size:13px">${rows.length} fila(s)</span>
-    </div>
-    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px">
-      ${kpi('Ingresos brutos',abM(bruto))}${kpi('Tarifas Airbnb',abM(tarifas),'#c0392b')}${kpi('Neto (Monto)',abM(neto),'#1e8a5a')}${kpi('Impuestos',abM(imp))}${kpi('Payouts (transferido)',abM(payouts),'#1f4e79')}${kpi('Reservas · noches',res.length+' · '+noches)}
-    </div>
-    <div class="panel"><div style="overflow-x:auto"><table class="tbl-compact" style="width:100%;font-size:12.5px">
-      <thead><tr><th>Fecha</th><th>Tipo</th><th>Alojamiento</th><th>Huésped</th><th style="text-align:center">Noches</th><th style="text-align:right">Bruto</th><th style="text-align:right">Neto</th><th style="text-align:right">Payout</th><th>Código</th></tr></thead>
-      <tbody>${trs}</tbody></table></div>${rows.length>400?`<div style="font-size:12px;color:var(--suave);margin-top:8px">Mostrando 400 de ${rows.length}. Filtra por mes o alojamiento para acotar.</div>`:''}</div>`;
-}
-async function abImport(input){
-  const f=input.files&&input.files[0]; if(!f) return;
-  if(typeof zonaRO==='function'&&zonaRO('airbnb')){ alert('Tienes esta sección en solo lectura.'); input.value=''; return; }
-  try{
-    const buf=await f.arrayBuffer(); const wb=XLSX.read(buf,{type:'array'}); const ws=wb.Sheets[wb.SheetNames[0]];
-    const aoa=XLSX.utils.sheet_to_json(ws,{header:1,defval:''}); if(!aoa.length){ alert('El CSV está vacío.'); return; }
-    const head=(aoa[0]||[]).map(h=>(''+h).replace(/^﻿/,'').trim()); const idx={}; head.forEach((h,i)=>idx[h]=i);
-    const G=(r,name)=>{ const i=idx[name]; return i==null?'':(''+(r[i]==null?'':r[i])).trim(); };
-    const recs=[];
-    aoa.slice(1).forEach(r=>{ if(!r||!r.length) return;
-      const fecha=abDate(G(r,'Fecha')); const tipo=G(r,'Tipo'); const conf=G(r,'Código de confirmación'); const ref=G(r,'Código de referencia');
-      const esp=G(r,'Espacio'); const hues=G(r,'Huésped'); const monto=abNum(G(r,'Monto')); const recib=abNum(G(r,'Ingresos recibidos'));
-      if(!fecha && !tipo) return;
-      const uniq=[fecha||'',tipo||'',conf||ref||'',esp||'',hues||'',monto==null?'':monto,recib==null?'':recib].join('|');
-      const pint=v=>{ const n=parseInt(G(r,v),10); return isNaN(n)?null:n; };
-      recs.push({ uniq, fecha, tipo, confirmacion:conf||null, reserva_fecha:abDate(G(r,'Fecha de la reservación')), inicio:abDate(G(r,'Fecha de inicio')), fin:abDate(G(r,'Fecha de finalización')), noches:pint('Noches'), huesped:hues||null, espacio:esp||null, detalles:G(r,'Detalles')||null, referencia:ref||null, moneda:G(r,'Moneda')||null, monto, ingresos_recibidos:recib, tarifa_servicio:abNum(G(r,'Tarifa de servicio')), tarifa_pago_rapido:abNum(G(r,'Tarifa por Pago rápido')), tarifa_limpieza:abNum(G(r,'Tarifa de limpieza')), tarifa_mascotas:abNum(G(r,'Tarifa por mascotas')), ingresos_brutos:abNum(G(r,'Ingresos brutos')), impuesto:abNum(G(r,'Impuesto liquidado por Airbnb')), anio:pint('Año de ingresos') });
-    });
-    const seen={}; const uniqRecs=[]; recs.forEach(x=>{ if(!seen[x.uniq]){ seen[x.uniq]=1; uniqRecs.push(x); } });
-    if(!uniqRecs.length){ alert('No se encontraron filas válidas en el CSV.'); return; }
-    let ok=0;
-    for(let i=0;i<uniqRecs.length;i+=500){ const chunk=uniqRecs.slice(i,i+500); const {error}=await sb.from('airbnb_tx').upsert(chunk,{onConflict:'uniq'}); if(error){ alert('Error al importar (¿ejecutaste supabase_airbnb.sql?): '+error.message); return; } ok+=chunk.length; }
-    toast('✓ '+ok+' transacción(es) importada(s)'); input.value=''; await abLoad(); abRender();
-  }catch(e){ alert('No se pudo leer el CSV: '+((e&&e.message)||e)); }
-}
-function abExportCSV(){
-  const rows=abFiltered(); const q=v=>'"'+String(v==null?'':v).replace(/"/g,'""')+'"';
-  const cols=[['fecha','Fecha'],['tipo','Tipo'],['espacio','Alojamiento'],['huesped','Huesped'],['noches','Noches'],['ingresos_brutos','Bruto'],['tarifa_servicio','T. servicio'],['tarifa_limpieza','T. limpieza'],['monto','Neto'],['ingresos_recibidos','Payout'],['impuesto','Impuesto'],['confirmacion','Confirmacion'],['referencia','Referencia']];
-  const lines=[cols.map(c=>c[1]).join(';')]; rows.forEach(r=>lines.push(cols.map(c=>q(r[c[0]])).join(';')));
-  const blob=new Blob(['﻿'+lines.join('\n')],{type:'text/csv;charset=utf-8'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='airbnb'+(abMes?'_'+abMes:'')+'.csv'; document.body.appendChild(a); a.click(); a.remove();
-}
 function pagosCan(){ if(isAdmin()) return true; const a=(PROFILE.area||''),d=(PROFILE.dept||''); if(a==='Finanzas'||d==='Finanzas') return true; if(PROFILE.role==='direccion') return true; return false; }
 function pagMoney(n){ const x=parseFloat(n)||0; return '$'+x.toLocaleString('es-PA',{minimumFractionDigits:2,maximumFractionDigits:2}); }
 function pagSetView(v){ pagView=v; pagRender(); }
@@ -4699,7 +4627,7 @@ function ccSyncGastos(){ ccGastos.forEach((g,i)=>{ const m=document.getElementBy
 function ccAddGasto(){ ccSyncGastos(); ccGastos.push({monto:'',motivo:'',just:false}); const b=document.getElementById('ccGastosBox'); if(b)b.innerHTML=ccGastosRows(); try{ccCalc();}catch(e){} }
 function ccDelGasto(i){ ccSyncGastos(); ccGastos.splice(i,1); const b=document.getElementById('ccGastosBox'); if(b)b.innerHTML=ccGastosRows(); try{ccCalc();}catch(e){} }
 function ccM(n){ return '$'+((parseFloat(n)||0).toFixed(2)); }
-function ccAllowedNow(){ if(isAdmin())return true; if(PROFILE.role==='direccion')return true; const dep=(PROFILE.dept||''),area=(PROFILE.area||''); if(dep==='Finanzas'||area==='Finanzas')return true; return false; }
+function ccAllowedNow(){ if(isAdmin())return true; if(PROFILE.role==='direccion')return true; const nk=s=>(''+(s||'')).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim(); const dep=nk(PROFILE.dept),area=nk(PROFILE.area); if(dep==='finanzas'||area==='finanzas')return true; if(dep==='atencion al cliente')return true; try{ if(typeof navItemAllowed==='function' && navItemAllowed('cierres')) return true; }catch(_e){} return false; }
 function ccCan(){ if(typeof zonaRO==='function' && zonaRO('cierres')) return false; return ccAllowedNow(); }
 function ccDid(v){ return 'cc_d_'+(''+v).replace('.','_'); }
 function ccSetTab(t){ ccEditId=null; ccEditRec=null; ccTab=t; ccView=null; if(t==='nuevo'){ccGastos=[];ccLugar='';} show('cierres'); }
@@ -6486,7 +6414,7 @@ async function pageIncidencias(){
     <button class="asg-tab ${incTab==='calendario'?'on':''}" onclick="setIncTab('calendario')">📅 Calendario</button>
     ${canManage?`<button class="asg-tab ${incTab==='panel'?'on':''}" onclick="setIncTab('panel')">📊 Panel</button>`:''}
     ${canManage?`<button class="asg-tab ${incTab==='informe'?'on':''}" onclick="setIncTab('informe')">📋 Informe</button>`:''}
-    <button class="btn btn-orange" style="margin-left:auto;align-self:center" onclick="incNuevaOpen()">+ Nueva incidencia</button></div>`;
+    <button class="btn btn-orange" style="margin-left:auto;align-self:center" onclick="incNuevaOpen()">+ Nueva incidencia</button>${canManage?`<button class="btn ghost" style="align-self:center;font-size:13px;padding:6px 10px" onclick="incWAConfig()" title="Personalizar el mensaje de WhatsApp de alta prioridad">💬</button>`:''}</div>`;
   let body; const fullScreen=(incSel!=null||incNew);
   if(incNew){ body=renderIncForm(); }
   else if(incSel!=null){ body=renderIncDetail(incSel); }
@@ -6837,7 +6765,7 @@ async function incCreate(e){ if(typeof zonaRO==='function'&&zonaRO('incidencias'
   const loc=(base.edificio||'—')+(uniTxt?' · '+uniTxt:'');
   const urgLbl=INC_URG[base.urgencia]?INC_URG[base.urgencia][0]:base.urgencia;
   // Cerrar y avisar al usuario YA (las notificaciones no deben bloquear el guardado)
-  incFormOpen=false; incNew=false; toast('✓ '+(ids.length>1?ids.length+' incidencias creadas':'Incidencia creada')); show('incidencias'); if(base.urgencia==='alta'){ try{ incWAModal('Nueva incidencia de alta prioridad', '🔴 NUEVA incidencia de ALTA prioridad\n📍 '+loc+'\n📝 '+desc+'\n👤 Reportada por: '+(PROFILE.nombre||'')); }catch(_e){} }
+  incFormOpen=false; incNew=false; toast('✓ '+(ids.length>1?ids.length+' incidencias creadas':'Incidencia creada')); show('incidencias'); if(base.urgencia==='alta'){ try{ incWAModal('Nueva incidencia de alta prioridad', incWABuild('nueva',{edificio:base.edificio,unidad:uniTxt,descripcion:desc,persona:(PROFILE.nombre||'')})); }catch(_e){} }
   (async()=>{ try{
     if(personaId && String(personaId)!==String(ME.id)){
       await sb.from('mensajes').insert({de_id:ME.id,para_id:personaId,de_nombre:PROFILE.nombre,para_nombre:persona?persona.nombre:'',texto:`🛠️ Se te ha asignado ${ids.length>1?ids.length+' incidencias':'una incidencia'} (${urgLbl}) en ${loc}: ${desc.slice(0,120)}`,leido:false});
@@ -6912,7 +6840,7 @@ async function incFinalizar(id,estadoFinal){
   toast(estadoFinal==='terminada'?'✅ Incidencia terminada':'⏸️ Guardada a medias');
   if(estadoFinal==='terminada'){ incSel=null; if(incTimerInt){clearInterval(incTimerInt);incTimerInt=null;} try{refreshIncBell();}catch(e){} }
   show('incidencias');
-  if(estadoFinal==='terminada' && i.urgencia==='alta'){ try{ incWAModal('Incidencia de alta prioridad resuelta', '✅ Incidencia de ALTA prioridad RESUELTA\n📍 '+((i.edificio||'—')+(i.unidad?(' · '+i.unidad):''))+'\n📝 '+(i.descripcion||'')+'\n🛠 Resuelta por: '+quien); }catch(_e){} }
+  if(estadoFinal==='terminada' && i.urgencia==='alta'){ try{ incWAModal('Incidencia de alta prioridad resuelta', incWABuild('resuelta',{edificio:i.edificio,unidad:i.unidad,descripcion:i.descripcion,persona:quien})); }catch(_e){} }
 }
 async function incReabrir(id){
   const i=INC.find(x=>String(x.id)===String(id)); if(!i)return;
@@ -6936,7 +6864,7 @@ async function incSaveEdit(id){ if(typeof zonaRO==='function'&&zonaRO('incidenci
   const personaId=g('ePersona')||null; const persona=personaId?MANT_STAFF.find(s=>String(s.id)===String(personaId)):null;
   const costeV=g('eCoste'); const afecta=!!(document.getElementById('eAfecta')||{}).checked, fuera=!!(document.getElementById('eFuera')||{}).checked;
   await sb.from('mant_incidencias').update({urgencia:g('eUrg'),categoria:g('eCat')||null,descripcion:desc,asignado_equipo:g('eEquipo')||'*',asignado_a:personaId||null,asignado_a_nombre:persona?persona.nombre:null,coste:(costeV===''||costeV==null)?null:Number(costeV),proveedor:(g('eProv')||'').trim()||null,afecta_huesped:afecta,fuera_servicio:fuera,historial:incLog(i,'Editada / reasignada'),updated_at:new Date().toISOString()}).eq('id',id);
-  incEditOpen=false; toast('✓ Cambios guardados'); show('incidencias'); if(g('eUrg')==='alta'){ try{ incWAModal('Incidencia de alta prioridad', '🔴 Incidencia de ALTA prioridad\n📍 '+((i.edificio||'—')+(i.unidad?(' · '+i.unidad):''))+'\n📝 '+desc+'\n👤 Reportada por: '+(i.creado_por_nombre||PROFILE.nombre||'')); }catch(_e){} }
+  incEditOpen=false; toast('✓ Cambios guardados'); show('incidencias'); if(g('eUrg')==='alta'){ try{ incWAModal('Incidencia de alta prioridad', incWABuild('nueva',{edificio:i.edificio,unidad:i.unidad,descripcion:desc,persona:(i.creado_por_nombre||PROFILE.nombre||'')})); }catch(_e){} }
 }
 async function incDelete(id){
   if(!confirm('¿Eliminar esta incidencia de forma permanente?'))return;
@@ -7026,6 +6954,13 @@ function renderIncDetail(id){
      </div>`:'')
   + ( (Array.isArray(i.historial)&&i.historial.length)? `<div class="panel"><h3 class="inc-h3">🕒 Historial de actividad</h3><ul class="inc-timeline">${i.historial.slice().reverse().map(h=>`<li><b>${esc(h.act||'')}</b>${h.who?' · '+esc(h.who):''}<br><small>${h.t?new Date(h.t).toLocaleString('es-ES'):''}</small></li>`).join('')}</ul></div>` : '');
 }
+let INC_WA_TPL={};
+const INC_WA_DEF={ nueva:'🔴 NUEVA incidencia de ALTA prioridad\n📍 {ubicacion}\n📝 {descripcion}\n👤 Reportada por: {persona}', resuelta:'✅ Incidencia de ALTA prioridad RESUELTA\n📍 {ubicacion}\n📝 {descripcion}\n🛠 Resuelta por: {persona}' };
+async function incWALoad(){ try{ const {data}=await sb.from('config').select('clave,valor').in('clave',['inc_wa_nueva','inc_wa_resuelta']); const m={}; (data||[]).forEach(r=>{ if(r.clave==='inc_wa_nueva') m.nueva=r.valor; if(r.clave==='inc_wa_resuelta') m.resuelta=r.valor; }); INC_WA_TPL=m; }catch(e){} }
+function incWABuild(kind,v){ v=v||{}; const ubic=(v.edificio||'—')+(v.unidad?(' · '+v.unidad):''); let t=(INC_WA_TPL&&INC_WA_TPL[kind])||INC_WA_DEF[kind]||''; return t.split('{ubicacion}').join(ubic).split('{edificio}').join(v.edificio||'').split('{unidad}').join(v.unidad||'').split('{descripcion}').join(v.descripcion||'').split('{persona}').join(v.persona||''); }
+function incWAConfig(){ const cur={nueva:(INC_WA_TPL.nueva||INC_WA_DEF.nueva), resuelta:(INC_WA_TPL.resuelta||INC_WA_DEF.resuelta)}; let ov=document.getElementById('incWAcfg'); if(!ov){ ov=document.createElement('div'); ov.id='incWAcfg'; ov.style.cssText='position:fixed;inset:0;background:rgba(15,30,55,.55);z-index:99999;display:flex;align-items:center;justify-content:center;padding:16px'; document.body.appendChild(ov); ov.onclick=function(e){ if(e.target===ov) ov.style.display='none'; }; } const ta='width:100%;min-height:110px;padding:10px;border:1px solid var(--gris2);border-radius:8px;font-family:inherit;font-size:13px'; ov.innerHTML=`<div style="background:#fff;border-radius:14px;max-width:520px;width:100%;padding:20px;font-family:inherit;max-height:88vh;overflow:auto"><div style="display:flex;align-items:center;margin-bottom:6px"><h2 style="margin:0;font-size:17px">💬 Mensaje de WhatsApp (alta prioridad)</h2><button onclick="document.getElementById('incWAcfg').style.display='none'" style="margin-left:auto;border:none;background:none;font-size:20px;color:#94a3b8;cursor:pointer">✕</button></div><div style="font-size:12.5px;color:var(--suave);margin-bottom:12px">Variables (se sustituyen solas): <code>{ubicacion}</code> <code>{descripcion}</code> <code>{persona}</code> <code>{edificio}</code> <code>{unidad}</code>. Puedes cambiar textos, emojis y saltos de línea.</div><label style="font-size:12.5px;font-weight:700;color:#c0392b">🔴 Al registrar (o poner en alta) una incidencia</label><textarea id="waTn" style="${ta}">${esc(cur.nueva)}</textarea><label style="font-size:12.5px;font-weight:700;color:#1e8a5a;display:block;margin-top:12px">✅ Al resolverla</label><textarea id="waTr" style="${ta}">${esc(cur.resuelta)}</textarea><div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap"><button class="btn" onclick="incWASave()">💾 Guardar</button><button class="btn ghost" onclick="incWARestore()">↩ Restaurar por defecto</button></div></div>`; ov.style.display='flex'; }
+async function incWASave(){ const n=(document.getElementById('waTn')||{}).value||''; const r=(document.getElementById('waTr')||{}).value||''; try{ const {error}=await sb.from('config').upsert([{clave:'inc_wa_nueva',valor:n},{clave:'inc_wa_resuelta',valor:r}],{onConflict:'clave'}); if(error) throw error; }catch(e){ alert('No se pudo guardar (¿ejecutaste supabase_config.sql?): '+((e&&e.message)||e)); return; } await incWALoad(); const ov=document.getElementById('incWAcfg'); if(ov)ov.style.display='none'; try{ if(typeof toast==='function') toast('✓ Mensaje personalizado guardado'); }catch(_e){} }
+function incWARestore(){ const n=document.getElementById('waTn'), r=document.getElementById('waTr'); if(n)n.value=INC_WA_DEF.nueva; if(r)r.value=INC_WA_DEF.resuelta; }
 function incWAsend(msg){ try{ if(navigator.clipboard&&navigator.clipboard.writeText) navigator.clipboard.writeText(msg); }catch(_e){} try{ if(typeof toast==='function') toast('✓ Texto copiado — elige el grupo'); }catch(_e){} window.open('https://wa.me/?text='+encodeURIComponent(msg),'_blank'); }
 function incWAModal(titulo,msg){ const esc2=s=>(''+s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); let ov=document.getElementById('incWAov'); if(!ov){ ov=document.createElement('div'); ov.id='incWAov'; ov.style.cssText='position:fixed;inset:0;background:rgba(15,30,55,.55);z-index:99999;display:flex;align-items:center;justify-content:center;padding:16px'; document.body.appendChild(ov); } ov.innerHTML='<div style="background:#fff;border-radius:16px;max-width:390px;width:100%;padding:22px;font-family:inherit;box-shadow:0 14px 50px rgba(0,0,0,.32)"><div style="display:flex;align-items:flex-start;gap:8px;margin-bottom:3px"><div style="font-size:16px;font-weight:800;color:#1f4e79;flex:1">📲 '+esc2(titulo)+'</div><button id="incWAx" aria-label="Cerrar" style="background:none;border:none;font-size:20px;line-height:1;color:#94a3b8;cursor:pointer;font-family:inherit;padding:0 2px">✕</button></div><div style="font-size:12.5px;color:#64748b;margin-bottom:12px">Avisa al grupo de WhatsApp con el texto ya preparado.</div><div style="background:#f5f8fc;border:1px solid #e2e8f0;border-radius:10px;padding:11px 12px;font-size:13px;white-space:pre-wrap;color:#243b53;max-height:190px;overflow:auto">'+esc2(msg)+'</div><div style="margin-top:16px"><button id="incWAgo" style="width:100%;background:#0a8a3f;color:#fff;border:none;padding:13px;border-radius:10px;font-weight:700;font-size:15px;font-family:inherit;cursor:pointer">Enviar por WhatsApp</button></div></div>'; ov.style.display='flex'; document.getElementById('incWAgo').onclick=function(){ incWAsend(msg); ov.style.display='none'; }; document.getElementById('incWAx').onclick=function(){ ov.style.display='none'; }; ov.onclick=function(ev){ if(ev.target===ov) ov.style.display='none'; }; }
 function incResolvers(x){ if(Array.isArray(x.realizadores)&&x.realizadores.length) return x.realizadores; if(x.resuelto_por_nombre) return (''+x.resuelto_por_nombre).split(/[,;]+/).map(s=>s.trim()).filter(Boolean); return ['—']; }
