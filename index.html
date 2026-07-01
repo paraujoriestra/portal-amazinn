@@ -6174,7 +6174,7 @@ function incMatchesFilters(i){ const f=incFilters;
   if(f.categoria && (i.categoria||'')!==f.categoria) return false;
   if(f.afecta==='si' && !i.afecta_huesped) return false;
   if(f.q){ const q=f.q.toLowerCase(); const hay=((i.descripcion||'')+' '+(i.edificio||'')+' '+(i.unidad||'')+' '+incCatLabel(i.categoria)+' '+(i.creado_por_nombre||'')+' '+(i.tomada_por_nombre||'')+' '+(i.resuelto_por_nombre||'')).toLowerCase(); if(!hay.includes(q)) return false; }
-  if(f.trab){ const tn=f.trab.toLowerCase(); const who=[i.resuelto_por_nombre,i.tomada_por_nombre,i.asignado_a_nombre].map(x=>(x||'').toLowerCase()); if(!who.includes(tn)) return false; }
+  if(f.trab){ const _deb=s=>(''+s).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,''); const tn=_deb(f.trab); const who=[i.resuelto_por_nombre,i.tomada_por_nombre,i.asignado_a_nombre].join(',').split(/[,;]+/).map(x=>_deb(x.trim())).filter(Boolean); if(!who.includes(tn)) return false; }
   if(f.desde){ if(!i.resuelta_at || String(i.resuelta_at).slice(0,10) < f.desde) return false; }
   if(f.hasta){ if(!i.resuelta_at || String(i.resuelta_at).slice(0,10) > f.hasta) return false; }
   return true; }
@@ -6332,7 +6332,7 @@ function incSetFilter(k,v){ incFilters[k]=v; if(k==='edificio') incFilters.unida
 function incClearFilters(){ incFilters.edificio='';incFilters.unidad='';incFilters.urgencia='';incFilters.estado='';incFilters.q='';incFilters.categoria='';incFilters.afecta='';incFilters.trab='';incFilters.desde='';incFilters.hasta=''; show('incidencias'); }
 function incHistFiltroHTML(){
   const done=INC.filter(i=>i.estado==='terminada'||i.estado==='cancelada');
-  const names=[...new Set([].concat(MANT_STAFF.map(s=>s.nombre), done.flatMap(i=>[i.resuelto_por_nombre,i.tomada_por_nombre,i.asignado_a_nombre])).filter(Boolean))].sort((a,b)=>String(a).localeCompare(String(b)));
+  const _splitN=s=>(''+(s||'')).split(/[,;]+/).map(x=>x.trim()).filter(Boolean); const _deb=s=>(''+s).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,''); const _nmap={}; [].concat(MANT_STAFF.map(s=>s.nombre), done.flatMap(i=>[].concat(_splitN(i.resuelto_por_nombre),_splitN(i.tomada_por_nombre),_splitN(i.asignado_a_nombre)))).filter(Boolean).forEach(nm=>{ const k=_deb(nm); if(!_nmap[k]) _nmap[k]=nm; }); const names=Object.values(_nmap).sort((a,b)=>String(a).localeCompare(String(b),'es'));
   const f=incFilters; const n=incFilteredList(true).length;
   const inp='padding:7px 10px;border:1px solid var(--gris2);border-radius:8px;font-family:inherit;font-size:13px';
   return `<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;background:#f5f8fc;border:1px solid var(--gris2);border-radius:10px;padding:10px 12px;margin:0 0 12px">
