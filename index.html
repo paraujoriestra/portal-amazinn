@@ -6586,7 +6586,7 @@ async function incCreate(e){ if(typeof zonaRO==='function'&&zonaRO('incidencias'
   const loc=(base.edificio||'—')+(uniTxt?' · '+uniTxt:'');
   const urgLbl=INC_URG[base.urgencia]?INC_URG[base.urgencia][0]:base.urgencia;
   // Cerrar y avisar al usuario YA (las notificaciones no deben bloquear el guardado)
-  incFormOpen=false; incNew=false; toast('✓ '+(ids.length>1?ids.length+' incidencias creadas':'Incidencia creada')); show('incidencias');
+  incFormOpen=false; incNew=false; toast('✓ '+(ids.length>1?ids.length+' incidencias creadas':'Incidencia creada')); show('incidencias'); if(base.urgencia==='alta'){ try{ incWAModal('Nueva incidencia de alta prioridad', '🔴 NUEVA incidencia de ALTA prioridad\n📍 '+loc+'\n📝 '+desc+'\n👤 Reportada por: '+(PROFILE.nombre||'')); }catch(_e){} }
   (async()=>{ try{
     if(personaId && String(personaId)!==String(ME.id)){
       await sb.from('mensajes').insert({de_id:ME.id,para_id:personaId,de_nombre:PROFILE.nombre,para_nombre:persona?persona.nombre:'',texto:`🛠️ Se te ha asignado ${ids.length>1?ids.length+' incidencias':'una incidencia'} (${urgLbl}) en ${loc}: ${desc.slice(0,120)}`,leido:false});
@@ -6661,6 +6661,7 @@ async function incFinalizar(id,estadoFinal){
   toast(estadoFinal==='terminada'?'✅ Incidencia terminada':'⏸️ Guardada a medias');
   if(estadoFinal==='terminada'){ incSel=null; if(incTimerInt){clearInterval(incTimerInt);incTimerInt=null;} try{refreshIncBell();}catch(e){} }
   show('incidencias');
+  if(estadoFinal==='terminada' && i.urgencia==='alta'){ try{ incWAModal('Incidencia de alta prioridad resuelta', '✅ Incidencia de ALTA prioridad RESUELTA\n📍 '+((i.edificio||'—')+(i.unidad?(' · '+i.unidad):''))+'\n📝 '+(i.descripcion||'')+'\n🛠 Resuelta por: '+quien); }catch(_e){} }
 }
 async function incReabrir(id){
   const i=INC.find(x=>String(x.id)===String(id)); if(!i)return;
@@ -6773,6 +6774,8 @@ function renderIncDetail(id){
      </div>`:'')
   + ( (Array.isArray(i.historial)&&i.historial.length)? `<div class="panel"><h3 class="inc-h3">🕒 Historial de actividad</h3><ul class="inc-timeline">${i.historial.slice().reverse().map(h=>`<li><b>${esc(h.act||'')}</b>${h.who?' · '+esc(h.who):''}<br><small>${h.t?new Date(h.t).toLocaleString('es-ES'):''}</small></li>`).join('')}</ul></div>` : '');
 }
+function incWAsend(msg){ try{ if(navigator.clipboard&&navigator.clipboard.writeText) navigator.clipboard.writeText(msg); }catch(_e){} try{ if(typeof toast==='function') toast('✓ Texto copiado — elige el grupo'); }catch(_e){} window.open('https://wa.me/?text='+encodeURIComponent(msg),'_blank'); }
+function incWAModal(titulo,msg){ const esc2=s=>(''+s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); let ov=document.getElementById('incWAov'); if(!ov){ ov=document.createElement('div'); ov.id='incWAov'; ov.style.cssText='position:fixed;inset:0;background:rgba(15,30,55,.55);z-index:99999;display:flex;align-items:center;justify-content:center;padding:16px'; document.body.appendChild(ov); } ov.innerHTML='<div style="background:#fff;border-radius:16px;max-width:390px;width:100%;padding:22px;font-family:inherit;box-shadow:0 14px 50px rgba(0,0,0,.32)"><div style="display:flex;align-items:flex-start;gap:8px;margin-bottom:3px"><div style="font-size:16px;font-weight:800;color:#1f4e79;flex:1">📲 '+esc2(titulo)+'</div><button id="incWAx" aria-label="Cerrar" style="background:none;border:none;font-size:20px;line-height:1;color:#94a3b8;cursor:pointer;font-family:inherit;padding:0 2px">✕</button></div><div style="font-size:12.5px;color:#64748b;margin-bottom:12px">Avisa al grupo de WhatsApp con el texto ya preparado.</div><div style="background:#f5f8fc;border:1px solid #e2e8f0;border-radius:10px;padding:11px 12px;font-size:13px;white-space:pre-wrap;color:#243b53;max-height:190px;overflow:auto">'+esc2(msg)+'</div><div style="margin-top:16px"><button id="incWAgo" style="width:100%;background:#0a8a3f;color:#fff;border:none;padding:13px;border-radius:10px;font-weight:700;font-size:15px;font-family:inherit;cursor:pointer">Enviar por WhatsApp</button></div></div>'; ov.style.display='flex'; document.getElementById('incWAgo').onclick=function(){ incWAsend(msg); ov.style.display='none'; }; document.getElementById('incWAx').onclick=function(){ ov.style.display='none'; }; ov.onclick=function(ev){ if(ev.target===ov) ov.style.display='none'; }; }
 function incResolvers(x){ if(Array.isArray(x.realizadores)&&x.realizadores.length) return x.realizadores; if(x.resuelto_por_nombre) return (''+x.resuelto_por_nombre).split(/[,;]+/).map(s=>s.trim()).filter(Boolean); return ['—']; }
 function renderIncPanel(I){
   const pad=n=>(''+n).padStart(2,'0'); const today=new Date();
@@ -7175,6 +7178,7 @@ function asgUpdFecha(v){ ASG.fecha=v; }
 function asgRenderUTbody(focusLast){ const b=document.getElementById('asgUTbody'); if(b){ b.innerHTML=asgUnidadRows(); if(focusLast){ const inp=b.querySelector('tr:last-child input'); if(inp) inp.focus(); } } asgRefreshResumen(); }
 function asgRenderCTbody(focusLast){ const b=document.getElementById('asgCTbody'); if(b){ b.innerHTML=asgComunRows(); if(focusLast){ const inp=b.querySelector('tr:last-child input'); if(inp) inp.focus(); } } asgRefreshResumen(); }
 function asgAddUnidad(){ ASG.unidades.push(asgNewUnit()); asgRenderUTbody(true); }
+function asgSortUnidades(){ if(!ASG||!Array.isArray(ASG.unidades)) return; const key=u=>[(u.edificio||''),(u.unidadNombre||u.unidad||'')]; ASG.unidades.sort((a,b)=>{ const ka=key(a),kb=key(b); const ce=String(ka[0]).localeCompare(String(kb[0]),'es',{numeric:true,sensitivity:'base'}); if(ce!==0) return ce; return String(ka[1]).localeCompare(String(kb[1]),'es',{numeric:true,sensitivity:'base'}); }); asgRenderUTbody(false); try{ if(typeof toast==='function') toast('✓ Unidades ordenadas por nombre'); }catch(_e){} }
 function asgDelUnidad(i){ ASG.unidades.splice(i,1); asgRenderUTbody(false); }
 function asgAddComun(){ ASG.comunes.push({area:'',trabajadores:[],nota:''}); asgRenderCTbody(true); }
 function asgComTrabAdd(i){ const el=document.getElementById('asgCWin_'+i); if(!el)return; const v=(el.value||'').trim(); const c=ASG.comunes[i]; if(!c)return; c.trabajadores=Array.isArray(c.trabajadores)?c.trabajadores:asgWorkersOf(c); if(v&&!c.trabajadores.includes(v)) c.trabajadores.push(v); el.value=''; asgRenderCTbody(false); setTimeout(()=>{const e=document.getElementById('asgCWin_'+i); if(e)e.focus();},20); }
@@ -7606,7 +7610,7 @@ function asgRenderEditor(){
     <div class="panel"><h2 style="margin-top:0">🏠 Unidades</h2>
       <div class="asg-scroll"><table class="asg-table"><thead><tr><th></th><th style="min-width:130px">Edificio</th><th style="min-width:110px">Unidad</th><th>🕐 Check-in</th><th style="min-width:155px">Tipo</th><th>Cliente</th><th>Nº pax</th><th>Extra / nota</th><th style="min-width:170px">Trabajadores</th><th>Supervisora</th>${edit?'<th></th>':''}</tr></thead>
         <tbody id="asgUTbody">${asgUnidadRows()}</tbody></table></div>
-      ${edit?`<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px"><button class="btn ghost" onclick="asgAddUnidad()">+ Añadir unidad</button></div>`:''}
+      ${edit?`<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px"><button class="btn ghost" onclick="asgAddUnidad()">+ Añadir unidad</button>${ASG.unidades.length>1?`<button class="btn ghost" onclick="asgSortUnidades()" title="Ordenar las unidades por edificio y número">↕️ Ordenar por nombre</button>`:''}</div>`:''}
     </div>
     ${edit?`<div class="panel"><h2 style="margin-top:0">⚖️ Balance de carga del equipo</h2>
       <p style="font-size:12.5px;color:var(--suave);margin:-4px 0 12px">Unidades asignadas por trabajador (incluye 2º trabajador). ⚠ = posible sobrecarga.</p>
