@@ -4816,7 +4816,8 @@ function fillTpl(c,u){return (c||'')
   .split('{NºPlanta}').join(u.planta||'').split('{NoPlanta}').join(u.planta||'')
   .split('{código}').join(u.codigo||'')
   .split('{wifi}').join(u.wifi_red||u.wifi||'')
-  .split('{wifi_clave}').join(u.wifi_pass||'').split('{wifiClave}').join(u.wifi_pass||'').split('{clave_wifi}').join(u.wifi_pass||'').split('{contraseña_wifi}').join(u.wifi_pass||'')
+  .split('{wifi_clave}').join(u.wifi_pass||'').split('{wifiClave}').join(u.wifi_pass||'').split('{clave_wifi}').join(u.wifi_pass||'').split('{contraseña_wifi}').join(u.wifi_pass||'').split('{contrasena_wifi}').join(u.wifi_pass||'').split('{claveWifi}').join(u.wifi_pass||'').split('{clave}').join(u.wifi_pass||'').split('{contraseña}').join(u.wifi_pass||'').split('{contrasena}').join(u.wifi_pass||'').split('{password}').join(u.wifi_pass||'').split('{wifi_password}').join(u.wifi_pass||'')
+  .split('{wifi_red}').join(u.wifi_red||u.wifi||'').split('{red_wifi}').join(u.wifi_red||u.wifi||'').split('{ssid}').join(u.wifi_red||u.wifi||'')
   /* compatibilidad con variables antiguas */
   .split('{apartamento}').join(u.nombre||'').split('{numero}').join(u.numero||'').split('{codigo}').join(u.codigo||'');}
 async function auditLog(accion,tipo){await sb.from('auditoria').insert({user_nombre:PROFILE.nombre,accion,tipo});}
@@ -4842,7 +4843,7 @@ async function loadUnidades(){
   const eds=ed.data||[], uns=un.data||[]; const out=[];
   eds.forEach(e=>{
     const apts=uns.filter(u=>u.edificio===e.nombre && u.tipo!=='comun');
-    if(apts.length){ apts.forEach(u=>out.push({id:u.id,raw:u.id,kind:'u',nombre:u.nombre,prop:e.nombre,tipo:'apartamento',numero:u.numero||'',planta:u.planta||'',codigo:u.codigo||'',wifi:u.wifi||'',wifi_red:u.wifi_red||'',wifi_pass:u.wifi_pass||'',cod_acceso:!!u.cod_acceso})); }
+    if(apts.length){ apts.forEach(u=>out.push({id:u.id,raw:u.id,kind:'u',nombre:u.nombre,prop:e.nombre,tipo:'apartamento',numero:u.numero||'',planta:u.planta||'',codigo:u.codigo||'',wifi:u.wifi||'',wifi_red:u.wifi_red||e.wifi_red||'',wifi_pass:u.wifi_pass||e.wifi_pass||'',cod_acceso:!!u.cod_acceso})); }
     else { out.push({id:'E'+e.id,raw:e.id,kind:'e',nombre:e.nombre,prop:e.nombre,tipo:'apartamento',whole:true,numero:e.numero||'',planta:e.planta||'',codigo:e.codigo||'',wifi:e.wifi||'',wifi_red:e.wifi_red||'',wifi_pass:e.wifi_pass||'',cod_acceso:!!e.cod_acceso}); }
   });
   return out;
@@ -4944,7 +4945,7 @@ async function tplForm(){
   return `<div class="panel" style="max-width:760px"><form class="box" onsubmit="return tplSave(event)" style="max-width:none">
     <div class="row"><div><label>Título</label><input id="tT" required value="${t.titulo?esc(t.titulo):''}"></div><div><label>Categoría</label><select id="tC">${TPL_CATS.map(c=>`<option ${t.cat===c?'selected':''}>${c}</option>`).join('')}</select></div></div>
     <label>Contenido</label><textarea id="tB" rows="6" required>${t.cuerpo?esc(t.cuerpo):''}</textarea>
-    <small style="color:var(--suave)">Variables: {propiedad} {NºUnidad} {NºPlanta} {código} {wifi} {wifi_clave}</small>
+    <small style="color:var(--suave)">Variables: {propiedad} {NºUnidad} {NºPlanta} {código} {wifi} {wifi_clave} {clave}</small>
     <div style="margin-top:10px"><label>Propiedad</label><input id="tProp" list="tPropDL" value="${esc(selProp)}" placeholder="Escribe o elige…" oninput="tplFormProp()">${propDL}</div>
     <div style="margin-top:10px"><label>Unidades <small style="color:var(--suave);font-weight:400">(deja la lista vacía = propiedad completa)</small></label>
       <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap"><select id="tUniPick" ${pickDisabled?'disabled':''} style="flex:1;min-width:160px">${unitOpts}</select><button class="btn ghost" type="button" onclick="tplUnitAdd()" style="padding:8px 12px;white-space:nowrap">+ Añadir</button></div>
@@ -5386,6 +5387,20 @@ function trfChooser(){
       <button class="btn ghost" style="padding:22px 16px;font-size:15px;text-align:center;line-height:1.5;height:auto" onclick="trfPick('salida')"><div style="font-size:30px">🛫</div><b>Propiedad → aeropuerto</b><br><span style="font-size:12px;color:var(--suave)">Salida del huésped</span></button>
     </div></div>`;
 }
+function trfParseFecha(txt){ const M={enero:1,febrero:2,marzo:3,abril:4,mayo:5,junio:6,julio:7,agosto:8,septiembre:9,setiembre:9,octubre:10,noviembre:11,diciembre:12}; const now=new Date(); const yNow=now.getFullYear(); let d,m,y,explicitY=false; let mm=txt.toLowerCase().match(/(\d{1,2})\s*(?:de\s*)?(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|setiembre|octubre|noviembre|diciembre)(?:\s*(?:de\s*)?(\d{4}))?/); if(mm){ d=+mm[1]; m=M[mm[2]]; if(mm[3]){y=+mm[3];explicitY=true;} else y=yNow; } else { let nm=txt.match(/\b(\d{1,2})[\/\-.](\d{1,2})(?:[\/\-.](\d{2,4}))?\b/); if(nm){ d=+nm[1]; m=+nm[2]; if(nm[3]){ y=(+nm[3]<100?2000+ +nm[3]:+nm[3]); explicitY=true; } else y=yNow; } } if(!d||!m) return ''; let dt=new Date(y,m-1,d); const today=new Date(now.getFullYear(),now.getMonth(),now.getDate()); if(!explicitY && dt<today) dt=new Date(y+1,m-1,d); const p=n=>('0'+n).slice(-2); return dt.getFullYear()+'-'+p(dt.getMonth()+1)+'-'+p(dt.getDate()); }
+function trfAIFill(){ const el=document.getElementById('trfPaste'); if(!el) return; const txt=(el.value||'').replace(/\r/g,'').trim(); if(!txt){ alert('Pega primero el mensaje del cliente.'); return; } const lines=txt.split('\n').map(s=>s.trim()).filter(Boolean); const low=txt.toLowerCase(); const setV=(id,v)=>{ const e=document.getElementById(id); if(e&&v!=null&&v!==''){ e.value=v; try{e.dispatchEvent(new Event('change'));}catch(_){} } };
+  let phone=''; const pm=txt.match(/(\+?\d[\d\s().\-]{6,}\d)/); if(pm){ phone=pm[1].replace(/[^\d+]/g,''); if(phone&&!/^\+/.test(phone)) phone='+'+phone.replace(/^00/,''); }
+  let hora=''; const hm=txt.match(/\b([01]?\d|2[0-3])[:h.]([0-5]\d)\b/); if(hm) hora=('0'+hm[1]).slice(-2)+':'+hm[2];
+  let pax=''; const px=low.match(/(\d{1,2})\s*(personas?|pax|adultos?|pasajeros?|hu[eé]spedes?|pers)/); if(px) pax=px[1];
+  let vuelo=''; const vl=lines.find(l=>/vuelo|flight/i.test(l)); if(vl){ const vt=vl.match(/([A-Za-z]{2}\s?\d{1,4}[A-Za-z]?)/); vuelo=vt?vt[1].toUpperCase().replace(/\s+/g,''):vl.replace(/.*(vuelo|flight)\s*:?\s*/i,'').trim(); } else { const vg=txt.match(/\b([A-Z]{2}\s?\d{1,4}[A-Z]?)\b/); if(vg) vuelo=vg[1].replace(/\s+/g,''); }
+  let aeropuerto=''; const airList=(typeof TRF_AIRPORTS!=='undefined'?TRF_AIRPORTS:[]); const deb=s=>(''+s).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,''); const lowD=deb(txt); airList.forEach(a=>{ if(lowD.includes(deb(a))) aeropuerto=a; }); if(!aeropuerto){ for(const k of ['tocumen','albrook','pacifico']){ if(lowD.includes(k)){ aeropuerto=airList.find(a=>deb(a).includes(k))||''; break; } } }
+  let destino=''; const dl=lines.find(l=>/destino|destination|direcci[oó]n/i.test(l)); if(dl) destino=dl.replace(/.*?(destino|destination|direcci[oó]n)\s*:?\s*/i,'').trim();
+  let fecha=trfParseFecha(txt);
+  let nombre=''; const kw=/tocumen|albrook|pac[ií]fico|aeropuerto|destino|destination|vuelo|flight|persona|pax|adulto|pasajero|hu[eé]sped|tel[eé]fono|whatsapp|celular|m[oó]vil|d[ií]a|fecha|hora|llegada|salida|recogida|maleta|equipaje|direcci[oó]n/i; for(const l of lines){ let head=l.replace(/^(nombre|cliente)\s*:?\s*/i,'').split(/\d/)[0].trim(); if(!head||kw.test(head)) continue; const words=head.split(/\s+/).filter(Boolean); if(words.length>=1&&words.length<=5&&/^[a-záéíóúñ .'-]+$/i.test(head)){ nombre=head.replace(/[·|,;-]+$/,'').trim(); break; } }
+  setV('trfCliente',nombre); setV('trfAeropuerto',aeropuerto); setV('trfWhatsapp',phone); setV('trfVuelo',vuelo); setV('trfFecha',fecha); setV('trfHoraVuelo',hora); setV('trfDestino',destino);
+  if(pax){ const ps=document.getElementById('trfPax'); if(ps){ ps.value=pax; } }
+  try{ if(typeof toast==='function') toast('✨ Campos rellenados — revisa antes de guardar'); }catch(_){}
+}
 function trfForm(){
   const t=trfEditId?(TRF.find(x=>String(x.id)===String(trfEditId))||{}):{};
   const sentido=trfSentido||'llegada';
@@ -5426,6 +5441,11 @@ function trfForm(){
   return `<div style="margin-bottom:12px"><button class="btn ghost" ${volver}>← Volver</button></div>
     <div class="panel" style="max-width:720px"><h2 style="margin-top:0">${trfEditId?'Editar transfer':'Nuevo transfer'} · <span style="color:var(--azul)">${titulo}</span></h2>
     <p style="font-size:12.5px;color:var(--suave);margin:-4px 0 10px">Rellena los datos que envió el huésped.</p>
+    <div style="background:#f4f9f4;border:1px solid #cfe6cf;border-radius:10px;padding:12px;margin:0 0 14px">
+      <div style="font-size:13px;font-weight:700;color:#1f7a3f;margin-bottom:6px">✨ Rellenar desde el mensaje del cliente</div>
+      <textarea id="trfPaste" rows="4" placeholder="Pega aquí el mensaje del cliente (nombre, personas, aeropuerto, destino, teléfono, fecha, vuelo, hora…)" style="width:100%;padding:9px 11px;border:1px solid var(--gris2);border-radius:8px;font-family:inherit;font-size:13.5px"></textarea>
+      <div style="margin-top:8px"><button class="btn" type="button" onclick="trfAIFill()">✨ Rellenar campos</button> <span style="font-size:12px;color:var(--suave)">Revisa siempre los datos antes de guardar.</span></div>
+    </div>
     ${(trfEditId&&t.created_by_nombre)?`<div style="font-size:12px;color:var(--suave);margin:0 0 14px;padding:7px 11px;background:var(--gris);border-radius:8px">📝 Solicitado por <b>${esc(t.created_by_nombre)}</b>${t.created_at?' · '+new Date(t.created_at).toLocaleString('es-ES',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}):''}</div>`:''}
     <form class="box" onsubmit="return trfSave(event)" style="max-width:none">${campos}
       <div style="margin-top:14px"><button class="btn" type="submit">${trfEditId?'Guardar cambios':'Guardar transfer'}</button> <button class="btn ghost" type="button" ${volver}>Cancelar</button></div>
