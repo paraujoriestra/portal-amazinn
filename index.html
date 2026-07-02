@@ -5952,7 +5952,24 @@ let SUPPORT_UID=null;
 let msgSupOnly=false;
 function isSupportUser(){ return (typeof isOwner==='function'&&isOwner()); }
 function isSupSend(toId){ return SUPPORT_UID && String(toId)===String(SUPPORT_UID) && String(ME.id)!==String(SUPPORT_UID); }
-function msgHasSupport(cid){ return (MSG_ALL||[]).some(m=>String(m.de_id)===String(cid)&&String(m.para_id)===String(ME.id)&&m.soporte); }
+/* ===== Soporte como HILO PARALELO =====
+   El "target" de una conversación puede ser un id normal, o 'sup:<idUsuario>' para el hilo de Soporte.
+   El hilo de Soporte solo contiene mensajes con soporte=true; el normal, los que NO tienen soporte. */
+function convParse(id){ const s=String(id==null?'':id); if(s.slice(0,4)==='sup:') return {uid:s.slice(4), sup:true}; return {uid:s, sup:false}; }
+function convBetween(uid){ return (MSG_ALL||[]).filter(m=>(String(m.de_id)===String(ME.id)&&String(m.para_id)===String(uid))||(String(m.de_id)===String(uid)&&String(m.para_id)===String(ME.id))); }
+function convThread(id){ const p=convParse(id); return convBetween(p.uid).filter(m=> p.sup? !!m.soporte : !m.soporte ); }
+function convMarkRead(id){ const p=convParse(id); const th=convThread(id); const ids=th.filter(m=>String(m.de_id)===String(p.uid)&&!m.leido).map(m=>m.id); th.forEach(m=>{ if(String(m.de_id)===String(p.uid)) m.leido=true; }); if(ids.length){ try{ sb.from('mensajes').update({leido:true}).in('id',ids).then(()=>loadMsgUnread()); }catch(_e){} } return ids.length; }
+/* Lista de conversaciones: contactos normales (sin soporte) + hilos de Soporte (solo para el propietario). */
+function convEntries(){
+  const meSup=isSupportUser();
+  const hide=SUPPORT_UID&&String(ME.id)!==String(SUPPORT_UID);
+  const src=hide?(MSG_CONTACTS||[]).filter(c=>String(c.id)!==String(SUPPORT_UID)):(MSG_CONTACTS||[]);
+  const ents=[];
+  src.forEach(c=>ents.push({target:String(c.id),uid:String(c.id),sup:false,nombre:c.nombre,color:c.color,foto:c.foto,last_seen:c.last_seen}));
+  if(meSup){ (MSG_CONTACTS||[]).forEach(c=>{ if(msgHasSupport(c.id)) ents.push({target:'sup:'+c.id,uid:String(c.id),sup:true,nombre:'🛟 Soporte · '+(c.nombre||''),color:'#0a8a3f',foto:null,last_seen:null}); }); }
+  return ents;
+}
+function msgHasSupport(cid){ return (MSG_ALL||[]).some(m=>m.soporte && ((String(m.de_id)===String(cid)&&String(m.para_id)===String(ME.id))||(String(m.de_id)===String(ME.id)&&String(m.para_id)===String(cid)))); }
 function msgToggleSup(){ msgSupOnly=!msgSupOnly; const l=document.getElementById('msgwList'); if(l) l.innerHTML=msgwListHTML((document.getElementById('msgwSearch')||{}).value||''); const cl=document.getElementById('contactList'); if(cl) cl.innerHTML=buildContactList((document.getElementById('msgSearch')||{}).value||''); }
 function msgSupChip(){ if(!isSupportUser()) return ''; const n=(MSG_ALL||[]).filter(m=>String(m.para_id)===String(ME.id)&&m.soporte&&!m.leido).length; return `<div style="padding:6px 10px"><button class="cc-filt-btn ${msgSupOnly?'on':''}" style="font-size:12px;padding:5px 10px" onclick="msgToggleSup()">🛟 Soporte${n?` (${n})`:''}</button></div>`; }
 async function toggleChat(){
@@ -5975,38 +5992,38 @@ function msgwRender(){
   if(!msgwWith){
     b.innerHTML=`<div style="padding:8px 10px;border-bottom:1px solid var(--gris2)"><input id="msgwSearch" placeholder="🔍 Buscar persona o palabra…" oninput="msgwRenderList(this.value)" style="width:100%;padding:8px 12px;border:1px solid var(--gris2);border-radius:20px;font-family:inherit;font-size:13px;outline:none"></div><div id="msgwList" style="overflow-y:auto;flex:1">${msgwListHTML('')}</div>`;
   } else {
-    const c=MSG_CONTACTS.find(x=>x.id===msgwWith); const cOn=c&&isOnline(c.last_seen);
-    const thread=MSG_ALL.filter(m=>(m.de_id===ME.id&&m.para_id===msgwWith)||(m.de_id===msgwWith&&m.para_id===ME.id));
+    const _P=convParse(msgwWith);
+    const c=(_P.sup&&!isSupportUser())?null:MSG_CONTACTS.find(x=>String(x.id)===String(_P.uid)); const cOn=c&&isOnline(c.last_seen);
+    const thread=convThread(msgwWith);
     chatLastId=thread.length?Math.max(...thread.map(m=>m.id)):0;
     b.innerHTML=`<div class="msgw-conv-h"><span class="msgw-back" onclick="msgwBack()">←</span><b>${esc(msgwName)}</b>${c?`<small style="color:${cOn?'#1f9d55':'var(--suave)'};font-weight:${cOn?'700':'400'}">${cOn?'En línea':'últ. '+haceTiempo(c.last_seen)}</small>`:''}</div>
       <div class="msgw-thread" id="msgwThread">${threadHTML(thread,'<div style="color:var(--suave);text-align:center;font-size:13px;padding:18px">Aún no hay mensajes. ¡Escribe el primero!</div>')}</div>
       <div class="msgw-in"><div class="emoji-wrap"><button type="button" class="emoji-btn" onclick="msgwToggleEmoji(event)" title="Emojis">😊</button><div id="msgwEmojiPanel" class="emoji-panel"></div></div><label class="emoji-btn" style="cursor:pointer" title="Adjuntar archivo">📎<input type="file" id="msgwFile" style="display:none" onchange="msgwAttach(this)"></label><input id="msgwIn" placeholder="Escribe un mensaje…" onkeydown="if(event.key==='Enter')msgwSend()"><button onclick="msgwSend()">➤</button></div>`;
     setTimeout(()=>{const t=document.getElementById('msgwThread');if(t)t.scrollTop=t.scrollHeight;},20);
-    MSG_ALL.forEach(m=>{ if(m.de_id===msgwWith&&m.para_id===ME.id) m.leido=true; });
-    sb.from('mensajes').update({leido:true}).eq('para_id',ME.id).eq('de_id',msgwWith).eq('leido',false).then(()=>loadMsgUnread());
+    convMarkRead(msgwWith);
   }
 }
 function msgwRenderList(term){ const l=document.getElementById('msgwList'); if(l) l.innerHTML=msgwListHTML(term); }
 function supportPinHTML(openFn,term){
   if(!SUPPORT_UID || String(ME.id)===String(SUPPORT_UID)) return '';
   term=(term||'').toLowerCase(); if(term && !('soporte atencion atención ayuda usuario problema duda'.includes(term))) return '';
-  const conv=MSG_ALL.filter(m=>(m.de_id===ME.id&&m.para_id===SUPPORT_UID)||(m.de_id===SUPPORT_UID&&m.para_id===ME.id));
-  const noLeidos=conv.filter(m=>m.de_id===SUPPORT_UID&&m.para_id===ME.id&&!m.leido).length;
-  return `<div class="mc" style="background:#f1faf4;border-bottom:1px solid #d7ecdd" onclick="${openFn}('${SUPPORT_UID}','🛟 Soporte · Atención al usuario')"><div style="width:34px;height:34px;border-radius:50%;background:#0a8a3f;color:#fff;display:flex;align-items:center;justify-content:center;font-size:17px;flex-shrink:0">🛟</div><div style="overflow:hidden;flex:1"><b style="display:block;font-size:13.5px">Soporte · Atención al usuario</b><small style="color:var(--suave);display:block">¿Dudas o problemas? Escríbenos</small></div>${noLeidos?`<span class="mc-dot">${noLeidos>99?'99+':noLeidos}</span>`:''}</div>`;
+  const _tgt='sup:'+SUPPORT_UID;
+  const conv=convThread(_tgt);
+  const noLeidos=conv.filter(m=>String(m.de_id)===String(SUPPORT_UID)&&!m.leido).length;
+  return `<div class="mc" style="background:#f1faf4;border-bottom:1px solid #d7ecdd" onclick="${openFn}('${_tgt}','🛟 Soporte · Atención al usuario')"><div style="width:34px;height:34px;border-radius:50%;background:#0a8a3f;color:#fff;display:flex;align-items:center;justify-content:center;font-size:17px;flex-shrink:0">🛟</div><div style="overflow:hidden;flex:1"><b style="display:block;font-size:13.5px">Soporte · Atención al usuario</b><small style="color:var(--suave);display:block">¿Dudas o problemas? Escríbenos</small></div>${noLeidos?`<span class="mc-dot">${noLeidos>99?'99+':noLeidos}</span>`:''}</div>`;
 }
 
 function msgwListHTML(term){
   term=(term||'').trim().toLowerCase();
-  const _hide=SUPPORT_UID&&String(ME.id)!==String(SUPPORT_UID); const _src=_hide?MSG_CONTACTS.filter(c=>String(c.id)!==String(SUPPORT_UID)):MSG_CONTACTS;
-  const ord=_src.map(c=>{const conv=MSG_ALL.filter(m=>(m.de_id===ME.id&&m.para_id===c.id)||(m.de_id===c.id&&m.para_id===ME.id));const last=[...conv].reverse()[0];return {c,t:last?new Date(last.created_at).getTime():0};}).sort((a,b)=>b.t-a.t||(a.c.nombre||'').localeCompare(b.c.nombre||'')).map(x=>x.c);
-  const _ord2=(isSupportUser()&&msgSupOnly)?ord.filter(c=>msgHasSupport(c.id)):ord;
-  const rows=_ord2.map(c=>{
-    const conv=MSG_ALL.filter(m=>(m.de_id===ME.id&&m.para_id===c.id)||(m.de_id===c.id&&m.para_id===ME.id));
-    const last=[...conv].reverse()[0];
-    const noLeidos=conv.filter(m=>m.de_id===c.id&&m.para_id===ME.id&&!m.leido).length;
-    if(term && !(c.nombre||'').toLowerCase().includes(term) && !conv.find(m=>(m.texto||'').toLowerCase().includes(term))) return '';
+  let ents=convEntries();
+  if(isSupportUser()&&msgSupOnly) ents=ents.filter(e=>e.sup);
+  const withT=ents.map(e=>{ const conv=convThread(e.target); const last=[...conv].reverse()[0]; return {e,conv,last,t:last?new Date(last.created_at).getTime():0}; })
+    .sort((a,b)=>b.t-a.t||(a.e.nombre||'').localeCompare(b.e.nombre||''));
+  const rows=withT.map(({e,conv,last})=>{
+    const noLeidos=conv.filter(m=>String(m.de_id)===String(e.uid)&&!m.leido).length;
+    if(term && !(e.nombre||'').toLowerCase().includes(term) && !conv.find(m=>(m.texto||'').toLowerCase().includes(term))) return '';
     const sub=last?(last.texto?esc(last.texto):(last.adj_path?'📎 archivo':'—')):'Sin mensajes aún';
-    return `<div class="mc" onclick="msgwOpenConv('${c.id}','${(c.nombre||'').replace(/'/g,"\\'")}')">${avP(c.nombre,c.color,34,c.foto,c.last_seen)}<div style="overflow:hidden;flex:1"><b style="display:block;font-size:13.5px">${isSupportUser()&&msgHasSupport(c.id)?'🛟 ':''}${esc(c.nombre)}</b><small style="color:var(--suave);display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:200px">${sub}</small></div>${noLeidos?`<span class="mc-dot">${noLeidos>99?'99+':noLeidos}</span>`:''}</div>`;
+    return `<div class="mc" onclick="msgwOpenConv('${e.target}','${(e.nombre||'').replace(/'/g,"\\'")}')">${avP(e.nombre,e.color,34,e.foto,e.last_seen)}<div style="overflow:hidden;flex:1"><b style="display:block;font-size:13.5px">${esc(e.nombre)}</b><small style="color:var(--suave);display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:200px">${sub}</small></div>${noLeidos?`<span class="mc-dot">${noLeidos>99?'99+':noLeidos}</span>`:''}</div>`;
   }).filter(Boolean).join('');
   const _pin=supportPinHTML('msgwOpenConv',term); return (msgSupChip()+_pin+rows)||`<div style="padding:16px;color:var(--suave);font-size:13px">${term?'Sin resultados para "'+esc(term)+'"':'No hay otros usuarios todavía.'}</div>`;
 }
@@ -6015,28 +6032,31 @@ function msgwBack(){ msgwWith=null; msgwLoad().then(msgwRender); }
 async function msgwSend(){ if(typeof zonaRO==='function'&&zonaRO('mensajes')){ alert('Tienes esta sección en solo lectura.'); return; }
   const i=document.getElementById('msgwIn'); const t=(i.value||'').trim(); if(!t||!msgwWith) return;
   i.value=''; i.focus();
-  const {data,error}=await sb.from('mensajes').insert({de_id:ME.id,para_id:msgwWith,de_nombre:PROFILE.nombre,para_nombre:msgwName,texto:t,leido:false,...(isSupSend(msgwWith)?{soporte:true}:{})}).select().single();
+  const _P=convParse(msgwWith);
+  const {data,error}=await sb.from('mensajes').insert({de_id:ME.id,para_id:_P.uid,de_nombre:PROFILE.nombre,para_nombre:msgwName,texto:t,leido:false,...(_P.sup?{soporte:true}:{})}).select().single();
   if(error){ alert('Error: '+error.message); i.value=t; return; }
   MSG_ALL.push(data); chatLastId=Math.max(chatLastId,data.id);
   const th=document.getElementById('msgwThread'); if(th){ const tmp=document.createElement('div'); tmp.innerHTML=bubbleHTML(data); if(tmp.firstElementChild){th.appendChild(tmp.firstElementChild);th.scrollTop=th.scrollHeight;} }
 }
 async function msgwPoll(){
   if(!msgwOpen||!msgwWith) return;
-  const {data}=await sb.from('mensajes').select('*').gt('id',chatLastId).or(`and(de_id.eq.${ME.id},para_id.eq.${msgwWith}),and(de_id.eq.${msgwWith},para_id.eq.${ME.id})`).order('created_at');
+  const _P=convParse(msgwWith);
+  const {data}=await sb.from('mensajes').select('*').gt('id',chatLastId).or(`and(de_id.eq.${ME.id},para_id.eq.${_P.uid}),and(de_id.eq.${_P.uid},para_id.eq.${ME.id})`).order('created_at');
   if(data&&data.length){
     let rec=false; const th=document.getElementById('msgwThread');
-    for(const m of data){ MSG_ALL.push(m); chatLastId=Math.max(chatLastId,m.id); if(th){const tmp=document.createElement('div');tmp.innerHTML=bubbleHTML(m);if(tmp.firstElementChild)th.appendChild(tmp.firstElementChild);} if(m.de_id===msgwWith) rec=true; }
+    for(const m of data){ MSG_ALL.push(m); chatLastId=Math.max(chatLastId,m.id); const inTh=(_P.sup?!!m.soporte:!m.soporte); if(inTh){ if(th){const tmp=document.createElement('div');tmp.innerHTML=bubbleHTML(m);if(tmp.firstElementChild)th.appendChild(tmp.firstElementChild);} if(String(m.de_id)===String(_P.uid)) rec=true; } }
     if(th) th.scrollTop=th.scrollHeight;
-    if(rec){ await sb.from('mensajes').update({leido:true}).eq('para_id',ME.id).eq('de_id',msgwWith).eq('leido',false); loadMsgUnread(); }
+    if(rec){ convMarkRead(msgwWith); }
   }
 }
 function msgwToggleEmoji(e){ if(e)e.stopPropagation(); const p=document.getElementById('msgwEmojiPanel'); if(!p)return; if(p.classList.contains('open')){p.classList.remove('open');return;} p.innerHTML=EMOJIS.map(x=>`<button type="button" onclick="msgwAddEmoji(event,'${x}')">${x}</button>`).join(''); p.classList.add('open'); setTimeout(()=>document.addEventListener('click',msgwCloseEmoji),0); }
 function msgwCloseEmoji(){const p=document.getElementById('msgwEmojiPanel');if(p)p.classList.remove('open');document.removeEventListener('click',msgwCloseEmoji);}
 function msgwAddEmoji(e,x){if(e)e.stopPropagation();const i=document.getElementById('msgwIn');if(!i)return;i.value=(i.value||'')+x;i.focus();}
 async function msgwAttach(input){ const f=input.files[0]; input.value=''; if(!f||!msgwWith) return; if(f.size>25*1024*1024){alert('Máximo 25 MB por archivo.');return;}
-  const path=ME.id+'/'+msgwWith+'/'+Date.now()+'_'+f.name.replace(/[^\w.\-]/g,'_'); const up=await sb.storage.from('mensajes').upload(path,f); if(up.error){alert('No se pudo subir: '+up.error.message);return;}
+  const _P=convParse(msgwWith);
+  const path=ME.id+'/'+_P.uid+'/'+Date.now()+'_'+f.name.replace(/[^\w.\-]/g,'_'); const up=await sb.storage.from('mensajes').upload(path,f); if(up.error){alert('No se pudo subir: '+up.error.message);return;}
   const i=document.getElementById('msgwIn'); const txt=(i?i.value:'').trim(); if(i)i.value='';
-  const {data,error}=await sb.from('mensajes').insert({de_id:ME.id,para_id:msgwWith,de_nombre:PROFILE.nombre,para_nombre:msgwName,texto:txt,adj_path:path,adj_nombre:f.name,adj_tipo:f.type,leido:false,...(isSupSend(msgwWith)?{soporte:true}:{})}).select().single();
+  const {data,error}=await sb.from('mensajes').insert({de_id:ME.id,para_id:_P.uid,de_nombre:PROFILE.nombre,para_nombre:msgwName,texto:txt,adj_path:path,adj_nombre:f.name,adj_tipo:f.type,leido:false,...(_P.sup?{soporte:true}:{})}).select().single();
   if(error){alert('Error: '+error.message);return;}
   MSG_ALL.push(data); chatLastId=Math.max(chatLastId,data.id);
   const th=document.getElementById('msgwThread'); if(th){const tmp=document.createElement('div');tmp.innerHTML=bubbleHTML(data);if(tmp.firstElementChild){th.appendChild(tmp.firstElementChild);th.scrollTop=th.scrollHeight;}} }
@@ -6117,13 +6137,10 @@ async function pageMensajeria(){
   const contacts=profs||[];
   const {data:msgs}=await sb.from('mensajes').select('*').order('created_at');
   const MS=msgs||[];
-  if(chatWithId && !contacts.find(c=>c.id===chatWithId)) chatWithId=null;
-  // marcar como leídos los mensajes recibidos de este contacto
-  if(chatWithId){
-    await sb.from('mensajes').update({leido:true}).eq('para_id',ME.id).eq('de_id',chatWithId).eq('leido',false);
-    loadMsgUnread();
-  }
   MSG_CONTACTS=contacts; MSG_ALL=MS; SUPPORT_UID=((contacts.find(c=>c.role==='propietario'))||{}).id||null;
+  if(chatWithId){ const _pt=convParse(chatWithId); if(!contacts.find(c=>String(c.id)===String(_pt.uid))) chatWithId=null; }
+  // marcar como leídos los mensajes recibidos en este hilo (normal o soporte)
+  if(chatWithId){ convMarkRead(chatWithId); }
   const lista=buildContactList('');
   setTimeout(()=>{const t=document.getElementById('msgThread');if(t)t.scrollTop=t.scrollHeight;},40);
   document.getElementById('main').innerHTML=`<div class="page-title">Mensajería interna</div><div class="page-sub">Habla con tus compañeros de equipo</div><div class="msg-layout"><div class="msg-contacts"><div class="msg-search"><input id="msgSearch" placeholder="🔍 Buscar persona o palabra…" oninput="msgSearch(this.value)"></div><div id="contactList">${lista}</div></div><div id="msgConvWrap" style="min-width:0;min-height:0;display:flex;flex-direction:column">${convHTML()}</div></div>`;
@@ -6132,9 +6149,10 @@ async function pageMensajeria(){
 }
 function convHTML(){
   if(!chatWithId) return `<div class="msg-conv" style="align-items:center;justify-content:center;color:var(--suave);font-size:14px">Selecciona un compañero para chatear</div>`;
-  const thread=MSG_ALL.filter(m=>(m.de_id===ME.id&&m.para_id===chatWithId)||(m.de_id===chatWithId&&m.para_id===ME.id));
+  const _P=convParse(chatWithId);
+  const thread=convThread(chatWithId);
   chatLastId = thread.length?Math.max(...thread.map(m=>m.id)):0;
-  const c=MSG_CONTACTS.find(x=>x.id===chatWithId); const cOn=c&&isOnline(c.last_seen);
+  const c=(_P.sup&&!isSupportUser())?null:MSG_CONTACTS.find(x=>String(x.id)===String(_P.uid)); const cOn=c&&isOnline(c.last_seen);
   const estado=c?`<small style="color:${cOn?'#1f9d55':'var(--suave)'};font-weight:${cOn?'700':'400'}">${cOn?'En línea':('últ. vez '+haceTiempo(c.last_seen))}</small>`:'';
   return `<div class="msg-conv"><div style="padding:10px 16px;border-bottom:1px solid var(--gris2);display:flex;flex-direction:column;gap:1px"><b>${esc(chatWithName)}</b>${estado}</div>
       <div class="msg-thread" id="msgThread">${threadHTML(thread,'<div id="msgEmpty" style="color:var(--suave);text-align:center;font-size:13px">Aún no hay mensajes. ¡Escribe el primero!</div>')}</div>
@@ -6169,52 +6187,46 @@ async function descargarAdj(path,nombre){
 async function enviarAdj(input){
   const f=input.files[0]; input.value=''; if(!f||!chatWithId) return;
   if(f.size>25*1024*1024){alert('Máximo 25 MB por archivo.');return;}
-  const path=ME.id+'/'+chatWithId+'/'+Date.now()+'_'+f.name.replace(/[^\w.\-]/g,'_');
+  const _P=convParse(chatWithId);
+  const path=ME.id+'/'+_P.uid+'/'+Date.now()+'_'+f.name.replace(/[^\w.\-]/g,'_');
   const up=await sb.storage.from('mensajes').upload(path,f);
   if(up.error){alert('No se pudo subir: '+up.error.message);return;}
   const i=document.getElementById('msgIn'); const txt=(i?i.value:'').trim(); if(i)i.value='';
-  const{data,error}=await sb.from('mensajes').insert({de_id:ME.id,para_id:chatWithId,de_nombre:PROFILE.nombre,para_nombre:chatWithName,texto:txt,adj_path:path,adj_nombre:f.name,adj_tipo:f.type,leido:false,...(isSupSend(chatWithId)?{soporte:true}:{})}).select().single();
+  const{data,error}=await sb.from('mensajes').insert({de_id:ME.id,para_id:_P.uid,de_nombre:PROFILE.nombre,para_nombre:chatWithName,texto:txt,adj_path:path,adj_nombre:f.name,adj_tipo:f.type,leido:false,...(_P.sup?{soporte:true}:{})}).select().single();
   if(error){alert('Error: '+error.message);return;}
   appendBubble(data);chatLastId=Math.max(chatLastId,data.id);MSG_ALL.push(data);refreshContactList();
 }
 async function pollChat(){
   if(curPage!=='mensajeria' || !chatWithId) return;
-  const filt=`and(de_id.eq.${ME.id},para_id.eq.${chatWithId}),and(de_id.eq.${chatWithId},para_id.eq.${ME.id})`;
+  const _P=convParse(chatWithId);
+  const filt=`and(de_id.eq.${ME.id},para_id.eq.${_P.uid}),and(de_id.eq.${_P.uid},para_id.eq.${ME.id})`;
   const {data}=await sb.from('mensajes').select('*').gt('id',chatLastId).or(filt).order('created_at');
   if(data&&data.length){
     let recibido=false;
-    for(const m of data){ appendBubble(m); chatLastId=Math.max(chatLastId,m.id); MSG_ALL.push(m); if(m.de_id===chatWithId) recibido=true; }
-    if(recibido){ await sb.from('mensajes').update({leido:true}).eq('para_id',ME.id).eq('de_id',chatWithId).eq('leido',false); loadMsgUnread(); }
+    for(const m of data){ chatLastId=Math.max(chatLastId,m.id); MSG_ALL.push(m); const inTh=(_P.sup?!!m.soporte:!m.soporte); if(inTh){ appendBubble(m); if(String(m.de_id)===String(_P.uid)) recibido=true; } }
+    if(recibido){ convMarkRead(chatWithId); }
     refreshContactList();
   }
   // actualizar el "Visto" de mis mensajes cuando el otro los lee
-  const {data:seen}=await sb.from('mensajes').select('id').eq('de_id',ME.id).eq('para_id',chatWithId).eq('leido',true);
+  const {data:seen}=await sb.from('mensajes').select('id').eq('de_id',ME.id).eq('para_id',_P.uid).eq('leido',true);
   (seen||[]).forEach(r=>{const el=document.getElementById('mseen_'+r.id);if(el&&el.textContent!=='✓✓ Visto')el.textContent='✓✓ Visto';});
 }
 let MSG_CONTACTS=[], MSG_ALL=[];
 function buildContactList(term){
   term=(term||'').trim().toLowerCase();
-  // Ordenar por conversación más reciente (los que tienen mensajes, arriba)
-  const _hide=SUPPORT_UID&&String(ME.id)!==String(SUPPORT_UID); const _src=_hide?MSG_CONTACTS.filter(c=>String(c.id)!==String(SUPPORT_UID)):MSG_CONTACTS;
-  const ordenados=_src.map(c=>{
-    const conv=MSG_ALL.filter(m=>(m.de_id===ME.id&&m.para_id===c.id)||(m.de_id===c.id&&m.para_id===ME.id));
-    const last=[...conv].reverse()[0];
-    return {c, t: last?new Date(last.created_at).getTime():0};
-  }).sort((a,b)=> b.t - a.t || (a.c.nombre||'').localeCompare(b.c.nombre||'')).map(x=>x.c);
-  const _ord2=(isSupportUser()&&msgSupOnly)?ordenados.filter(c=>msgHasSupport(c.id)):ordenados;
-  const rows=_ord2.map(c=>{
-    const conv=MSG_ALL.filter(m=>(m.de_id===ME.id&&m.para_id===c.id)||(m.de_id===c.id&&m.para_id===ME.id));
-    const last=[...conv].reverse()[0];
-    const noLeidos=conv.filter(m=>m.de_id===c.id&&m.para_id===ME.id&&!m.leido).length;
+  let ents=convEntries();
+  if(isSupportUser()&&msgSupOnly) ents=ents.filter(e=>e.sup);
+  const withT=ents.map(e=>{ const conv=convThread(e.target); const last=[...conv].reverse()[0]; return {e,conv,last,t:last?new Date(last.created_at).getTime():0}; })
+    .sort((a,b)=> b.t - a.t || (a.e.nombre||'').localeCompare(b.e.nombre||''));
+  const rows=withT.map(({e,conv,last})=>{
+    const noLeidos=conv.filter(m=>String(m.de_id)===String(e.uid)&&!m.leido).length;
     const dot=noLeidos>0?`<span class="mc-dot">${noLeidos>99?'99+':noLeidos}</span>`:'';
-    // ¿coincide con la búsqueda? por nombre o por contenido de algún mensaje
-    const nameHit=(c.nombre||'').toLowerCase().includes(term);
+    const nameHit=(e.nombre||'').toLowerCase().includes(term);
     const msgHit=term?conv.find(m=>(m.texto||'').toLowerCase().includes(term)):null;
     if(term && !nameHit && !msgHit) return '';
-    // si la búsqueda coincide con un mensaje, muestro ese fragmento
     const preview=m=>m?(m.texto?esc(m.texto):(m.adj_path?'📎 '+esc(m.adj_nombre||'archivo'):'—')):'—';
     const sub=(term && msgHit)?esc(msgHit.texto):preview(last);
-    return `<div class="mc ${c.id===chatWithId?'on':''}" onclick="openChat('${c.id}','${(c.nombre||'').replace(/'/g,"\\'")}')">${avP(c.nombre,c.color,34,c.foto,c.last_seen)}<div style="overflow:hidden"><b style="display:block">${isSupportUser()&&msgHasSupport(c.id)?'🛟 ':''}${esc(c.nombre)}</b><small style="color:var(--suave);display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:170px">${sub}</small></div>${dot}</div>`;
+    return `<div class="mc ${e.target===chatWithId?'on':''}" onclick="openChat('${e.target}','${(e.nombre||'').replace(/'/g,"\\'")}')">${avP(e.nombre,e.color,34,e.foto,e.last_seen)}<div style="overflow:hidden"><b style="display:block">${esc(e.nombre)}</b><small style="color:var(--suave);display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:170px">${sub}</small></div>${dot}</div>`;
   }).filter(Boolean).join('');
   const _pin=supportPinHTML('openChat',term); const _sc=msgSupChip(); if(!rows&&!_pin&&!_sc) return `<div style="padding:14px;color:var(--suave);font-size:13px">${term?'Sin resultados para "'+esc(term)+'"':'No hay otros usuarios todavía.'}</div>`;
   return _sc+_pin+rows;
@@ -6224,18 +6236,17 @@ async function openChat(id,name){
   chatWithId=id; chatWithName=name;
   const wrap=document.getElementById('msgConvWrap');
   if(!wrap){ show('mensajeria'); return; }
-  // marcar leídos en memoria y refrescar solo el panel + la lista (sin recargar todo)
-  MSG_ALL.forEach(m=>{ if(m.de_id===id && m.para_id===ME.id) m.leido=true; });
+  // marcar leídos (en memoria + BD) solo del hilo abierto (normal o soporte)
+  convMarkRead(chatWithId);
   wrap.innerHTML=convHTML();
   setTimeout(()=>{const t=document.getElementById('msgThread');if(t)t.scrollTop=t.scrollHeight;},20);
   refreshContactList();
-  const{error}=await sb.from('mensajes').update({leido:true}).eq('para_id',ME.id).eq('de_id',id).eq('leido',false);
-  if(!error) loadMsgUnread();
 }
 async function sendMsg(){
   const i=document.getElementById('msgIn');const t=(i.value||'').trim();if(!t||!chatWithId)return;
   i.value='';i.focus();
-  const{data,error}=await sb.from('mensajes').insert({de_id:ME.id,para_id:chatWithId,de_nombre:PROFILE.nombre,para_nombre:chatWithName,texto:t,leido:false,...(isSupSend(chatWithId)?{soporte:true}:{})}).select().single();
+  const _P=convParse(chatWithId);
+  const{data,error}=await sb.from('mensajes').insert({de_id:ME.id,para_id:_P.uid,de_nombre:PROFILE.nombre,para_nombre:chatWithName,texto:t,leido:false,...(_P.sup?{soporte:true}:{})}).select().single();
   if(error){alert('Error: '+error.message);i.value=t;return;}
   appendBubble(data);chatLastId=Math.max(chatLastId,data.id);MSG_ALL.push(data);
   refreshContactList();
