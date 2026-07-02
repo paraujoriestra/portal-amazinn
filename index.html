@@ -6331,6 +6331,14 @@ function incVencida(i){ if(['terminada','cancelada'].includes(i.estado))return f
 function incMoney(n){ const v=Number(n); return isNaN(v)?'—':('$'+v.toLocaleString('es-ES',{minimumFractionDigits:0,maximumFractionDigits:2})); }
 function incCan(){ if(typeof zonaRO==='function'&&zonaRO('incidencias')) return false; if(candadoPanel('incidencias')) return navItemAllowed('incidencias'); return CAN_MANAGE.includes(PROFILE.role); }
 function incEsMant(){ return PROFILE.dept==='Mantenimiento' || incCan(); }
+/* ¿Fui YO quien realizó/resolvió esta incidencia? (para poder reabrir y corregir SOLO la mía) */
+function incMineDone(i){ if(!i) return false;
+  if(i.tomada_por!=null && String(i.tomada_por)===String(ME.id)) return true;
+  const mine=(PROFILE.nombre||'').trim(); if(!mine) return false;
+  const arr=Array.isArray(i.realizadores)?i.realizadores:[];
+  if(arr.map(x=>(''+x).trim()).includes(mine)) return true;
+  const rp=(''+(i.resuelto_por_nombre||'')).split(/[,;]+/).map(x=>x.trim());
+  return rp.includes(mine); }
 // Quién puede CREAR/EDITAR/BORRAR mantenimientos preventivos:
 // admin/propietario, Director del área Operaciones, o Responsable del depto. Mantenimiento.
 function prevCanManage(){ if(typeof zonaRO==='function'&&zonaRO('preventivo')) return false; if(isAdmin())return true; if(candadoPanel('preventivo')) return navItemAllowed('preventivo'); const role=PROFILE.role, dept=(PROFILE.dept||''); if(role==='direccion')return true; if(role==='responsable'&&dept==='Mantenimiento')return true; return false; }
@@ -6954,7 +6962,7 @@ function renderIncDetail(id){
        ${(i.coste!=null&&i.coste!=='')?`<div class="inc-kv"><b>Coste:</b> ${incMoney(i.coste)}${i.proveedor?' · '+esc(i.proveedor):''}</div>`:''}
        ${i.nota_solucion?`<div class="inc-kv"><b>Nota:</b> ${esc(i.nota_solucion)}</div>`:''}
        <h3 class="inc-h3">📷 Fotos de la solución</h3>${galeria(fs,'Sin fotos de solución.')}
-       ${puedeEditar?`<div style="margin-top:14px"><button class="btn-sm" onclick="incReabrir(${i.id})">🔄 Reabrir incidencia</button></div>`:''}</div>` : '')
+       ${(puedeEditar||incMineDone(i))?`<div style="margin-top:14px"><button class="btn-sm" onclick="incReabrir(${i.id})">🔄 Reabrir incidencia</button>${(!puedeEditar&&incMineDone(i))?'<div style="font-size:12px;color:var(--suave);margin-top:6px">¿Te equivocaste al completarla? Reábrela para corregir el tiempo, la nota, las fotos o el coste, y vuelve a marcarla como terminada.</div>':''}</div>`:''}</div>` : '')
   + ( puedeTomar? `<div class="panel"><button class="btn-ok" onclick="incTomar(${i.id})">✋ Tomar esta incidencia</button></div>`:'')
   + ( puedeTrabajar? `<div class="panel">
        <h3 class="inc-h3">🛠 Ejecutar y resolver</h3>
