@@ -5777,6 +5777,7 @@ function bitTeam(arr){
 }
 function bitMine(b){ return (b.autor_id&&String(b.autor_id)===String(ME.id))||(!b.autor_id&&b.autor_nombre===PROFILE.nombre); }
 function bitFmt(b){ return b.fecha?new Date(b.fecha+'T00:00:00').toLocaleDateString('es-ES',{day:'2-digit',month:'short',year:'numeric'}):(b.created_at?new Date(b.created_at).toLocaleDateString('es-ES'):''); }
+function bitIsToday(b){ const f=b.fecha||((b.created_at||'').slice(0,10)); return f===hoyISO(); }
 async function pageBitacora(){
   asgEnsureStyle();
   const [pe,bi,pf]=await Promise.all([
@@ -5793,9 +5794,9 @@ async function pageBitacora(){
     ? `<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:14px"><label style="font-size:13px;font-weight:600;color:var(--suave)">👥 Equipo:</label><select onchange="bitEquipo=this.value;show('bitacora')" style="padding:8px 11px;border:1px solid var(--gris2);border-radius:8px;font-family:inherit;font-size:13.5px"><option value="">Todos los equipos</option>${equiposAll.map(e=>`<option ${bitEquipo===e?'selected':''}>${esc(e)}</option>`).join('')}</select></div>`
     : (myTeamsList().length?`<div style="margin-bottom:12px"><span style="background:#eef2f7;color:#34557a;padding:4px 11px;border-radius:20px;font-size:12px;font-weight:700">👥 Equipo${myTeamsList().length>1?'s':''}: ${esc(myTeamsList().join(', '))}</span></div>`:'');
   const tabs=`<div class="tabs">
-    <button class="${bitTab==='pendientes'?'on':''}" onclick="setBitTab('pendientes')">📋 Pendientes${nOpen?` (${nOpen})`:''}</button>
-    <button class="${bitTab==='bitacoras'?'on':''}" onclick="setBitTab('bitacoras')">📓 Diario de turnos</button></div>
-    <div style="background:var(--azul-claro,#eef4fb);border-radius:10px;padding:9px 13px;font-size:12.5px;color:#34557a;margin:0 0 14px">${bitTab==='pendientes'?'📋 <b>Pendientes</b>: tareas que un turno deja al siguiente. Márcalas como realizadas al completarlas.':'📓 <b>Diario de turnos</b>: cada turno deja aquí su bitácora (cómo fue, incidencias) y los pendientes para el siguiente compañero.'}</div>`;
+    <button class="${bitTab==='bitacoras'?'on':''}" onclick="setBitTab('bitacoras')">📓 Historial bitácoras</button>
+    <button class="${bitTab==='pendientes'?'on':''}" onclick="setBitTab('pendientes')">📋 Pendientes${nOpen?` (${nOpen})`:''}</button></div>
+    <div style="background:var(--azul-claro,#eef4fb);border-radius:10px;padding:9px 13px;font-size:12.5px;color:#34557a;margin:0 0 14px">${bitTab==='pendientes'?'📋 <b>Pendientes</b>: tareas que un turno deja al siguiente. Márcalas como realizadas al completarlas.':'📓 <b>Historial bitácoras</b>: cada turno deja aquí su bitácora (cómo fue, incidencias) y los pendientes para el siguiente compañero.'}</div>`;
   let body;
   if(bitFormOpen) body=bitForm();
   else if(bitView!=null) body=bitDetail(bitView);
@@ -5826,19 +5827,28 @@ function bitListRowsHTML(){
   const q=bitSearch.trim().toLowerCase();
   const list=q?BITS.filter(b=>((b.autor_nombre||'')+' '+(b.resumen||'')+' '+(b.turno||'')).toLowerCase().includes(q)):BITS;
   if(!list.length) return `<div class="panel" style="color:var(--suave)">${q?'Sin resultados para esa búsqueda.':'Aún no hay bitácoras. Crea la primera con «+ Nueva bitácora».'}</div>`;
-  const cards=list.map(b=>{ const mine=bitMine(b);
+  const cardHTML=b=>{ const mine=bitMine(b);
     const np=PENS.filter(p=>String(p.bitacora_id)===String(b.id)).length;
     const npo=PENS.filter(p=>String(p.bitacora_id)===String(b.id)&&p.estado!=='realizado').length;
     const col=BIT_TURNO_COL[b.turno]||'#7f8c8d';
+    const today=bitIsToday(b);
+    const bg=today?'#f2fbf5':'#fff'; const bd=today?'#bfe7c4':'var(--gris2)';
+    const hoyBadge=today?'<span style="background:#1e8a5a;color:#fff;padding:2px 9px;border-radius:20px;font-size:10px;font-weight:800;letter-spacing:.3px">🟢 HOY</span>':'';
     const prev=(b.resumen||'').replace(/\s+/g,' ').trim();const snip=prev.length>150?prev.slice(0,150)+'…':prev;
     const pend = np?`<span style="display:inline-flex;align-items:center;gap:5px;font-size:11.5px;font-weight:700;padding:3px 10px;border-radius:20px;background:${npo?'#fdf3e2':'#e4f5ec'};color:${npo?'#b9770e':'#1e8a5a'}">${npo?`🟠 ${npo} pendiente${npo>1?'s':''}`:'✅ pendientes hechos'}</span>`:'<span style="font-size:11.5px;color:var(--suave)">Sin pendientes</span>';
     const kebab=(mine||isAdmin())?`<details class="asg-kebab" onclick="event.stopPropagation()" style="flex-shrink:0"><summary>⋮</summary><div class="asg-kebab-menu">${mine?`<button onclick="bitEdit(${b.id})">✏️ Editar</button>`:''}<button onclick="bitDelete(${b.id})" style="color:#c0392b">🗑 Eliminar</button></div></details>`:'';
-    return `<div onclick="bitOpen(${b.id})" style="cursor:pointer;background:#fff;border:1px solid var(--gris2);border-left:5px solid ${col};border-radius:12px;padding:14px 16px;transition:box-shadow .15s,transform .12s" onmouseover="this.style.boxShadow='0 6px 18px rgba(0,0,0,.09)';this.style.transform='translateY(-2px)'" onmouseout="this.style.boxShadow='';this.style.transform=''">
-      <div style="display:flex;align-items:center;gap:10px">${bitAvatar(b.autor_nombre,BIT_COLORS[b.autor_nombre])}<div style="flex:1;min-width:0"><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><b>${esc(b.autor_nombre||'—')}</b>${bitTurnoBadge(b.turno)}${bitCanAllTeams()?bitEquipoBadge(b.equipo):''}</div><div style="font-size:12px;color:var(--suave);margin-top:2px">📅 ${bitFmt(b)}${b.editor_nombre?' · editada':''}</div></div>${kebab}</div>
+    return `<div onclick="bitOpen(${b.id})" style="cursor:pointer;background:${bg};border:1px solid ${bd};border-left:5px solid ${col};border-radius:12px;padding:14px 16px;transition:box-shadow .15s,transform .12s" onmouseover="this.style.boxShadow='0 6px 18px rgba(0,0,0,.09)';this.style.transform='translateY(-2px)'" onmouseout="this.style.boxShadow='';this.style.transform=''">
+      <div style="display:flex;align-items:center;gap:10px">${bitAvatar(b.autor_nombre,BIT_COLORS[b.autor_nombre])}<div style="flex:1;min-width:0"><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><b>${esc(b.autor_nombre||'—')}</b>${bitTurnoBadge(b.turno)}${hoyBadge}${bitCanAllTeams()?bitEquipoBadge(b.equipo):''}</div><div style="font-size:12px;color:var(--suave);margin-top:2px">📅 ${bitFmt(b)}${b.editor_nombre?' · editada':''}</div></div>${kebab}</div>
       ${snip?`<div style="font-size:13.5px;color:#3a4654;margin-top:10px;line-height:1.55">${esc(snip)}</div>`:'<div style="font-size:13px;color:var(--suave);margin-top:10px;font-style:italic">(sin resumen)</div>'}
       <div style="margin-top:12px;display:flex;align-items:center;justify-content:space-between;gap:8px">${pend}<span style="font-size:12px;color:var(--azul);font-weight:600">Abrir →</span></div>
-    </div>`; }).join('');
-  return `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px">${cards}</div>`;
+    </div>`; };
+  const hoy=list.filter(bitIsToday), ant=list.filter(b=>!bitIsToday(b));
+  const grid=arr=>`<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px">${arr.map(cardHTML).join('')}</div>`;
+  const hdr=(txt,color,bg)=>`<div style="display:inline-flex;align-items:center;gap:7px;font-size:11.5px;font-weight:800;letter-spacing:.4px;color:${color};background:${bg};padding:4px 12px;border-radius:20px;margin:2px 0 10px">${txt}</div>`;
+  let out='';
+  if(hoy.length) out+=hdr('🟢 HOY · '+hoy.length,'#1e6b3a','#e4f5ec')+grid(hoy);
+  if(ant.length) out+=(hoy.length?'<div style="height:20px"></div>':'')+hdr('🗂️ DÍAS ANTERIORES · '+ant.length,'#5a6b7a','#eef2f7')+grid(ant);
+  return out;
 }
 function bitRerenderList(){const el=document.getElementById('bitListPanel');if(el)el.innerHTML=bitListRowsHTML();}
 function bitRenderList(){
