@@ -1280,17 +1280,17 @@ function lblD(x){const ds=['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'],ms=['ene
 function isWk(x){return x.getDay()===0||x.getDay()===6;}
 let horTab='mi', horOtherDept=null, horEditDept=null, horOtherEquipo='';
 let horHistDept='', horHistEq='';
-let ACCESS_DENY=new Set(), ACCESS_GRANT=new Set(), ACCESS_VIEW=new Set(), ACCESS_PDENY=new Set(), ACCESS_PGRANT=new Set(), ACCESS_PVIEW=new Set(); let ZONA_RO=false;
+let ACCESS_DENY=new Set(), ACCESS_GRANT=new Set(), ACCESS_VIEW=new Set(), ACCESS_CREAR=new Set(), ACCESS_PDENY=new Set(), ACCESS_PGRANT=new Set(), ACCESS_PVIEW=new Set(), ACCESS_PCREAR=new Set(); let ZONA_RO=false;
 const PERM_V2=true;
 const ZONA_SISTEMA=['auditoria','permisos','registros','admin','backup'];
 function meId(){ try{ if(typeof ME!=='undefined' && ME && ME.id) return ME.id; }catch(e){} return (typeof PROFILE!=='undefined'&&PROFILE&&PROFILE.id)||''; }
-async function loadAccesos(){ ACCESS_DENY=new Set(); ACCESS_GRANT=new Set(); ACCESS_VIEW=new Set(); ACCESS_PDENY=new Set(); ACCESS_PGRANT=new Set(); ACCESS_PVIEW=new Set(); if(isOwner()) return;
+async function loadAccesos(){ ACCESS_DENY=new Set(); ACCESS_GRANT=new Set(); ACCESS_VIEW=new Set(); ACCESS_CREAR=new Set(); ACCESS_PDENY=new Set(); ACCESS_PGRANT=new Set(); ACCESS_PVIEW=new Set(); ACCESS_PCREAR=new Set(); if(isOwner()) return;
   const nivelDe=r=> r.nivel || (r.visible===false?'none':'full');
   try{ const {data,error}=await sb.from('accesos').select('item_id,visible,nivel').eq('dept',PROFILE.dept||'').eq('role',PROFILE.role); if(error) throw error;
-    (data||[]).forEach(r=>{ const n=nivelDe(r); if(n==='none') ACCESS_DENY.add(r.item_id); else if(n==='view') ACCESS_VIEW.add(r.item_id); else ACCESS_GRANT.add(r.item_id); }); }
+    (data||[]).forEach(r=>{ const n=nivelDe(r); if(n==='none') ACCESS_DENY.add(r.item_id); else if(n==='view') ACCESS_VIEW.add(r.item_id); else if(n==='crear') ACCESS_CREAR.add(r.item_id); else ACCESS_GRANT.add(r.item_id); }); }
   catch(e){ try{ const {data}=await sb.from('accesos').select('item_id,visible').eq('dept',PROFILE.dept||'').eq('role',PROFILE.role); (data||[]).forEach(r=>{ if(r.visible===false) ACCESS_DENY.add(r.item_id); else ACCESS_GRANT.add(r.item_id); }); }catch(_){} }
   try{ const {data,error}=await sb.from('acceso_persona').select('item_id,visible,nivel').eq('user_id',meId()); if(error) throw error;
-    (data||[]).forEach(r=>{ const n=nivelDe(r); if(n==='none') ACCESS_PDENY.add(r.item_id); else if(n==='view') ACCESS_PVIEW.add(r.item_id); else ACCESS_PGRANT.add(r.item_id); }); }
+    (data||[]).forEach(r=>{ const n=nivelDe(r); if(n==='none') ACCESS_PDENY.add(r.item_id); else if(n==='view') ACCESS_PVIEW.add(r.item_id); else if(n==='crear') ACCESS_PCREAR.add(r.item_id); else ACCESS_PGRANT.add(r.item_id); }); }
   catch(e){ try{ const {data}=await sb.from('acceso_persona').select('item_id,visible').eq('user_id',meId()); (data||[]).forEach(r=>{ if(r.visible===false) ACCESS_PDENY.add(r.item_id); else ACCESS_PGRANT.add(r.item_id); }); }catch(_){} } }
 function pagosCanFor(p){ const role=p&&p.role; if(role==='admin'||role==='propietario') return true; const a=(p&&p.area)||'',d=(p&&p.dept)||''; if(a==='Finanzas'||d==='Finanzas') return true; if(role==='direccion') return true; return false; }
 function accDefaultVisibleFor(p, it){
@@ -1309,16 +1309,23 @@ function navAllowed(it){
   if(isOwner()) return true;
   if(typeof isProvider==='function' && isProvider()) return !!(it.id && PROV_NAV_OK.includes(it.id));
   if(typeof isConductor==='function' && isConductor()) return !!(it.id && CONDUCTOR_NAV_OK.includes(it.id));
-  if(it.id){ if(ACCESS_PDENY.has(it.id)) return false; if(ACCESS_PGRANT.has(it.id)||ACCESS_PVIEW.has(it.id)) return true; if(ACCESS_DENY.has(it.id)) return false; if(ACCESS_GRANT.has(it.id)||ACCESS_VIEW.has(it.id)) return true; }
+  if(it.id){ if(ACCESS_PDENY.has(it.id)) return false; if(ACCESS_PGRANT.has(it.id)||ACCESS_PVIEW.has(it.id)||ACCESS_PCREAR.has(it.id)) return true; if(ACCESS_DENY.has(it.id)) return false; if(ACCESS_GRANT.has(it.id)||ACCESS_VIEW.has(it.id)||ACCESS_CREAR.has(it.id)) return true; }
   return accDefaultVisible(it);
 }
 function navItemAllowed(id){ const it=NAV.find(n=>n.id===id); return it? navAllowed(it) : true; }
 function nivelZona(id){ if(isOwner()) return 'full';
-  if(ACCESS_PDENY.has(id)) return 'none'; if(ACCESS_PVIEW.has(id)) return 'view'; if(ACCESS_PGRANT.has(id)) return 'full';
-  if(ACCESS_DENY.has(id)) return 'none'; if(ACCESS_VIEW.has(id)) return 'view'; if(ACCESS_GRANT.has(id)) return 'full';
+  if(ACCESS_PDENY.has(id)) return 'none'; if(ACCESS_PVIEW.has(id)) return 'view'; if(ACCESS_PCREAR.has(id)) return 'crear'; if(ACCESS_PGRANT.has(id)) return 'full';
+  if(ACCESS_DENY.has(id)) return 'none'; if(ACCESS_VIEW.has(id)) return 'view'; if(ACCESS_CREAR.has(id)) return 'crear'; if(ACCESS_GRANT.has(id)) return 'full';
   const it=NAV.find(n=>n.id===id); return (it && accDefaultVisible(it)) ? 'full' : 'none'; }
-function zonaRO(id){ return nivelZona(id)==='view'; }
-function puedeEditar(id){ return !zonaRO(id); }
+/* Niveles: none < view < crear < full.
+   - view  : entra pero NO crea/edita/borra.
+   - crear : entra y CREA; edita/borra SOLO lo suyo.
+   - full  : entra y crea/edita/borra TODO. */
+function zonaRO(id){ const n=nivelZona(id); return n==='view'||n==='crear'; } // "no edita libremente" (se mantiene por compatibilidad; en 'crear' la creación se gestiona con puedeCrearZona)
+function puedeCrearZona(id){ const n=nivelZona(id); return n==='crear'||n==='full'; }
+function zonaManage(id){ return nivelZona(id)==='full'; }            // edita/borra CUALQUIER registro
+function puedeEditarItem(id, esPropio){ const n=nivelZona(id); if(n==='full') return true; if(n==='crear') return !!esPropio; return false; }
+function puedeEditar(id){ return zonaManage(id); }
 function navGroups(){
   const groups=[]; let cur=null;
   NAV.forEach(it=>{
@@ -4628,7 +4635,7 @@ function ccAddGasto(){ ccSyncGastos(); ccGastos.push({monto:'',motivo:'',just:fa
 function ccDelGasto(i){ ccSyncGastos(); ccGastos.splice(i,1); const b=document.getElementById('ccGastosBox'); if(b)b.innerHTML=ccGastosRows(); try{ccCalc();}catch(e){} }
 function ccM(n){ return '$'+((parseFloat(n)||0).toFixed(2)); }
 function ccAllowedNow(){ return navItemAllowed('cierres'); }
-function ccCan(){ if(typeof zonaRO==='function' && zonaRO('cierres')) return false; return ccAllowedNow(); }
+function ccCan(){ return ccAllowedNow() && puedeCrearZona('cierres'); }
 /* Arqueo por denominación con TIPO (b=billete, m=moneda) para que el billete de $1
    y la moneda de $1 no compartan id ni clave. id DOM: cc_d_<tipo>_<valor>; clave guardada: <tipo>_<valor>. */
 const CC_DENOMS=[['b',100],['b',50],['b',20],['b',10],['b',5],['b',1],['m',1],['m',0.50],['m',0.25],['m',0.10],['m',0.05],['m',0.01]];
@@ -4648,8 +4655,8 @@ function ccArqPrefill(ed,tipo,v){ if(!ed||!ed.arqueo) return ''; const arq=ed.ar
 function ccSetTab(t){ ccEditId=null; ccEditRec=null; ccTab=t; ccView=null; if(t==='nuevo'){ccGastos=[];ccLugar='';} show('cierres'); }
 function ccOpen(id){ ccView=id; show('cierres'); }
 function ccBack(){ ccView=null; ccEditId=null; ccEditRec=null; show('cierres'); }
-function ccEditar(id){ if(typeof zonaRO==='function'&&zonaRO('cierres')){ alert('Tienes esta sección en solo lectura.'); return; } if(!isDireccion()){ alert('Solo Dirección puede editar cierres.'); return; } const c=CCAJA.find(x=>String(x.id)===String(id)); if(!c){ alert('Cierre no encontrado.'); return; } ccEditId=id; ccEditRec=c; ccLugar=c.lugar||''; ccGastos=(Array.isArray(c.gastos_items)?c.gastos_items:[]).map(x=>({monto:x.monto,motivo:x.motivo||'',just:!!x.justificante})); ccView=null; ccTab='nuevo'; show('cierres'); }
-async function ccEliminar(id){ if(typeof zonaRO==='function'&&zonaRO('cierres')){ alert('Tienes esta sección en solo lectura.'); return; } if(!isDireccion()){ alert('Solo Dirección puede eliminar cierres.'); return; } const c=CCAJA.find(x=>String(x.id)===String(id))||{}; if(!confirm('¿Eliminar el cierre de '+(c.lugar||'')+' del '+fechaLarga(c.fecha||'')+(c.turno?(' · '+c.turno):'')+'?\n\nQuedará registrado en Auditoría.')) return; const{error}=await sb.from('cierres_caja').delete().eq('id',id); if(error){ alert('No se pudo eliminar: '+error.message); return; } try{ await auditLog('🗑 Eliminó el cierre de caja · '+(c.lugar||'')+' · '+(c.fecha||'')+(c.turno?(' · '+c.turno):'')+' · ventas '+ccM(c.ventas_total||0),'cierres'); }catch(_e){} toast('✓ Cierre eliminado'); ccView=null; ccEditId=null; ccEditRec=null; ccTab='historial'; show('cierres'); }
+function ccEditar(id){ if(nivelZona('cierres')==='view'){ alert('Tienes esta sección en solo lectura.'); return; } const c=CCAJA.find(x=>String(x.id)===String(id)); if(!c){ alert('Cierre no encontrado.'); return; } const esPropio=String(c.creado_por||'')===String(ME.id); if(!(isDireccion()||puedeEditarItem('cierres',esPropio))){ alert('Solo puedes editar tu propio cierre de caja.'); return; } ccEditId=id; ccEditRec=c; ccLugar=c.lugar||''; ccGastos=(Array.isArray(c.gastos_items)?c.gastos_items:[]).map(x=>({monto:x.monto,motivo:x.motivo||'',just:!!x.justificante})); ccView=null; ccTab='nuevo'; show('cierres'); }
+async function ccEliminar(id){ if(nivelZona('cierres')==='view'){ alert('Tienes esta sección en solo lectura.'); return; } const c=CCAJA.find(x=>String(x.id)===String(id))||{}; const esPropio=String(c.creado_por||'')===String(ME.id); if(!(isDireccion()||puedeEditarItem('cierres',esPropio))){ alert('Solo puedes eliminar tu propio cierre de caja.'); return; } if(!confirm('¿Eliminar el cierre de '+(c.lugar||'')+' del '+fechaLarga(c.fecha||'')+(c.turno?(' · '+c.turno):'')+'?\n\nQuedará registrado en Auditoría.')) return; const{error}=await sb.from('cierres_caja').delete().eq('id',id); if(error){ alert('No se pudo eliminar: '+error.message); return; } try{ await auditLog('🗑 Eliminó el cierre de caja · '+(c.lugar||'')+' · '+(c.fecha||'')+(c.turno?(' · '+c.turno):'')+' · ventas '+ccM(c.ventas_total||0),'cierres'); }catch(_e){} toast('✓ Cierre eliminado'); ccView=null; ccEditId=null; ccEditRec=null; ccTab='historial'; show('cierres'); }
 function ccToggleFilt(){ ccFiltOpen=!ccFiltOpen; show('cierres'); }
 function ccSetFilt(k,v){ if(k==='from')ccFrom=v; else ccTo=v; show('cierres'); }
 function ccClearFilt(){ ccFrom=''; ccTo=''; show('cierres'); }
@@ -4835,7 +4842,10 @@ function ccCalc(){
     <div style="display:flex;justify-content:space-between;padding:8px 0 0;font-size:15px;font-weight:800;color:${col};border-top:1px dashed var(--gris2);margin-top:4px"><span>${lbl}</span><span>${dif>0?'+':''}${ccM(dif)}</span></div>
   </div>`;
 }
-async function ccSave(){ if(typeof zonaRO==='function' && zonaRO('cierres')){ alert('Tienes esta sección en solo lectura.'); return; }
+async function ccSave(){
+  if(nivelZona('cierres')==='view'){ alert('Tienes esta sección en solo lectura.'); return; }
+  if(!ccEditId && !puedeCrearZona('cierres')){ alert('No tienes permiso para crear cierres.'); return; }
+  if(ccEditId){ const _c=CCAJA.find(x=>String(x.id)===String(ccEditId))||{}; const _prop=String(_c.creado_por||'')===String(ME.id); if(!(isDireccion()||puedeEditarItem('cierres',_prop))){ alert('Solo puedes editar tu propio cierre de caja.'); return; } }
   const g=id=>(document.getElementById(id)||{}).value;
   const gn=id=>parseFloat((document.getElementById(id)||{}).value)||0;
   const lugar=g('cc_lugar')||ccLugar||'';
@@ -4876,7 +4886,8 @@ function ccDetail(id){
     ? `<h3 class="inc-h3">Gastos de efectivo</h3>${items.map(x=>`<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:13.5px;padding:2px 0"><span>${esc(x.motivo||'Gasto')} ${x.justificante?'<span style="color:#1e8a5a;font-size:11px">✓ justificante</span>':'<span style="color:#c0392b;font-size:11px">⚠ sin justificante</span>'}</span><b>−${ccM(x.monto)}</b></div>`).join('')}`
     : ((parseFloat(c.gastos)||0)?`<h3 class="inc-h3">Gastos de efectivo</h3><div style="display:flex;justify-content:space-between;font-size:13.5px"><span>${esc(c.gastos_motivo||'Gastos')}</span><b>−${ccM(c.gastos)}</b></div>`:'');
   const reg=c.created_at?new Date(c.created_at).toLocaleString('es-ES'):'';
-  return `<div style="margin-bottom:14px;display:flex;gap:10px;flex-wrap:wrap;align-items:center"><button onclick="ccBack()" style="background:none;border:none;color:var(--azul);font-weight:600;font-size:14px;cursor:pointer;font-family:inherit;padding:6px 4px">← Volver al listado</button>${isDireccion()?`<button class="btn ghost" style="margin-left:auto" onclick="ccEditar(${c.id})">✏️ Editar</button><button class="btn ghost" style="color:#c0392b;border-color:#e7b3b3" onclick="ccEliminar(${c.id})">🗑 Eliminar</button><button class="btn" onclick="ccPDF()">🖨️ PDF</button>`:`<button class="btn" onclick="ccPDF()" style="margin-left:auto">🖨️ Imprimir / PDF</button>`}</div>
+  const ccPuedeMod = nivelZona('cierres')!=='view' && (isDireccion()||puedeEditarItem('cierres', String(c.creado_por||'')===String(ME.id)));
+  return `<div style="margin-bottom:14px;display:flex;gap:10px;flex-wrap:wrap;align-items:center"><button onclick="ccBack()" style="background:none;border:none;color:var(--azul);font-weight:600;font-size:14px;cursor:pointer;font-family:inherit;padding:6px 4px">← Volver al listado</button>${ccPuedeMod?`<button class="btn ghost" style="margin-left:auto" onclick="ccEditar(${c.id})">✏️ Editar</button><button class="btn ghost" style="color:#c0392b;border-color:#e7b3b3" onclick="ccEliminar(${c.id})">🗑 Eliminar</button><button class="btn" onclick="ccPDF()">🖨️ PDF</button>`:`<button class="btn" onclick="ccPDF()" style="margin-left:auto">🖨️ Imprimir / PDF</button>`}</div>
   ${(()=>{ const rev=!!c.revisado; const dir=isDireccion(); return `<div class="cc-revpanel ${rev?'rev':'pend'}">
     <div class="cc-revhead"><div>${rev?`<b style="color:#1e8a5a">✓ Revisado por Dirección</b>${c.revisado_por?` · ${esc(c.revisado_por)}`:''}${c.revisado_at?` · ${esc(fechaLarga((c.revisado_at||'').slice(0,10)))}`:''}`:`<b style="color:#b9770e">⏳ Pendiente de revisión</b>`}</div>${dir?`<button class="cc-revbtn ${rev?'':'go'}" onclick="ccToggleRevisado(${c.id})">${rev?'Quitar revisión':'✓ Marcar como revisado'}</button>`:''}</div>
     ${faltaJust?`<div style="margin-top:8px;background:#fdecea;border:1px solid #f5c6cb;color:#c0392b;border-radius:8px;padding:8px 11px;font-size:13px;font-weight:600">⚠ Hay gasto(s) SIN justificante marcado. Revisar el sobre físico.</div>`:''}
@@ -8017,7 +8028,7 @@ async function pagePermisosPersona(tabs){
     const its=g.items.map(it=>{
       const def=accDefaultVisibleFor(person,it);
       const st=permPersonState.get(it.id)||'';
-      const sel='<select onchange="permPersonSet(\''+it.id+'\',this.value)" style="padding:5px 8px;border:1px solid var(--gris2);border-radius:7px;font-family:inherit;font-size:12.5px"><option value="">Por defecto ('+(def?'con acceso':'sin acceso')+')</option><option value="full" '+(st==='full'?'selected':'')+'>✓ Acceso completo</option><option value="view" '+(st==='view'?'selected':'')+'>👁 Solo ver</option><option value="none" '+(st==='none'?'selected':'')+'>✕ Sin acceso</option></select>';
+      const sel='<select onchange="permPersonSet(\''+it.id+'\',this.value)" style="padding:5px 8px;border:1px solid var(--gris2);border-radius:7px;font-family:inherit;font-size:12.5px"><option value="">Por defecto ('+(def?'con acceso':'sin acceso')+')</option><option value="full" '+(st==='full'?'selected':'')+'>✓ Acceso completo</option><option value="crear" '+(st==='crear'?'selected':'')+'>📝 Registrar (crea y edita lo suyo)</option><option value="view" '+(st==='view'?'selected':'')+'>👁 Solo ver</option><option value="none" '+(st==='none'?'selected':'')+'>✕ Sin acceso</option></select>';
       const eff = st==='none'?false : (st===''? def : true);
       return '<tr><td class="perm-area">'+(it.ic?it.ic+' ':'')+esc(it.t)+(eff?'':' <span style="color:#c0392b;font-size:11px">(oculto)</span>')+'</td><td>'+sel+'</td></tr>';
     }).join('');
@@ -8081,7 +8092,7 @@ async function pagePermisos(){
     const its=g.items.map(it=>{
       const def=accDefaultVisibleFor({role:role,dept:dep,area:permArea}, it);
       const st=permState.get(it.id)||'';
-      const sel=`<select onchange="permItemSet('${it.id}',this.value)" style="padding:5px 8px;border:1px solid var(--gris2);border-radius:7px;font-family:inherit;font-size:12.5px"><option value="">Por defecto (${def?'con acceso':'sin acceso'})</option><option value="full" ${st==='full'?'selected':''}>✓ Acceso completo</option><option value="view" ${st==='view'?'selected':''}>👁 Solo ver</option><option value="none" ${st==='none'?'selected':''}>✕ Sin acceso</option></select>`;
+      const sel=`<select onchange="permItemSet('${it.id}',this.value)" style="padding:5px 8px;border:1px solid var(--gris2);border-radius:7px;font-family:inherit;font-size:12.5px"><option value="">Por defecto (${def?'con acceso':'sin acceso'})</option><option value="full" ${st==='full'?'selected':''}>✓ Acceso completo</option><option value="crear" ${st==='crear'?'selected':''}>📝 Registrar (crea y edita lo suyo)</option><option value="view" ${st==='view'?'selected':''}>👁 Solo ver</option><option value="none" ${st==='none'?'selected':''}>✕ Sin acceso</option></select>`;
       const eff = st==='none'?false : (st===''? def : true);
       return `<tr><td class="perm-area">${it.ic?it.ic+' ':''}${esc(it.t)}${eff?'':' <span style="color:#c0392b;font-size:11px">(oculto)</span>'}</td><td>${sel}</td></tr>`;
     }).join('');
